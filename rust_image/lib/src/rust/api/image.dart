@@ -442,7 +442,35 @@ sealed class ImageFilter with _$ImageFilter {
   const factory ImageFilter.pixelize({required int size}) =
       ImageFilter_Pixelize;
   const factory ImageFilter.solarize() = ImageFilter_Solarize;
-  const factory ImageFilter.preset(FilterPreset field0) = ImageFilter_Preset;
+  const factory ImageFilter.preset({
+    required FilterPreset preset,
+
+    /// 0.0 = identity, 1.0 = full preset (Instagram-style filter strength).
+    required double strength,
+  }) = ImageFilter_Preset;
+
+  /// Color temperature shift (−100 cool … +100 warm).
+  const factory ImageFilter.warmth({required double amount}) =
+      ImageFilter_Warmth;
+
+  /// Blend toward neutral gray (0 = none, 1 = max fade).
+  const factory ImageFilter.fade({required double amount}) = ImageFilter_Fade;
+
+  /// Radial edge darkening (0 = none, 1 = strong).
+  const factory ImageFilter.vignette({required double amount}) =
+      ImageFilter_Vignette;
+
+  /// Recover/compress bright tones (−100 … +100).
+  const factory ImageFilter.highlights({required double amount}) =
+      ImageFilter_Highlights;
+
+  /// Lift/crush dark tones (−100 … +100).
+  const factory ImageFilter.shadows({required double amount}) =
+      ImageFilter_Shadows;
+
+  /// Local clarity / micro-contrast (−100 … +100).
+  const factory ImageFilter.structure({required double amount}) =
+      ImageFilter_Structure;
 }
 
 class ImageInfo {

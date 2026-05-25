@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
+import '../crop_controller.dart';
 import '../draw_placement.dart';
 import '../models/layer_stack.dart';
 import '../models/overlay_layer.dart';
@@ -15,6 +16,7 @@ import 'cached_preview_image.dart';
 import 'layer_editor_overlay.dart';
 import 'overlay_placement_layer.dart';
 import 'rgba_preview_image.dart';
+import 'crop_overlay.dart';
 import 'placement_overlay.dart';
 
 class LivePreview extends StatefulWidget {
@@ -28,6 +30,7 @@ class LivePreview extends StatefulWidget {
     this.previewRgba,
     this.useRgbaPreview = false,
     this.placement,
+    this.cropController,
     this.overlayPlacement,
     this.onOverlayPositionChanged,
     this.emptyHint = 'No image selected',
@@ -41,12 +44,14 @@ class LivePreview extends StatefulWidget {
     this.onLayerStackChanged,
     this.onTransformBegin,
     this.onUserImageStickerTap,
+    this.onTextLayerDoubleTap,
     this.onPaintStroke,
     this.onActiveStrokeUpdate,
     this.activePaintStrokeListenable,
     this.activePaintColor,
     this.activePaintWidth,
     this.activePaintOpacity,
+    this.activePaintBrush,
   });
 
   final Uint8List? bytes;
@@ -57,6 +62,7 @@ class LivePreview extends StatefulWidget {
   final bool processing;
   final bool blocking;
   final DrawPlacementController? placement;
+  final CropController? cropController;
   final OverlayPlacementController? overlayPlacement;
   final VoidCallback? onOverlayPositionChanged;
   final String emptyHint;
@@ -75,6 +81,7 @@ class LivePreview extends StatefulWidget {
   final VoidCallback? onLayerStackChanged;
   final VoidCallback? onTransformBegin;
   final void Function(StickerLayer layer)? onUserImageStickerTap;
+  final void Function(TextLayer layer)? onTextLayerDoubleTap;
   final void Function(List<Offset> points, {required Size childSize})?
       onPaintStroke;
   final void Function(List<Offset> points)? onActiveStrokeUpdate;
@@ -82,6 +89,7 @@ class LivePreview extends StatefulWidget {
   final Color? activePaintColor;
   final double? activePaintWidth;
   final double? activePaintOpacity;
+  final PaintBrushKind? activePaintBrush;
 
   @override
   State<LivePreview> createState() => _LivePreviewState();
@@ -170,6 +178,7 @@ class _LivePreviewState extends State<LivePreview> {
                     compareBytes: widget.compareBytes,
                     showCompare: widget.showCompare,
                     placement: widget.placement,
+                    cropController: widget.cropController,
                     overlayPlacement: widget.overlayPlacement,
                     onOverlayPositionChanged: widget.onOverlayPositionChanged,
                     controller: _controller,
@@ -181,6 +190,7 @@ class _LivePreviewState extends State<LivePreview> {
                     onLayerStackChanged: widget.onLayerStackChanged,
                     onTransformBegin: widget.onTransformBegin,
                     onUserImageStickerTap: widget.onUserImageStickerTap,
+                    onTextLayerDoubleTap: widget.onTextLayerDoubleTap,
                     onPaintStroke: widget.onPaintStroke,
                     onActiveStrokeUpdate: widget.onActiveStrokeUpdate,
                     activePaintStrokeListenable:
@@ -188,6 +198,7 @@ class _LivePreviewState extends State<LivePreview> {
                     activePaintColor: widget.activePaintColor,
                     activePaintWidth: widget.activePaintWidth,
                     activePaintOpacity: widget.activePaintOpacity,
+                    activePaintBrush: widget.activePaintBrush,
                   ),
           ),
           AnimatedSwitcher(
@@ -275,6 +286,7 @@ class _PreviewContent extends StatelessWidget {
     required this.compareBytes,
     required this.showCompare,
     required this.placement,
+    required this.cropController,
     required this.overlayPlacement,
     required this.onOverlayPositionChanged,
     required this.controller,
@@ -286,12 +298,14 @@ class _PreviewContent extends StatelessWidget {
     this.onLayerStackChanged,
     this.onTransformBegin,
     this.onUserImageStickerTap,
+    this.onTextLayerDoubleTap,
     this.onPaintStroke,
     this.onActiveStrokeUpdate,
     this.activePaintStrokeListenable,
     this.activePaintColor,
     this.activePaintWidth,
     this.activePaintOpacity,
+    this.activePaintBrush,
   });
 
   final Uint8List? bytes;
@@ -300,6 +314,7 @@ class _PreviewContent extends StatelessWidget {
   final Uint8List? compareBytes;
   final bool showCompare;
   final DrawPlacementController? placement;
+  final CropController? cropController;
   final OverlayPlacementController? overlayPlacement;
   final VoidCallback? onOverlayPositionChanged;
   final TransformationController controller;
@@ -311,6 +326,7 @@ class _PreviewContent extends StatelessWidget {
   final VoidCallback? onLayerStackChanged;
   final VoidCallback? onTransformBegin;
   final void Function(StickerLayer layer)? onUserImageStickerTap;
+  final void Function(TextLayer layer)? onTextLayerDoubleTap;
   final void Function(List<Offset> points, {required Size childSize})?
       onPaintStroke;
   final void Function(List<Offset> points)? onActiveStrokeUpdate;
@@ -318,6 +334,7 @@ class _PreviewContent extends StatelessWidget {
   final Color? activePaintColor;
   final double? activePaintWidth;
   final double? activePaintOpacity;
+  final PaintBrushKind? activePaintBrush;
 
   Widget _buildPreviewImage() {
     if (useRgbaPreview && previewRgba != null) {
@@ -376,19 +393,30 @@ class _PreviewContent extends StatelessWidget {
           ),
         );
 
-        Widget content = Center(child: image);
+        // Frozen preview subtree — placement [ListenableBuilder] must not close
+        // over `content` after we wrap it in a [Stack] (infinite nest on zoom).
+        final previewBase = Center(child: image);
+        Widget content = previewBase;
         final needsViewerTransform = placement != null ||
+            cropController != null ||
             overlayPlacement != null ||
             layerEditorActive;
 
-        if (placement != null || overlayPlacement != null) {
+        if (placement != null || cropController != null || overlayPlacement != null) {
           content = ListenableBuilder(
             listenable: controller,
             builder: (context, _) {
-              var child = content;
+              Widget child = previewBase;
               if (placement != null) {
                 child = PlacementOverlay(
                   placement: placement!,
+                  childSize: childSize,
+                  viewerTransform: controller.value,
+                  child: child,
+                );
+              } else if (cropController != null) {
+                child = CropOverlay(
+                  crop: cropController!,
                   childSize: childSize,
                   viewerTransform: controller.value,
                   child: child,
@@ -425,12 +453,14 @@ class _PreviewContent extends StatelessWidget {
                       onStackChanged: onLayerStackChanged ?? () {},
                       onTransformBegin: onTransformBegin,
                       onUserImageStickerTap: onUserImageStickerTap,
+                      onTextLayerDoubleTap: onTextLayerDoubleTap,
                       onPaintStroke: onPaintStroke,
                       onActiveStrokeUpdate: onActiveStrokeUpdate,
                       activePaintStrokeListenable: activePaintStrokeListenable,
                       activePaintColor: activePaintColor,
                       activePaintWidth: activePaintWidth,
                       activePaintOpacity: activePaintOpacity,
+                      activePaintBrush: activePaintBrush,
                     );
                   },
                 )
@@ -444,12 +474,14 @@ class _PreviewContent extends StatelessWidget {
                   onStackChanged: onLayerStackChanged ?? () {},
                   onTransformBegin: onTransformBegin,
                   onUserImageStickerTap: onUserImageStickerTap,
+                  onTextLayerDoubleTap: onTextLayerDoubleTap,
                   onPaintStroke: onPaintStroke,
                   onActiveStrokeUpdate: onActiveStrokeUpdate,
                   activePaintStrokeListenable: activePaintStrokeListenable,
                   activePaintColor: activePaintColor,
                   activePaintWidth: activePaintWidth,
                   activePaintOpacity: activePaintOpacity,
+                  activePaintBrush: activePaintBrush,
                 );
           content = Stack(
             fit: StackFit.expand,
@@ -464,6 +496,7 @@ class _PreviewContent extends StatelessWidget {
         // so emoji/sticker/text gestures (drag, pinch, rotate) aren't stolen by
         // the viewer. Pan/zoom on paint and drawing tools is already disabled.
         final viewerInteractive = placement == null &&
+            cropController == null &&
             overlayPlacement == null &&
             !paintMode &&
             !layerEditorActive;
@@ -551,8 +584,8 @@ class _ZoomResetButtonState extends State<_ZoomResetButton> {
               ? Colors.black.withValues(alpha: _hovered ? 0.65 : 0.45)
               : scheme.surface.withValues(alpha: _hovered ? 0.95 : 0.85),
           borderRadius: BorderRadius.circular(20),
-          elevation: _hovered ? 4 : 0,
-          shadowColor: scheme.primary.withValues(alpha: 0.2),
+          elevation: 0,
+          shadowColor: Colors.transparent,
           child: IconButton(
             tooltip: 'Reset zoom',
             icon: Icon(

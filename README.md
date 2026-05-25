@@ -231,6 +231,11 @@ chmod +x test_all.sh   # one time
   because it needs a Flutter device/simulator and rebuilds native code).
 - `TEST_DEVICE` — Flutter device id passed to `flutter test -d`. Default
   `macos`. Use `flutter devices` to list available targets.
+- `SKIP_NATIVE_SYNC` — set to `1` to skip `cargo build` before Dart tests (faster).
+  `test_all.sh` runs `cargo build` so `rust/target/debug/librust_image_core.dylib`
+  matches the Rust API; `editor_widget_smoke_test` may still log an FRB content-hash
+  warning because `flutter test` often loads a cached plugin dylib — that is harmless
+  for the mount-only check. Use `RUN_INTEGRATION=1` for full FFI on a device.
 
 Example: everything, including integration on the iOS simulator:
 

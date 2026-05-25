@@ -63,7 +63,23 @@ pub enum ImageFilter {
     FrostedGlass,
     Pixelize { size: u32 },
     Solarize,
-    Preset(FilterPreset),
+    Preset {
+        preset: FilterPreset,
+        /// 0.0 = identity, 1.0 = full preset (Instagram-style filter strength).
+        strength: f32,
+    },
+    /// Color temperature shift (−100 cool … +100 warm).
+    Warmth { amount: f32 },
+    /// Blend toward neutral gray (0 = none, 1 = max fade).
+    Fade { amount: f32 },
+    /// Radial edge darkening (0 = none, 1 = strong).
+    Vignette { amount: f32 },
+    /// Recover/compress bright tones (−100 … +100).
+    Highlights { amount: f32 },
+    /// Lift/crush dark tones (−100 … +100).
+    Shadows { amount: f32 },
+    /// Local clarity / micro-contrast (−100 … +100).
+    Structure { amount: f32 },
 }
 
 #[derive(Debug, Clone, Copy)]

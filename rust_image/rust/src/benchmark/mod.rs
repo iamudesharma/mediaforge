@@ -401,7 +401,10 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
             |buf| {
                 let _ = buffer::filter_rgba_with_backend(
                     buf,
-                    ImageFilter::Preset(crate::api::image::FilterPreset::Dramatic),
+                    ImageFilter::Preset {
+                        preset: crate::api::image::FilterPreset::Dramatic,
+                        strength: 1.0,
+                    },
                     pb,
                 )?;
                 Ok(())
@@ -713,7 +716,10 @@ fn filter_for_bench_name(name: &str) -> ImageFilter {
     } else if name.contains("saturation") {
         ImageFilter::Saturation { amount: 1.3 }
     } else if name.contains("dramatic") {
-        ImageFilter::Preset(crate::api::image::FilterPreset::Dramatic)
+        ImageFilter::Preset {
+            preset: crate::api::image::FilterPreset::Dramatic,
+            strength: 1.0,
+        }
     } else {
         ImageFilter::Blur { radius: 4 }
     }

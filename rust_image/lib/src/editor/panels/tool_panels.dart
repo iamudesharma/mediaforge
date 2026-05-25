@@ -3,8 +3,11 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
+import '../crop_controller.dart';
 import '../draw_placement.dart';
 import '../editor_session.dart';
+import '../models/layer_transform.dart';
+import '../models/overlay_layer.dart';
 import '../overlay_placement.dart';
 import '../rust_image_editor_config.dart';
 import '../services/filter_descriptor.dart';
@@ -14,6 +17,7 @@ import '../theme/lumina_tokens.dart';
 import '../widgets/control_widgets.dart';
 import '../widgets/editor_animations.dart';
 import 'blank_canvas_sheet.dart';
+import 'layers_panel.dart';
 import 'paint_panel.dart';
 import 'stickers_panel.dart';
 
@@ -26,6 +30,7 @@ enum EditorTool {
   stickers,
   export_,
   draw,
+  layers,
   overlay,
   advanced,
 }
@@ -39,7 +44,8 @@ extension EditorToolX on EditorTool {
         EditorTool.paint => 'Paint',
         EditorTool.stickers => 'Stickers',
         EditorTool.export_ => 'Export',
-        EditorTool.draw => 'Draw',
+        EditorTool.draw => 'Shapes',
+        EditorTool.layers => 'Layers',
         EditorTool.overlay => 'Overlay',
         EditorTool.advanced => 'Advanced',
       };
@@ -53,7 +59,8 @@ extension EditorToolX on EditorTool {
         EditorTool.paint => 'Paint',
         EditorTool.stickers => 'Stickers',
         EditorTool.export_ => 'Export',
-        EditorTool.draw => 'Draw',
+        EditorTool.draw => 'Shapes',
+        EditorTool.layers => 'Layers',
         EditorTool.overlay => 'Overlay',
         EditorTool.advanced => 'Advanced',
       };
@@ -66,8 +73,9 @@ extension EditorToolX on EditorTool {
         EditorTool.paint => Icons.brush_outlined,
         EditorTool.stickers => Icons.emoji_emotions_outlined,
         EditorTool.export_ => Icons.save_alt_outlined,
-        EditorTool.draw => Icons.draw_outlined,
-        EditorTool.overlay => Icons.layers_outlined,
+        EditorTool.draw => Icons.interests_outlined,
+        EditorTool.layers => Icons.layers_outlined,
+        EditorTool.overlay => Icons.image_outlined,
         EditorTool.advanced => Icons.memory_outlined,
       };
 
@@ -80,8 +88,9 @@ extension EditorToolX on EditorTool {
         EditorTool.paint => Icons.brush_outlined,
         EditorTool.stickers => Icons.emoji_emotions_outlined,
         EditorTool.export_ => Icons.save_alt_outlined,
-        EditorTool.draw => Icons.draw_outlined,
-        EditorTool.overlay => Icons.layers_outlined,
+        EditorTool.draw => Icons.interests_outlined,
+        EditorTool.layers => Icons.layers_outlined,
+        EditorTool.overlay => Icons.image_outlined,
         EditorTool.advanced => Icons.equalizer,
       };
 
@@ -97,6 +106,7 @@ class ToolPanelHost extends StatelessWidget {
     required this.session,
     required this.config,
     this.drawPlacement,
+    this.cropController,
     this.overlayPlacement,
     this.scrollController,
     this.compact = false,
@@ -106,6 +116,7 @@ class ToolPanelHost extends StatelessWidget {
   final EditorSession session;
   final RustImageEditorConfig config;
   final DrawPlacementController? drawPlacement;
+  final CropController? cropController;
   final OverlayPlacementController? overlayPlacement;
   final ScrollController? scrollController;
   final bool compact;
@@ -120,7 +131,10 @@ class ToolPanelHost extends StatelessWidget {
             session: session,
             allowBlankCanvas: config.allowBlankCanvas,
           ),
-        EditorTool.transform => TransformPanel(session: session),
+        EditorTool.transform => TransformPanel(
+            session: session,
+            crop: cropController!,
+          ),
         EditorTool.filters => FiltersPanel(session: session),
         EditorTool.adjust => AdjustPanel(session: session),
         EditorTool.paint => PaintPanel(
@@ -132,10 +146,11 @@ class ToolPanelHost extends StatelessWidget {
             scrollController: scrollController,
           ),
         EditorTool.export_ => ExportPanel(session: session, config: config),
-        EditorTool.draw => DrawPanel(
+        EditorTool.draw => ShapesPanel(
             session: session,
             placement: drawPlacement!,
           ),
+        EditorTool.layers => LayersPanel(session: session),
         EditorTool.overlay => OverlayPanel(
             session: session,
             placement: overlayPlacement!,
@@ -308,9 +323,14 @@ class _InfoTile extends StatelessWidget {
 // --- Transform ---
 
 class TransformPanel extends StatefulWidget {
-  const TransformPanel({super.key, required this.session});
+  const TransformPanel({
+    super.key,
+    required this.session,
+    required this.crop,
+  });
 
   final EditorSession session;
+  final CropController crop;
 
   @override
   State<TransformPanel> createState() => _TransformPanelState();
@@ -320,15 +340,11 @@ class _TransformPanelState extends State<TransformPanel> {
   int _width = 1024;
   int _height = 1024;
   int _thumbEdge = 512;
-  int _cropX = 0;
-  int _cropY = 0;
-  int _cropW = 400;
-  int _cropH = 400;
   ResizeAlgorithm _algorithm = ResizeAlgorithm.lanczos3;
   int? _lastInfoWidth;
-  String _aspect = 'Free';
 
   EditorSession get s => widget.session;
+  CropController get c => widget.crop;
 
   void _maybeSyncFromInfo() {
     final info = s.imageInfo;
@@ -336,59 +352,40 @@ class _TransformPanelState extends State<TransformPanel> {
     _lastInfoWidth = info.width;
     _width = info.width;
     _height = info.height;
-    _cropW = (info.width * 0.8).round().clamp(1, info.width);
-    _cropH = (info.height * 0.8).round().clamp(1, info.height);
-    _cropX = ((info.width - _cropW) / 2).round();
-    _cropY = ((info.height - _cropH) / 2).round();
   }
 
-  void _applyAspect(String aspect) {
-    final info = s.imageInfo;
-    if (info == null) return;
-    final w = info.width;
-    final h = info.height;
-    switch (aspect) {
-      case '1:1':
-        final side = w < h ? w : h;
-        _cropW = side;
-        _cropH = side;
-      case '4:3':
-        _cropW = w;
-        _cropH = (w * 3 / 4).round().clamp(1, h);
-      case '16:9':
-        _cropW = w;
-        _cropH = (w * 9 / 16).round().clamp(1, h);
-      case '3:2':
-        _cropW = w;
-        _cropH = (w * 2 / 3).round().clamp(1, h);
-      default:
-        _cropW = (w * 0.8).round().clamp(1, w);
-        _cropH = (h * 0.8).round().clamp(1, h);
-    }
-    _cropX = ((w - _cropW) / 2).round().clamp(0, w - _cropW);
-    _cropY = ((h - _cropH) / 2).round().clamp(0, h - _cropH);
+  @override
+  void initState() {
+    super.initState();
+    c.addListener(_onCropChanged);
+  }
+
+  @override
+  void dispose() {
+    c.removeListener(_onCropChanged);
+    super.dispose();
+  }
+
+  void _onCropChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     _maybeSyncFromInfo();
 
-    return Column(
+    return ListenableBuilder(
+      listenable: c,
+      builder: (context, _) {
+        return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ActionChipRow<String>(
+        ActionChipRow<CropAspect>(
           horizontal: true,
-          items: const ['Free', '1:1', '4:3', '16:9', '3:2'],
-          label: (a) => a,
-          selected: _aspect,
-          onSelected: s.busy
-              ? (_) {}
-              : (a) {
-                  setState(() {
-                    _aspect = a;
-                    _applyAspect(a);
-                  });
-                },
+          items: CropAspect.values,
+          label: (a) => a.label,
+          selected: c.aspect,
+          onSelected: s.busy ? (_) {} : c.setAspect,
         ),
         const SizedBox(height: LuminaTokens.padMd),
         const SectionHeader('Resize'),
@@ -468,62 +465,76 @@ class _TransformPanelState extends State<TransformPanel> {
           ),
         ),
         const SizedBox(height: 16),
-        const SectionHeader('Crop'),
+        const SectionHeader(
+          'Crop',
+          subtitle: 'Adjust on preview, then tap Done (top) or Apply crop',
+        ),
         LabeledSlider(
           label: 'X',
-          value: _cropX.toDouble(),
+          value: c.cropX.toDouble(),
           min: 0,
           max: (s.imageInfo?.width ?? 1000).toDouble(),
           divisions: 40,
-          display: '$_cropX',
-          onChanged: s.busy ? null : (v) => setState(() => _cropX = v.round()),
+          display: '${c.cropX}',
+          onChanged: s.busy
+              ? null
+              : (v) => c.setCropRect(v.round(), c.cropY, c.cropW, c.cropH),
         ),
         LabeledSlider(
           label: 'Y',
-          value: _cropY.toDouble(),
+          value: c.cropY.toDouble(),
           min: 0,
           max: (s.imageInfo?.height ?? 1000).toDouble(),
           divisions: 40,
-          display: '$_cropY',
-          onChanged: s.busy ? null : (v) => setState(() => _cropY = v.round()),
+          display: '${c.cropY}',
+          onChanged: s.busy
+              ? null
+              : (v) => c.setCropRect(c.cropX, v.round(), c.cropW, c.cropH),
         ),
         LabeledSlider(
           label: 'Width',
-          value: _cropW.toDouble(),
+          value: c.cropW.toDouble(),
           min: 32,
           max: (s.imageInfo?.width ?? 1000).toDouble(),
           divisions: 40,
-          display: '$_cropW',
-          onChanged: s.busy ? null : (v) => setState(() => _cropW = v.round()),
+          display: '${c.cropW}',
+          onChanged: s.busy
+              ? null
+              : (v) => c.setCropRect(c.cropX, c.cropY, v.round(), c.cropH),
         ),
         LabeledSlider(
           label: 'Height',
-          value: _cropH.toDouble(),
+          value: c.cropH.toDouble(),
           min: 32,
           max: (s.imageInfo?.height ?? 1000).toDouble(),
           divisions: 40,
-          display: '$_cropH',
-          onChanged: s.busy ? null : (v) => setState(() => _cropH = v.round()),
+          display: '${c.cropH}',
+          onChanged: s.busy
+              ? null
+              : (v) => c.setCropRect(c.cropX, c.cropY, c.cropW, v.round()),
         ),
         PrimaryActionButton(
           icon: Icons.crop,
           label: 'Apply crop',
           enabled: s.hasImage && !s.blocking,
-          onPressed: () => s.runBytes(
-            'Crop',
-            (input) => RustWorker.bytesTransform(
-              bytes: input,
-              op: 'crop',
-              params: {
-                'x': _cropX,
-                'y': _cropY,
-                'width': _cropW,
-                'height': _cropH,
-                'format': s.outputFormat.index,
-                'quality': s.quality,
-              },
-            ),
-          ),
+          onPressed: () => s.applyCrop(crop: c),
+        ),
+        const SizedBox(height: 16),
+        const SectionHeader('Straighten', subtitle: 'Live preview on canvas · commits rotation'),
+        LabeledSlider(
+          label: 'Angle',
+          value: c.straightenDegrees,
+          min: -15,
+          max: 15,
+          divisions: 60,
+          display: '${c.straightenDegrees.toStringAsFixed(1)}°',
+          onChanged: s.busy ? null : (v) => c.setStraightenDegrees(v),
+        ),
+        PrimaryActionButton(
+          icon: Icons.check,
+          label: 'Apply straighten',
+          enabled: s.hasImage && !s.blocking && c.straightenDegrees.abs() > 0.05,
+          onPressed: () => s.applyStraighten(crop: c),
         ),
         const SizedBox(height: 16),
         const SectionHeader('Rotate & flip'),
@@ -571,6 +582,8 @@ class _TransformPanelState extends State<TransformPanel> {
         ),
       ],
     );
+      },
+    );
   }
 
   String _rotationLabel(Rotation r) => switch (r) {
@@ -596,8 +609,17 @@ class FiltersPanel extends StatefulWidget {
 class _FiltersPanelState extends State<FiltersPanel> {
   static const _presets = FilterPreset.values;
   int _selectedPreset = 0;
+  double _presetStrength = 100;
 
   EditorSession get session => widget.session;
+
+  FilterDescriptor? get _activePresetDescriptor {
+    if (_selectedPreset <= 0) return null;
+    return FilterDescriptor.preset(
+      _presets[_selectedPreset - 1],
+      strength: _presetStrength / 100,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -615,10 +637,50 @@ class _FiltersPanelState extends State<FiltersPanel> {
             if (i == 0) return;
             session.applyFilter(
               label: 'Preset',
-              descriptor: FilterDescriptor.preset(_presets[i - 1]),
+              descriptor: FilterDescriptor.preset(
+                _presets[i - 1],
+                strength: _presetStrength / 100,
+              ),
             );
           },
         ),
+        if (_selectedPreset > 0) ...[
+          const SizedBox(height: LuminaTokens.padMd),
+          LabeledSlider(
+            label: 'Filter intensity',
+            value: _presetStrength,
+            min: 0,
+            max: 100,
+            divisions: 20,
+            display: '${_presetStrength.round()}%',
+            onChanged: session.hasImage && !session.busy
+                ? (v) {
+                    setState(() => _presetStrength = v);
+                    final d = _activePresetDescriptor;
+                    if (d == null) return;
+                    session.applyFilter(
+                      label: 'Preview',
+                      descriptor: d,
+                      livePreview: true,
+                      fromBase: true,
+                    );
+                  }
+                : null,
+            onChangeEnd: session.hasImage && !session.busy
+                ? (_) {
+                    final d = _activePresetDescriptor;
+                    if (d == null) return;
+                    session.cancelDebounced();
+                    session.applyFilter(
+                      label: 'Preset',
+                      descriptor: d,
+                      saveUndo: true,
+                      fromBase: true,
+                    );
+                  }
+                : null,
+          ),
+        ],
         const SizedBox(height: LuminaTokens.padMd),
         const SectionHeader('Effects'),
         _EffectButton(
@@ -714,6 +776,12 @@ class _AdjustPanelState extends State<AdjustPanel> {
   double _contrast = 1.1;
   double _saturation = 1.2;
   double _hue = 30;
+  double _warmth = 0;
+  double _fade = 0;
+  double _vignette = 0;
+  double _highlights = 0;
+  double _shadows = 0;
+  double _structure = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -791,6 +859,112 @@ class _AdjustPanelState extends State<AdjustPanel> {
               : null,
           onChangeEnd: s.hasImage
               ? (_) => _commit(s, FilterDescriptor.hueRotate(degrees: _hue))
+              : null,
+        ),
+        const SizedBox(height: LuminaTokens.padMd),
+        const SectionHeader('Color & mood'),
+        LabeledSlider(
+          label: 'Warmth',
+          value: _warmth,
+          min: -100,
+          max: 100,
+          divisions: 40,
+          display: _warmth.round().toString(),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _warmth = v);
+                  _preview(s, FilterDescriptor.warmth(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.warmth(amount: _warmth))
+              : null,
+        ),
+        LabeledSlider(
+          label: 'Fade',
+          value: _fade,
+          min: 0,
+          max: 1,
+          divisions: 20,
+          display: _fade.toStringAsFixed(2),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _fade = v);
+                  _preview(s, FilterDescriptor.fade(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.fade(amount: _fade))
+              : null,
+        ),
+        LabeledSlider(
+          label: 'Vignette',
+          value: _vignette,
+          min: 0,
+          max: 1,
+          divisions: 20,
+          display: _vignette.toStringAsFixed(2),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _vignette = v);
+                  _preview(s, FilterDescriptor.vignette(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.vignette(amount: _vignette))
+              : null,
+        ),
+        const SizedBox(height: LuminaTokens.padMd),
+        const SectionHeader('Tone depth', subtitle: 'Highlights, shadows, clarity'),
+        LabeledSlider(
+          label: 'Highlights',
+          value: _highlights,
+          min: -100,
+          max: 100,
+          divisions: 40,
+          display: _highlights.round().toString(),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _highlights = v);
+                  _preview(s, FilterDescriptor.highlights(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.highlights(amount: _highlights))
+              : null,
+        ),
+        LabeledSlider(
+          label: 'Shadows',
+          value: _shadows,
+          min: -100,
+          max: 100,
+          divisions: 40,
+          display: _shadows.round().toString(),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _shadows = v);
+                  _preview(s, FilterDescriptor.shadows(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.shadows(amount: _shadows))
+              : null,
+        ),
+        LabeledSlider(
+          label: 'Structure',
+          value: _structure,
+          min: -100,
+          max: 100,
+          divisions: 40,
+          display: _structure.round().toString(),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _structure = v);
+                  _preview(s, FilterDescriptor.structure(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.structure(amount: _structure))
               : null,
         ),
       ],
@@ -901,10 +1075,10 @@ class _ExportPanelState extends State<ExportPanel> {
   }
 }
 
-// --- Draw ---
+// --- Shapes (line + circle; captions use Stickers → Text) ---
 
-class DrawPanel extends StatefulWidget {
-  const DrawPanel({
+class ShapesPanel extends StatefulWidget {
+  const ShapesPanel({
     super.key,
     required this.session,
     required this.placement,
@@ -914,35 +1088,12 @@ class DrawPanel extends StatefulWidget {
   final DrawPlacementController placement;
 
   @override
-  State<DrawPanel> createState() => _DrawPanelState();
+  State<ShapesPanel> createState() => _ShapesPanelState();
 }
 
-class _DrawPanelState extends State<DrawPanel> {
-  late final TextEditingController _textCtrl;
-
+class _ShapesPanelState extends State<ShapesPanel> {
   DrawPlacementController get p => widget.placement;
   EditorSession get s => widget.session;
-
-  @override
-  void initState() {
-    super.initState();
-    _textCtrl = TextEditingController(text: p.text);
-    p.addListener(_onPlacementChanged);
-  }
-
-  @override
-  void dispose() {
-    p.removeListener(_onPlacementChanged);
-    _textCtrl.dispose();
-    super.dispose();
-  }
-
-  void _onPlacementChanged() {
-    if (_textCtrl.text != p.text) {
-      _textCtrl.text = p.text;
-    }
-    setState(() {});
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -962,7 +1113,6 @@ class _DrawPanelState extends State<DrawPanel> {
             ActionChipRow<DrawPlaceKind>(
               items: DrawPlaceKind.values,
               label: (k) => switch (k) {
-                DrawPlaceKind.text => 'Text',
                 DrawPlaceKind.line => 'Line',
                 DrawPlaceKind.circle => 'Circle',
               },
@@ -971,10 +1121,15 @@ class _DrawPanelState extends State<DrawPanel> {
             ),
             const SizedBox(height: 12),
             ...switch (p.kind) {
-              DrawPlaceKind.text => _textControls(maxW, maxH),
               DrawPlaceKind.line => _lineControls(maxW, maxH),
               DrawPlaceKind.circle => _circleControls(maxW, maxH),
             },
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: s.busy ? null : _addArrowSticker,
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('Add arrow sticker'),
+            ),
             const SizedBox(height: 12),
             PrimaryActionButton(
               icon: Icons.check,
@@ -988,44 +1143,23 @@ class _DrawPanelState extends State<DrawPanel> {
     );
   }
 
-  List<Widget> _textControls(double maxW, double maxH) {
-    return [
-      TextField(
-        controller: _textCtrl,
-        decoration: const InputDecoration(
-          labelText: 'Text',
-          border: OutlineInputBorder(),
+  void _addArrowSticker() {
+    final info = s.imageInfo;
+    final cx = (info?.width ?? 400) / 2;
+    final cy = (info?.height ?? 600) / 2;
+    s.pushLayerUndo();
+    s.layerStack.add(
+      StickerLayer(
+        id: newLayerId(),
+        transform: LayerTransform(
+          centerX: cx,
+          centerY: cy,
+          scale: 1.4,
         ),
-        onChanged: p.setText,
+        assetKey: 'arrow',
       ),
-      LabeledSlider(
-        label: 'X',
-        value: p.textX.toDouble(),
-        min: 0,
-        max: maxW,
-        divisions: maxW > 0 ? maxW.clamp(1, 80).toInt() : 1,
-        display: '${p.textX}',
-        onChanged: s.blocking ? null : (v) => p.setTextPos(v.round(), p.textY),
-      ),
-      LabeledSlider(
-        label: 'Y',
-        value: p.textY.toDouble(),
-        min: 0,
-        max: maxH,
-        divisions: maxH > 0 ? maxH.clamp(1, 80).toInt() : 1,
-        display: '${p.textY}',
-        onChanged: s.blocking ? null : (v) => p.setTextPos(p.textX, v.round()),
-      ),
-      LabeledSlider(
-        label: 'Font size',
-        value: p.fontSize,
-        min: 12,
-        max: 120,
-        divisions: 27,
-        display: p.fontSize.round().toString(),
-        onChanged: s.blocking ? null : p.setFontSize,
-      ),
-    ];
+    );
+    s.notifyLayerChanged();
   }
 
   List<Widget> _lineControls(double maxW, double maxH) {
@@ -1102,28 +1236,7 @@ class _DrawPanelState extends State<DrawPanel> {
   }
 
   void _apply() {
-    p.setText(_textCtrl.text);
     switch (p.kind) {
-      case DrawPlaceKind.text:
-        s.runDraw(
-          label: 'Text',
-          work: (buf) => RustWorker.drawText(
-            buffer: buf,
-            overlay: TextOverlay(
-              text: p.text,
-              x: p.textX,
-              y: p.textY,
-              fontSize: p.fontSize,
-              colorR: 255,
-              colorG: 255,
-              colorB: 255,
-              colorA: 255,
-            ),
-            previewMaxEdge: EditorPipelineDefaults.previewMaxEdge,
-            previewQuality: EditorSession.previewQuality,
-            encodePreviewJpeg: !s.useRgbaPreview,
-          ),
-        );
       case DrawPlaceKind.line:
         s.runDraw(
           label: 'Line',

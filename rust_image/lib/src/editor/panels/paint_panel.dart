@@ -46,6 +46,7 @@ class _PaintPanelState extends State<PaintPanel> {
           PaintBrushKind.pen => 'Pen',
           PaintBrushKind.marker => 'Marker',
           PaintBrushKind.highlighter => 'Hi-lite',
+          PaintBrushKind.neon => 'Neon',
           PaintBrushKind.eraser => 'Eraser',
         },
         selected: _brush,

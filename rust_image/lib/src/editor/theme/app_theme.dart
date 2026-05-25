@@ -64,16 +64,13 @@ abstract final class AppTheme {
         backgroundColor: LuminaTokens.surfaceContainerLow,
         indicatorColor: LuminaTokens.primary.withValues(alpha: 0.15),
         selectedIconTheme: const IconThemeData(color: LuminaTokens.primary, size: 26),
-        unselectedIconTheme: const IconThemeData(
-          color: LuminaTokens.onSurfaceVariant,
-          size: 24,
-        ),
+        unselectedIconTheme: const IconThemeData(color: LuminaTokens.onSurfaceVariant, size: 24),
         labelType: NavigationRailLabelType.all,
       ),
       chipTheme: ChipThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(LuminaTokens.radiusLg),
-        ),
+        elevation: 0,
+        pressElevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusLg)),
         side: const BorderSide(color: LuminaTokens.outlineVariant),
         selectedColor: LuminaTokens.primary.withValues(alpha: 0.2),
         checkmarkColor: LuminaTokens.primary,
@@ -83,9 +80,7 @@ abstract final class AppTheme {
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(LuminaTokens.controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(LuminaTokens.radiusLg),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusLg)),
           elevation: 0,
           backgroundColor: LuminaTokens.primary,
           foregroundColor: LuminaTokens.onPrimary,
@@ -102,9 +97,7 @@ abstract final class AppTheme {
           minimumSize: const Size.fromHeight(LuminaTokens.controlHeight),
           foregroundColor: LuminaTokens.onSurface,
           side: const BorderSide(color: LuminaTokens.outlineVariant),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(LuminaTokens.radiusLg),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusLg)),
         ),
       ),
       sliderTheme: SliderThemeData(
@@ -119,25 +112,18 @@ abstract final class AppTheme {
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
           foregroundColor: LuminaTokens.onSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusMd)),
         ),
       ),
       listTileTheme: const ListTileThemeData(
         iconColor: LuminaTokens.onSurfaceVariant,
         textColor: LuminaTokens.onSurface,
       ),
-      dividerTheme: const DividerThemeData(
-        color: LuminaTokens.outlineVariant,
-        thickness: 1,
-      ),
+      dividerTheme: const DividerThemeData(color: LuminaTokens.outlineVariant, thickness: 1),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: LuminaTokens.surfaceContainerHigh,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusMd)),
       ),
     );
   }

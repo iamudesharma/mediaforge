@@ -7,8 +7,14 @@ class FilterDescriptor {
   final String kind;
   final Map<String, num> params;
 
-  factory FilterDescriptor.preset(FilterPreset p) =>
-      FilterDescriptor('preset', {'preset': p.index});
+  factory FilterDescriptor.preset(
+    FilterPreset p, {
+    double strength = 1.0,
+  }) =>
+      FilterDescriptor('preset', {
+        'preset': p.index,
+        'strength': strength,
+      });
 
   factory FilterDescriptor.blur({required int radius}) =>
       FilterDescriptor('blur', {'radius': radius});
@@ -27,6 +33,24 @@ class FilterDescriptor {
   factory FilterDescriptor.hueRotate({required double degrees}) =>
       FilterDescriptor('hueRotate', {'degrees': degrees});
 
+  factory FilterDescriptor.warmth({required double amount}) =>
+      FilterDescriptor('warmth', {'amount': amount});
+
+  factory FilterDescriptor.fade({required double amount}) =>
+      FilterDescriptor('fade', {'amount': amount});
+
+  factory FilterDescriptor.vignette({required double amount}) =>
+      FilterDescriptor('vignette', {'amount': amount});
+
+  factory FilterDescriptor.highlights({required double amount}) =>
+      FilterDescriptor('highlights', {'amount': amount});
+
+  factory FilterDescriptor.shadows({required double amount}) =>
+      FilterDescriptor('shadows', {'amount': amount});
+
+  factory FilterDescriptor.structure({required double amount}) =>
+      FilterDescriptor('structure', {'amount': amount});
+
   factory FilterDescriptor.oil({required int radius, required double intensity}) =>
       FilterDescriptor('oil', {'radius': radius, 'intensity': intensity});
 
@@ -37,6 +61,9 @@ class FilterDescriptor {
       FilterDescriptor('pixelize', {'size': size});
 
   factory FilterDescriptor.solarize() => const FilterDescriptor('solarize', {});
+
+  double get presetStrength =>
+      (params['strength'] ?? 1.0).toDouble().clamp(0.0, 1.0);
 
   factory FilterDescriptor.fromImageFilter(ImageFilter filter) {
     return switch (filter) {
@@ -50,19 +77,34 @@ class FilterDescriptor {
         FilterDescriptor.saturation(amount: amount),
       ImageFilter_HueRotate(:final degrees) =>
         FilterDescriptor.hueRotate(degrees: degrees),
+      ImageFilter_Warmth(:final amount) =>
+        FilterDescriptor.warmth(amount: amount),
+      ImageFilter_Fade(:final amount) => FilterDescriptor.fade(amount: amount),
+      ImageFilter_Vignette(:final amount) =>
+        FilterDescriptor.vignette(amount: amount),
+      ImageFilter_Highlights(:final amount) =>
+        FilterDescriptor.highlights(amount: amount),
+      ImageFilter_Shadows(:final amount) =>
+        FilterDescriptor.shadows(amount: amount),
+      ImageFilter_Structure(:final amount) =>
+        FilterDescriptor.structure(amount: amount),
       ImageFilter_Oil(:final radius, :final intensity) =>
         FilterDescriptor.oil(radius: radius, intensity: intensity),
       ImageFilter_FrostedGlass() => FilterDescriptor.frostedGlass(),
       ImageFilter_Pixelize(:final size) => FilterDescriptor.pixelize(size: size),
       ImageFilter_Solarize() => FilterDescriptor.solarize(),
-      ImageFilter_Preset(:final field0) => FilterDescriptor.preset(field0),
+      ImageFilter_Preset(:final preset, :final strength) =>
+        FilterDescriptor.preset(preset, strength: strength),
     };
   }
 
   ImageFilter toImageFilter() {
     switch (kind) {
       case 'preset':
-        return ImageFilter.preset(FilterPreset.values[params['preset']!.toInt()]);
+        return ImageFilter.preset(
+          preset: FilterPreset.values[params['preset']!.toInt()],
+          strength: presetStrength,
+        );
       case 'blur':
         return ImageFilter.blur(radius: params['radius']!.toInt());
       case 'sharpen':
@@ -75,6 +117,18 @@ class FilterDescriptor {
         return ImageFilter.saturation(amount: params['amount']!.toDouble());
       case 'hueRotate':
         return ImageFilter.hueRotate(degrees: params['degrees']!.toDouble());
+      case 'warmth':
+        return ImageFilter.warmth(amount: params['amount']!.toDouble());
+      case 'fade':
+        return ImageFilter.fade(amount: params['amount']!.toDouble());
+      case 'vignette':
+        return ImageFilter.vignette(amount: params['amount']!.toDouble());
+      case 'highlights':
+        return ImageFilter.highlights(amount: params['amount']!.toDouble());
+      case 'shadows':
+        return ImageFilter.shadows(amount: params['amount']!.toDouble());
+      case 'structure':
+        return ImageFilter.structure(amount: params['amount']!.toDouble());
       case 'oil':
         return ImageFilter.oil(
           radius: params['radius']!.toInt(),

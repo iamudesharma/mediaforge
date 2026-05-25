@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1459419909;
+  int get rustContentHash => 1228250518;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -316,6 +316,11 @@ abstract class RustLibApi extends BaseApi {
     required OutputFormat format,
     required int quality,
     required bool fixExif,
+  });
+
+  RgbaImageBuffer crateApiAdvancedRotateRgbaArbitrary({
+    required RgbaImageBuffer buffer,
+    required double degrees,
   });
 }
 
@@ -1626,6 +1631,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     argNames: ["bytes", "rotation", "format", "quality", "fixExif"],
   );
 
+  @override
+  RgbaImageBuffer crateApiAdvancedRotateRgbaArbitrary({
+    required RgbaImageBuffer buffer,
+    required double degrees,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_rgba_image_buffer(buffer, serializer);
+          sse_encode_f_32(degrees, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_rgba_image_buffer,
+          decodeErrorData: sse_decode_String,
+        ),
+        constMeta: kCrateApiAdvancedRotateRgbaArbitraryConstMeta,
+        argValues: [buffer, degrees],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiAdvancedRotateRgbaArbitraryConstMeta =>
+      const TaskConstMeta(
+        debugName: "rotate_rgba_arbitrary",
+        argNames: ["buffer", "degrees"],
+      );
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1833,7 +1868,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 9:
         return ImageFilter_Solarize();
       case 10:
-        return ImageFilter_Preset(dco_decode_filter_preset(raw[1]));
+        return ImageFilter_Preset(
+          preset: dco_decode_filter_preset(raw[1]),
+          strength: dco_decode_f_32(raw[2]),
+        );
+      case 11:
+        return ImageFilter_Warmth(amount: dco_decode_f_32(raw[1]));
+      case 12:
+        return ImageFilter_Fade(amount: dco_decode_f_32(raw[1]));
+      case 13:
+        return ImageFilter_Vignette(amount: dco_decode_f_32(raw[1]));
+      case 14:
+        return ImageFilter_Highlights(amount: dco_decode_f_32(raw[1]));
+      case 15:
+        return ImageFilter_Shadows(amount: dco_decode_f_32(raw[1]));
+      case 16:
+        return ImageFilter_Structure(amount: dco_decode_f_32(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -1929,8 +1979,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PaintStrokeInput dco_decode_paint_stroke_input(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return PaintStrokeInput(
       points: dco_decode_list_record_f_32_f_32(arr[0]),
       colorR: dco_decode_u_8(arr[1]),
@@ -1939,6 +1989,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       colorA: dco_decode_u_8(arr[4]),
       width: dco_decode_f_32(arr[5]),
       opacity: dco_decode_f_32(arr[6]),
+      erase: dco_decode_bool(arr[7]),
+      brushKind: dco_decode_u_8(arr[8]),
     );
   }
 
@@ -2319,8 +2371,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 9:
         return ImageFilter_Solarize();
       case 10:
-        var var_field0 = sse_decode_filter_preset(deserializer);
-        return ImageFilter_Preset(var_field0);
+        var var_preset = sse_decode_filter_preset(deserializer);
+        var var_strength = sse_decode_f_32(deserializer);
+        return ImageFilter_Preset(preset: var_preset, strength: var_strength);
+      case 11:
+        var var_amount = sse_decode_f_32(deserializer);
+        return ImageFilter_Warmth(amount: var_amount);
+      case 12:
+        var var_amount = sse_decode_f_32(deserializer);
+        return ImageFilter_Fade(amount: var_amount);
+      case 13:
+        var var_amount = sse_decode_f_32(deserializer);
+        return ImageFilter_Vignette(amount: var_amount);
+      case 14:
+        var var_amount = sse_decode_f_32(deserializer);
+        return ImageFilter_Highlights(amount: var_amount);
+      case 15:
+        var var_amount = sse_decode_f_32(deserializer);
+        return ImageFilter_Shadows(amount: var_amount);
+      case 16:
+        var var_amount = sse_decode_f_32(deserializer);
+        return ImageFilter_Structure(amount: var_amount);
       default:
         throw UnimplementedError('');
     }
@@ -2487,6 +2558,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_colorA = sse_decode_u_8(deserializer);
     var var_width = sse_decode_f_32(deserializer);
     var var_opacity = sse_decode_f_32(deserializer);
+    var var_erase = sse_decode_bool(deserializer);
+    var var_brushKind = sse_decode_u_8(deserializer);
     return PaintStrokeInput(
       points: var_points,
       colorR: var_colorR,
@@ -2495,6 +2568,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       colorA: var_colorA,
       width: var_width,
       opacity: var_opacity,
+      erase: var_erase,
+      brushKind: var_brushKind,
     );
   }
 
@@ -2864,9 +2939,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_u_32(size, serializer);
       case ImageFilter_Solarize():
         sse_encode_i_32(9, serializer);
-      case ImageFilter_Preset(field0: final field0):
+      case ImageFilter_Preset(preset: final preset, strength: final strength):
         sse_encode_i_32(10, serializer);
-        sse_encode_filter_preset(field0, serializer);
+        sse_encode_filter_preset(preset, serializer);
+        sse_encode_f_32(strength, serializer);
+      case ImageFilter_Warmth(amount: final amount):
+        sse_encode_i_32(11, serializer);
+        sse_encode_f_32(amount, serializer);
+      case ImageFilter_Fade(amount: final amount):
+        sse_encode_i_32(12, serializer);
+        sse_encode_f_32(amount, serializer);
+      case ImageFilter_Vignette(amount: final amount):
+        sse_encode_i_32(13, serializer);
+        sse_encode_f_32(amount, serializer);
+      case ImageFilter_Highlights(amount: final amount):
+        sse_encode_i_32(14, serializer);
+        sse_encode_f_32(amount, serializer);
+      case ImageFilter_Shadows(amount: final amount):
+        sse_encode_i_32(15, serializer);
+        sse_encode_f_32(amount, serializer);
+      case ImageFilter_Structure(amount: final amount):
+        sse_encode_i_32(16, serializer);
+        sse_encode_f_32(amount, serializer);
     }
   }
 
@@ -3019,6 +3113,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_8(self.colorA, serializer);
     sse_encode_f_32(self.width, serializer);
     sse_encode_f_32(self.opacity, serializer);
+    sse_encode_bool(self.erase, serializer);
+    sse_encode_u_8(self.brushKind, serializer);
   }
 
   @protected

@@ -18,6 +18,7 @@ class RustImageEditorConfig {
       EditorTool.filters,
       EditorTool.adjust,
       EditorTool.draw,
+      EditorTool.layers,
       EditorTool.overlay,
       EditorTool.paint,
       EditorTool.stickers,

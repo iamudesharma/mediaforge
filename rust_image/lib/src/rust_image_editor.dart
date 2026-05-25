@@ -1,5 +1,7 @@
+import 'dart:io' show File, Platform;
 import 'dart:typed_data';
 
+import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:rust_image/src/rust/api/advanced.dart';
 import 'package:rust_image/src/rust/api/image.dart';
 import 'package:rust_image/src/rust/api/layers.dart';
@@ -25,7 +27,16 @@ class RustImageEditor {
 
   static Future<void> _initOnce() async {
     try {
-      await RustLib.init();
+      final explicit = Platform.environment['RUST_IMAGE_DYLIB'];
+      if (explicit != null && explicit.isNotEmpty) {
+        final file = File(explicit);
+        if (!file.existsSync()) {
+          throw StateError('RUST_IMAGE_DYLIB not found: $explicit');
+        }
+        await RustLib.init(externalLibrary: ExternalLibrary.open(file.absolute.path));
+      } else {
+        await RustLib.init();
+      }
     } on StateError catch (e) {
       // Already initialized in this isolate (e.g. main + widget both called init).
       if (!e.message.contains('twice')) rethrow;

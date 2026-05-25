@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
+import 'crop_controller.dart';
 import 'models/edit_graph.dart';
 import 'models/layer_stack.dart';
 import 'models/layer_transform.dart';
@@ -52,14 +53,16 @@ class EditorSession extends ChangeNotifier {
   final ValueNotifier<int> statusListenable = ValueNotifier<int>(0);
   final ValueNotifier<int> chromeListenable = ValueNotifier<int>(0);
 
-  Listenable get editorChromeListenable => Listenable.merge([
-        layerListenable,
-        previewListenable,
-        processingListenable,
-        blockingListenable,
-        statusListenable,
-        chromeListenable,
-      ]);
+  /// Stable merge instance — do not allocate a new [Listenable.merge] per build
+  /// (that churns [ListenableBuilder] subscriptions and can destabilize rebuilds).
+  late final Listenable editorChromeListenable = Listenable.merge([
+    layerListenable,
+    previewListenable,
+    processingListenable,
+    blockingListenable,
+    statusListenable,
+    chromeListenable,
+  ]);
 
   Uint8List? sourceBytes;
   Uint8List? displayBytes;
@@ -659,6 +662,26 @@ class EditorSession extends ChangeNotifier {
     );
     editGraph = EditGraph();
     rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
+    rgbaBuffer = _cloneRgba(rgbaEditBase!);
+  }
+
+  /// Map [CropController] rect from preview/edit space into [buffer] pixel coordinates.
+  static ({int x, int y, int width, int height}) cropRectForBuffer({
+    required CropController crop,
+    required RgbaImageBuffer buffer,
+  }) {
+    final spaceW = crop.imageWidth;
+    final spaceH = crop.imageHeight;
+    if (spaceW <= 0 || spaceH <= 0) {
+      return (x: 0, y: 0, width: buffer.width, height: buffer.height);
+    }
+    final sx = buffer.width / spaceW;
+    final sy = buffer.height / spaceH;
+    final x = (crop.cropX * sx).round().clamp(0, buffer.width - 1);
+    final y = (crop.cropY * sy).round().clamp(0, buffer.height - 1);
+    final w = (crop.cropW * sx).round().clamp(1, buffer.width - x);
+    final h = (crop.cropH * sy).round().clamp(1, buffer.height - y);
+    return (x: x, y: y, width: w, height: h);
   }
 
   String _statusWithProfile(String label, int totalMs) {
@@ -690,10 +713,16 @@ class EditorSession extends ChangeNotifier {
       if (gen != _opGeneration) return;
 
       displayBytes = out;
+      previewRgba = null;
       rgbaBuffer = null;
       rgbaBase = null;
+      rgbaEditBase = null;
       rgbaPipeline = false;
+      editGraph = EditGraph();
+      _undoGraph.clear();
+      _redoGraph.clear();
       imageInfo = RustImageEditor.probe(out);
+      await _rebuildRgbaPipelineFromDisplay();
       lastDuration = sw.elapsed;
       status = '$label · ${sw.elapsedMilliseconds} ms';
     } catch (e) {
@@ -859,8 +888,10 @@ class EditorSession extends ChangeNotifier {
     if (bytes == null) return;
     await RustWorker.ensureStarted();
     final decoded = await RustWorker.decodeRgba(bytes);
-    rgbaBuffer = decoded;
     rgbaBase = _cloneRgba(decoded);
+    rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
+    rgbaBuffer = _cloneRgba(rgbaEditBase!);
+    previewRgba = rgbaBuffer;
     rgbaPipeline = true;
   }
 
@@ -918,12 +949,19 @@ class EditorSession extends ChangeNotifier {
       rgbaBuffer = result.buffer;
       rgbaBase = _cloneRgba(result.buffer);
       rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-      previewRgba = result.buffer;
+      previewRgba = rgbaBuffer;
       rgbaPipeline = true;
       displayBytes = result.preview;
       if (displayBytes != null) {
         imageInfo = RustImageEditor.probe(displayBytes!);
+      } else {
+        imageInfo = ImageInfo(
+          width: result.buffer.width,
+          height: result.buffer.height,
+          format: imageInfo?.format,
+        );
       }
+      notifyPreviewChanged();
       lastDuration = sw.elapsed;
       status = '$label · ${sw.elapsedMilliseconds} ms';
     } catch (e) {
@@ -935,6 +973,104 @@ class EditorSession extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Commit crop box (and pending straighten) into pixels; resets filters/layers for new canvas.
+  Future<void> applyCrop({required CropController crop}) async {
+    if (!hasImage) return;
+    cancelDebounced();
+
+    final aspect = crop.aspect;
+    final straighten = crop.straightenDegrees;
+    final spaceW = crop.imageWidth;
+    final spaceH = crop.imageHeight;
+
+    final noPixelChange = straighten.abs() < 0.05 &&
+        crop.cropX == 0 &&
+        crop.cropY == 0 &&
+        crop.cropW == spaceW &&
+        crop.cropH == spaceH;
+    if (noPixelChange || spaceW <= 0 || spaceH <= 0) return;
+
+    if (rgbaBase == null && rgbaBuffer == null && displayBytes != null) {
+      await _ensureRgbaReady();
+    }
+    if (rgbaBase == null && rgbaBuffer == null) return;
+
+    final gen = ++_opGeneration;
+    status = 'Crop…';
+    _setProcessing(true);
+    _bumpStatus();
+    await _yieldToUi();
+
+    final sw = Stopwatch()..start();
+    try {
+      _pushUndo();
+      await RustWorker.ensureStarted();
+      await _bakeGraphIntoFullBase();
+
+      var working = rgbaBase ?? rgbaBuffer;
+      if (working == null) return;
+
+      if (straighten.abs() >= 0.05) {
+        working = rotateRgbaArbitrary(buffer: working, degrees: straighten);
+        crop.syncImageSize(working.width, working.height);
+      }
+
+      final rect = cropRectForBuffer(crop: crop, buffer: working);
+      final cropped = RustImageEditor.cropRgba(
+        working,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+      );
+      if (gen != _opGeneration) return;
+
+      rgbaBase = _cloneRgba(cropped);
+      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
+      rgbaBuffer = _cloneRgba(rgbaEditBase!);
+      previewRgba = rgbaBuffer;
+      rgbaPipeline = true;
+      displayBytes = await RustWorker.encodePreview(
+        buffer: cropped,
+        previewMaxEdge: previewMaxEdge,
+        quality: previewQuality,
+      );
+      imageInfo = ImageInfo(
+        width: cropped.width,
+        height: cropped.height,
+        format: imageInfo?.format,
+      );
+      notifyPreviewChanged();
+
+      editGraph = EditGraph();
+      _undoGraph.clear();
+      _redoGraph.clear();
+      layerStack = LayerStack();
+      notifyLayerChanged();
+
+      crop.resetStraighten();
+      crop.syncImageSize(rgbaBuffer!.width, rgbaBuffer!.height);
+      crop.setAspect(aspect);
+
+      lastDuration = sw.elapsed;
+      status = 'Crop · ${sw.elapsedMilliseconds} ms';
+    } catch (e) {
+      if (_undo.isNotEmpty) _undo.removeLast();
+      status = 'Crop failed: $e';
+    } finally {
+      if (gen == _opGeneration) {
+        _setProcessing(false);
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Bake straighten rotation into pixels, crop, and re-fit crop rect (Sprint 10).
+  Future<void> applyStraighten({required CropController crop}) async {
+    if (crop.straightenDegrees.abs() < 0.05) return;
+    await applyCrop(crop: crop);
   }
 
   /// RGBA resize on the worker isolate (Advanced tab).
@@ -1038,19 +1174,25 @@ class EditorSession extends ChangeNotifier {
     );
   }
 
-  Future<void> _refreshRgbaFromDisplay() async {
+  Future<void> _rebuildRgbaPipelineFromDisplay() async {
     final bytes = displayBytes;
     if (bytes == null) return;
     try {
       await RustWorker.ensureStarted();
       final decoded = await RustWorker.decodeRgba(bytes);
-      rgbaBuffer = decoded;
       rgbaBase = _cloneRgba(decoded);
+      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
+      rgbaBuffer = _cloneRgba(rgbaEditBase!);
+      previewRgba = rgbaBuffer;
       rgbaPipeline = true;
+      notifyPreviewChanged();
     } catch (_) {
       rgbaPipeline = false;
+      previewRgba = null;
     }
   }
+
+  Future<void> _refreshRgbaFromDisplay() => _rebuildRgbaPipelineFromDisplay();
 
   static RgbaImageBuffer _cloneRgba(RgbaImageBuffer b) => RgbaImageBuffer(
         width: b.width,

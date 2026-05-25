@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../draw_placement.dart';
 
-/// Handles drag/tap on the preview to set draw positions (text, line, circle).
+/// Handles drag/tap on the preview to set shape positions (line, circle).
 class PlacementOverlay extends StatefulWidget {
   const PlacementOverlay({
     super.key,
@@ -79,8 +79,6 @@ class _PlacementOverlayState extends State<PlacementOverlay> {
     final px = _pixel(local);
     if (px == null) return;
     switch (p.kind) {
-      case DrawPlaceKind.text:
-        _dragging = 0;
       case DrawPlaceKind.line:
         final d0 = (px.dx - p.lineX0).abs() + (px.dy - p.lineY0).abs();
         final d1 = (px.dx - p.lineX1).abs() + (px.dy - p.lineY1).abs();
@@ -102,8 +100,6 @@ class _PlacementOverlayState extends State<PlacementOverlay> {
     final x = px.dx.round();
     final y = px.dy.round();
     switch (p.kind) {
-      case DrawPlaceKind.text:
-        p.setTextPos(x, y);
       case DrawPlaceKind.line:
         if (_dragging == 0 || isStart) {
           p.setLineStart(x, y);
@@ -124,7 +120,6 @@ class _HintChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final msg = switch (kind) {
-      DrawPlaceKind.text => 'Tap or drag to place text',
       DrawPlaceKind.line => 'Drag green / teal handles for line ends',
       DrawPlaceKind.circle => 'Drag to move circle center',
     };
@@ -155,22 +150,6 @@ class _PlacementPainter extends CustomPainter {
       ..strokeWidth = 2;
 
     switch (placement.kind) {
-      case DrawPlaceKind.text:
-        final c = placement.imagePixelToChild(
-          Offset(placement.textX.toDouble(), placement.textY.toDouble()),
-          childSize,
-        );
-        canvas.drawCircle(c, 8, Paint()..color = const Color(0xFF00D4AA));
-        canvas.drawLine(
-          Offset(c.dx - 16, c.dy),
-          Offset(c.dx + 16, c.dy),
-          border,
-        );
-        canvas.drawLine(
-          Offset(c.dx, c.dy - 16),
-          Offset(c.dx, c.dy + 16),
-          border,
-        );
       case DrawPlaceKind.line:
         final a = placement.imagePixelToChild(
           Offset(placement.lineX0.toDouble(), placement.lineY0.toDouble()),
@@ -217,8 +196,6 @@ class _PlacementPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _PlacementPainter old) =>
       old.placement.kind != placement.kind ||
-      old.placement.textX != placement.textX ||
-      old.placement.textY != placement.textY ||
       old.placement.lineX0 != placement.lineX0 ||
       old.placement.lineY0 != placement.lineY0 ||
       old.placement.lineX1 != placement.lineX1 ||

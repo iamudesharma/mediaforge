@@ -6,51 +6,58 @@ import 'lumina_tokens.dart';
 abstract final class AppTypography {
   static const _sansFamily = '.AppleSystemUIFont';
   static const _monoFamily = 'Menlo';
+  static const _noShadow = <Shadow>[];
 
   static void ensureConfigured() {}
 
+  static TextStyle _sans({
+    required double fontSize,
+    FontWeight? fontWeight,
+    double? height,
+    double? letterSpacing,
+    required Color color,
+  }) {
+    return TextStyle(
+      fontFamily: _sansFamily,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      height: height,
+      letterSpacing: letterSpacing,
+      color: color,
+      shadows: _noShadow,
+    );
+  }
+
   static TextTheme luminaTextTheme(ColorScheme scheme) {
     return TextTheme(
-      headlineLarge: TextStyle(
-        fontFamily: _sansFamily,
+      headlineLarge: _sans(
         fontSize: 24,
         fontWeight: FontWeight.w700,
         height: 32 / 24,
         letterSpacing: -0.02 * 24,
         color: scheme.onSurface,
       ),
-      headlineMedium: TextStyle(
-        fontFamily: _sansFamily,
+      headlineMedium: _sans(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         height: 24 / 18,
         color: scheme.onSurface,
       ),
-      titleSmall: TextStyle(
-        fontFamily: _sansFamily,
+      titleMedium: _sans(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        height: 22 / 16,
+        color: scheme.onSurface,
+      ),
+      titleSmall: _sans(
         fontSize: 14,
         fontWeight: FontWeight.w600,
         color: scheme.onSurface,
       ),
-      bodyLarge: TextStyle(
-        fontFamily: _sansFamily,
-        fontSize: 16,
-        height: 24 / 16,
-        color: scheme.onSurface,
-      ),
-      bodyMedium: TextStyle(
-        fontFamily: _sansFamily,
-        fontSize: 14,
-        height: 20 / 14,
-        color: scheme.onSurfaceVariant,
-      ),
-      bodySmall: TextStyle(
-        fontFamily: _sansFamily,
-        fontSize: 12,
-        color: scheme.onSurfaceVariant,
-      ),
-      labelLarge: TextStyle(
-        fontFamily: _sansFamily,
+      bodyLarge: _sans(fontSize: 16, height: 24 / 16, color: scheme.onSurface),
+      bodyMedium: _sans(fontSize: 14, height: 20 / 14, color: scheme.onSurfaceVariant),
+      bodySmall: _sans(fontSize: 12, color: scheme.onSurfaceVariant),
+      labelLarge: _sans(
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.1 * 11,
@@ -62,6 +69,7 @@ abstract final class AppTypography {
         fontWeight: FontWeight.w500,
         letterSpacing: 0.05 * 12,
         color: scheme.primary,
+        shadows: _noShadow,
       ),
     );
   }
@@ -73,6 +81,7 @@ abstract final class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: 2.4,
       color: LuminaTokens.onSurface,
+      shadows: _noShadow,
     );
   }
 
@@ -82,6 +91,7 @@ abstract final class AppTypography {
       fontSize: 10,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.4,
+      shadows: _noShadow,
       color: selected ? LuminaTokens.primary : LuminaTokens.onSurfaceVariant,
     );
   }
@@ -92,6 +102,7 @@ abstract final class AppTypography {
       fontSize: 12,
       fontWeight: FontWeight.w500,
       letterSpacing: 0.6,
+      shadows: _noShadow,
       color: Theme.of(context).colorScheme.primary,
     );
   }
@@ -103,6 +114,7 @@ abstract final class AppTypography {
       fontWeight: FontWeight.w700,
       letterSpacing: 1.1,
       color: LuminaTokens.onSurfaceVariant,
+      shadows: _noShadow,
     );
   }
 }

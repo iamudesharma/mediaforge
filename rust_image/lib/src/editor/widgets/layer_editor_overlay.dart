@@ -21,12 +21,14 @@ class LayerEditorOverlay extends StatefulWidget {
     required this.onStackChanged,
     this.onTransformBegin,
     this.onUserImageStickerTap,
+    this.onTextLayerDoubleTap,
     this.onPaintStroke,
     this.onActiveStrokeUpdate,
     this.activePaintStrokeListenable,
     this.activePaintColor,
     this.activePaintWidth,
     this.activePaintOpacity,
+    this.activePaintBrush,
   });
 
   final LayerStack stack;
@@ -38,6 +40,7 @@ class LayerEditorOverlay extends StatefulWidget {
   final VoidCallback onStackChanged;
   final VoidCallback? onTransformBegin;
   final void Function(StickerLayer layer)? onUserImageStickerTap;
+  final void Function(TextLayer layer)? onTextLayerDoubleTap;
   final void Function(List<Offset> points, {required Size childSize})?
       onPaintStroke;
   final void Function(List<Offset> points)? onActiveStrokeUpdate;
@@ -45,6 +48,7 @@ class LayerEditorOverlay extends StatefulWidget {
   final Color? activePaintColor;
   final double? activePaintWidth;
   final double? activePaintOpacity;
+  final PaintBrushKind? activePaintBrush;
 
   @override
   State<LayerEditorOverlay> createState() => _LayerEditorOverlayState();
@@ -56,6 +60,9 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
   int _coordsRevision = -1;
   List<OverlayLayer>? _hitTestLayers;
   int _hitTestRevision = -1;
+
+  /// After first layout, [RenderBox] is available for layer hit targets.
+  bool _layoutReady = false;
 
   /// Selected layer last so its expanded pinch hit box wins the gesture arena.
   static List<OverlayLayer> _layersForHitTest(LayerStack stack) {
@@ -96,10 +103,35 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
   }
 
   @override
+  void didUpdateWidget(covariant LayerEditorOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageWidth != widget.imageWidth ||
+        oldWidget.imageHeight != widget.imageHeight) {
+      _layoutReady = false;
+      _scheduleLayoutReadyCheck();
+    }
+  }
+
+  void _scheduleLayoutReadyCheck() {
+    if (_layoutReady) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _layoutReady) return;
+      if (_stackBox == null) return;
+      setState(() => _layoutReady = true);
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleLayoutReadyCheck();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stackBox = _stackBox;
+        final stackBox = _layoutReady ? _stackBox : null;
         final childSize = constraints.biggest;
         return Stack(
           key: _stackKey,
@@ -129,6 +161,7 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
                         color: widget.activePaintColor ?? const Color(0xFF4EDEA3),
                         width: widget.activePaintWidth ?? 8,
                         opacity: widget.activePaintOpacity ?? 0.9,
+                        brush: widget.activePaintBrush ?? PaintBrushKind.pen,
                       ),
                     );
                   },
@@ -152,7 +185,7 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
           ),
         if (stackBox != null)
           for (final layer in _hitTestLayersList())
-            if (layer is! PaintStrokeLayer)
+            if (layer.visible && layer is! PaintStrokeLayer)
               TransformableLayer(
                 key: ValueKey(layer.id),
                 layer: layer,
@@ -161,15 +194,21 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
                 selected: layer.id == widget.stack.selectedId,
                 onTransformCommit: widget.onStackChanged,
                 onTap: () {
+                  if (widget.stack.selectedId == layer.id) return;
                   widget.stack.select(layer.id);
                   widget.onStackChanged();
+                },
+                onDoubleTap: () {
+                  if (layer is TextLayer) {
+                    widget.onTextLayerDoubleTap?.call(layer);
+                    return;
+                  }
                   if (layer is StickerLayer &&
                       layer.userBytes != null &&
                       layer.userBytes!.isNotEmpty) {
                     widget.onUserImageStickerTap?.call(layer);
+                    return;
                   }
-                },
-                onDoubleTap: () {
                   widget.stack.remove(layer.id);
                   widget.onStackChanged();
                 },

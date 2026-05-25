@@ -131,6 +131,51 @@ void main() {
       expect(stack.selectedId, isNull);
     });
 
+    test('setVisible toggles visibility and bumps revision', () {
+      final stack = LayerStack()..add(_emoji('a'));
+      final rev = stack.revision;
+      stack.setVisible('a', false);
+      expect(stack.layers.first.visible, isFalse);
+      expect(stack.revision, rev + 1);
+      stack.setVisible('a', true);
+      expect(stack.layers.first.visible, isTrue);
+    });
+
+    test('sendToBack moves layer to index 0', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'))
+        ..add(_emoji('b'));
+      stack.sendToBack('b');
+      expect(stack.layers.map((l) => l.id).toList(), ['b', 'a']);
+    });
+
+    test('moveUp and moveDown swap with neighbor', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'))
+        ..add(_emoji('b'))
+        ..add(_emoji('c'));
+      stack.moveUp('a');
+      expect(stack.layers.map((l) => l.id).toList(), ['b', 'a', 'c']);
+      stack.moveDown('c');
+      expect(stack.layers.map((l) => l.id).toList(), ['b', 'c', 'a']);
+    });
+
+    test('insertAt reorders layer', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'))
+        ..add(_emoji('b'))
+        ..add(_emoji('c'));
+      stack.insertAt(0, 'c');
+      expect(stack.layers.map((l) => l.id).toList(), ['c', 'a', 'b']);
+    });
+
+    test('copy preserves visible flag', () {
+      final layer = _emoji('a');
+      layer.visible = false;
+      final stack = LayerStack([layer]);
+      expect(stack.copy().layers.first.visible, isFalse);
+    });
+
     test('paintStrokes returns only PaintStrokeLayer instances in order', () {
       final s1 = _stroke('s1');
       final s2 = _stroke('s2');
