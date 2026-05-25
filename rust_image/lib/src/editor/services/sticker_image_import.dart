@@ -7,6 +7,7 @@ import '../editor_session.dart';
 import '../models/layer_transform.dart';
 import '../models/overlay_layer.dart';
 import '../panels/shape_mask_sheet.dart';
+import 'image_bytes_normalizer.dart';
 import 'image_source_picker.dart';
 import 'layer_rasterizer.dart';
 import 'sticker_image_cache.dart';
@@ -16,7 +17,8 @@ abstract final class StickerImageImport {
   static const defaultLayerScale = 1.4;
 
   static Future<Size> probeImageDimensions(Uint8List bytes) async {
-    final dims = await StickerImageCache.dimensionsFor(bytes);
+    final prepared = await ImageBytesNormalizer.prepareForEditor(bytes);
+    final dims = await StickerImageCache.dimensionsFor(prepared);
     return Size(dims.width, dims.height);
   }
 
@@ -36,18 +38,21 @@ abstract final class StickerImageImport {
   /// Top bar / Stickers panel: multi-pick then shape sheet, adds layers.
   static Future<void> importFromGallery(
     BuildContext context,
-    EditorSession session,
-  ) async {
+    EditorSession session, {
+    Future<StickerShapeMask?> Function(int imageCount)? pickShapeMask,
+  }) async {
     if (!session.hasImage || session.busy) return;
 
     final images = await ImageSourcePicker.pickMultipleImageBytes();
     if (images.isEmpty || !context.mounted) return;
 
-    final mask = await ShapeMaskSheet.pick(
-      context,
-      imageCount: images.length,
-      title: 'Shape for new stickers',
-    );
+    final mask = pickShapeMask != null
+        ? await pickShapeMask(images.length)
+        : await ShapeMaskSheet.pick(
+            context,
+            imageCount: images.length,
+            title: 'Shape for new stickers',
+          );
     if (!context.mounted || mask == null) return;
 
     await _addLayers(
@@ -72,26 +77,23 @@ abstract final class StickerImageImport {
   static Future<void> pickShapeForLayer(
     BuildContext context,
     EditorSession session,
-    StickerLayer layer,
-  ) async {
+    StickerLayer layer, {
+    Future<StickerShapeMask?> Function()? pickShapeMask,
+  }) async {
     if (layer.userBytes == null || layer.userBytes!.isEmpty) return;
     await ensureUserSourceDimensions(layer);
 
-    final mask = await ShapeMaskSheet.pick(
-      context,
-      imageCount: 1,
-      title: 'Sticker shape',
-      initial: layer.shapeMask,
-    );
+    final mask = pickShapeMask != null
+        ? await pickShapeMask()
+        : await ShapeMaskSheet.pick(
+            context,
+            imageCount: 1,
+            title: 'Sticker shape',
+            initial: layer.shapeMask,
+          );
     if (!context.mounted || mask == null) return;
 
-    session.pushLayerUndo();
-    layer.shapeMask = mask;
-    LayerRasterizer.invalidateCache(layer);
-    session.notifyLayerChanged();
-    unawaited(LayerRasterizer.cacheLayerBitmap(layer).then((_) {
-      session.notifyLayerChanged();
-    }));
+    await applyShape(session, layer, mask);
   }
 
   static Future<void> applyShape(
@@ -120,7 +122,7 @@ abstract final class StickerImageImport {
 
     session.pushLayerUndo();
     for (var i = 0; i < images.length; i++) {
-      final bytes = images[i];
+      final bytes = await ImageBytesNormalizer.prepareForEditor(images[i]);
       final dims = await probeImageDimensions(bytes);
       final layer = StickerLayer(
         id: newLayerId(),

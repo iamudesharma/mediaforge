@@ -11,9 +11,11 @@ class BlankCanvasSheet extends StatefulWidget {
   const BlankCanvasSheet({
     super.key,
     required this.session,
+    this.onDismiss,
   });
 
   final EditorSession session;
+  final VoidCallback? onDismiss;
 
   static Future<void> show(BuildContext context, EditorSession session) {
     final wide = MediaQuery.sizeOf(context).width >= 600;
@@ -59,7 +61,11 @@ class _BlankCanvasSheetState extends State<BlankCanvasSheet> {
         background: _background,
       );
       if (!mounted) return;
-      Navigator.of(context).pop();
+      if (widget.onDismiss != null) {
+        widget.onDismiss!();
+      } else {
+        Navigator.of(context).pop();
+      }
       await widget.session.loadSource(bytes);
     } catch (e) {
       if (!mounted) return;
@@ -91,7 +97,15 @@ class _BlankCanvasSheetState extends State<BlankCanvasSheet> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
-                    onPressed: _creating ? null : () => Navigator.pop(context),
+                    onPressed: _creating
+                        ? null
+                        : () {
+                            if (widget.onDismiss != null) {
+                              widget.onDismiss!();
+                            } else {
+                              Navigator.pop(context);
+                            }
+                          },
                   ),
                 ],
               ),

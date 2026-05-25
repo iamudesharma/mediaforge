@@ -124,6 +124,8 @@ class ActionChipRow<T> extends StatelessWidget {
         height: 40,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
+          shrinkWrap: true,
+          physics: const ClampingScrollPhysics(),
           itemCount: items.length,
           separatorBuilder: (_, _) => const SizedBox(width: LuminaTokens.padSm),
           itemBuilder: (context, i) {
@@ -252,10 +254,10 @@ class LuminaFilterStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 88,
+      height: 72,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(vertical: LuminaTokens.padSm),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: labels.length,
         separatorBuilder: (_, _) => const SizedBox(width: LuminaTokens.padSm),
         itemBuilder: (context, i) {

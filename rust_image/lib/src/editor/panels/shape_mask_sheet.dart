@@ -11,11 +11,13 @@ class ShapeMaskSheet extends StatelessWidget {
     required this.imageCount,
     this.title,
     this.initial,
+    this.onSelected,
   });
 
   final int imageCount;
   final String? title;
   final StickerShapeMask? initial;
+  final ValueChanged<StickerShapeMask>? onSelected;
 
   static Future<StickerShapeMask?> pick(
     BuildContext context, {
@@ -76,7 +78,7 @@ class ShapeMaskSheet extends StatelessWidget {
               items: StickerShapeMask.values,
               label: label,
               selected: initial ?? StickerShapeMask.none,
-              onSelected: (mask) => Navigator.pop(context, mask),
+              onSelected: onSelected ?? ((mask) => Navigator.pop(context, mask)),
             ),
             const SizedBox(height: 8),
           ],

@@ -21,17 +21,25 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: TextLayerEditSheet(session: session, layer: layer),
+          body: SingleChildScrollView(
+            child: TextLayerEditSheet(session: session, layer: layer),
+          ),
         ),
       ),
     );
 
     await tester.enterText(find.byType(TextField), 'Updated caption');
     await tester.pump();
-    await tester.tap(find.text('Apply'));
+    await tester.pump();
+    var updated = session.layerStack.layers.whereType<TextLayer>().first;
+    expect(updated.text, 'Updated caption');
+
+    await tester.ensureVisible(find.text('Done'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
     await tester.pump();
 
-    final updated = session.layerStack.layers.whereType<TextLayer>().first;
+    updated = session.layerStack.layers.whereType<TextLayer>().first;
     expect(updated.text, 'Updated caption');
   });
 }

@@ -14,6 +14,7 @@ import '../services/filter_descriptor.dart';
 import '../services/image_source_picker.dart';
 import '../services/rust_worker.dart';
 import '../theme/lumina_tokens.dart';
+import '../layout/mobile_tool_sheet.dart';
 import '../widgets/control_widgets.dart';
 import '../widgets/editor_animations.dart';
 import 'blank_canvas_sheet.dart';
@@ -94,9 +95,23 @@ extension EditorToolX on EditorTool {
         EditorTool.advanced => Icons.equalizer,
       };
 
-  /// Export uses top-bar pill; import opens from top bar on mobile.
-  bool get showInBottomNav =>
-      this != EditorTool.export_ && this != EditorTool.import;
+  /// Export uses top-bar pill on mobile; import is in bottom nav.
+  bool get showInBottomNav => this != EditorTool.export_;
+
+  /// Layers live on the canvas (top-left) on phone — not in bottom nav.
+  bool get showInMobileBottomNav =>
+      showInBottomNav && this != EditorTool.layers;
+
+  /// Context strip above bottom nav (filters, adjust, crop, paint, stickers).
+  bool get hasMobileContextStrip => switch (this) {
+        EditorTool.filters ||
+        EditorTool.adjust ||
+        EditorTool.transform ||
+        EditorTool.paint ||
+        EditorTool.stickers =>
+          true,
+        _ => false,
+      };
 }
 
 class ToolPanelHost extends StatelessWidget {
@@ -110,6 +125,12 @@ class ToolPanelHost extends StatelessWidget {
     this.overlayPlacement,
     this.scrollController,
     this.compact = false,
+    this.stripHostedExternally = false,
+    this.stickersTabIndex = 0,
+    this.onStickersTabChanged,
+    this.onBlankCanvas,
+    this.selectedAdjustKind = AdjustControlKind.brightness,
+    this.onAdjustKindChanged,
   });
 
   final EditorTool tool;
@@ -120,30 +141,45 @@ class ToolPanelHost extends StatelessWidget {
   final OverlayPlacementController? overlayPlacement;
   final ScrollController? scrollController;
   final bool compact;
-
-  bool get _ownsScroll =>
-      compact &&
-      scrollController != null &&
-      (tool == EditorTool.stickers || tool == EditorTool.paint);
+  final bool stripHostedExternally;
+  final int stickersTabIndex;
+  final ValueChanged<int>? onStickersTabChanged;
+  final VoidCallback? onBlankCanvas;
+  final AdjustControlKind selectedAdjustKind;
+  final ValueChanged<AdjustControlKind>? onAdjustKindChanged;
 
   Widget _panel() => switch (tool) {
         EditorTool.import => ImportPanel(
             session: session,
             allowBlankCanvas: config.allowBlankCanvas,
+            onBlankCanvas: onBlankCanvas,
           ),
         EditorTool.transform => TransformPanel(
             session: session,
             crop: cropController!,
+            stripHostedExternally: stripHostedExternally,
           ),
-        EditorTool.filters => FiltersPanel(session: session),
-        EditorTool.adjust => AdjustPanel(session: session),
+        EditorTool.filters => FiltersPanel(
+            session: session,
+            stripHostedExternally: stripHostedExternally,
+          ),
+        EditorTool.adjust => AdjustPanel(
+            session: session,
+            selectedKind: selectedAdjustKind,
+            onSelectedKindChanged: onAdjustKindChanged,
+            compactStripMode: stripHostedExternally,
+          ),
         EditorTool.paint => PaintPanel(
             session: session,
             scrollController: scrollController,
+            stripHostedExternally: stripHostedExternally,
           ),
         EditorTool.stickers => StickersPanel(
             session: session,
             scrollController: scrollController,
+            stripHostedExternally: stripHostedExternally,
+            tabIndex: stickersTabIndex,
+            onTabChanged: onStickersTabChanged,
           ),
         EditorTool.export_ => ExportPanel(session: session, config: config),
         EditorTool.draw => ShapesPanel(
@@ -160,22 +196,24 @@ class ToolPanelHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final padding = compact
-        ? const EdgeInsets.fromLTRB(12, 0, 12, 16)
-        : const EdgeInsets.fromLTRB(16, 8, 16, 24);
+    if (compact) {
+      // MobileToolSheet owns the scroll view (DraggableScrollableSheet controller).
+      return AnimatedPanelSwitcher(
+        switchKey: tool,
+        child: _panel(),
+      );
+    }
 
-    final child = _ownsScroll
-        ? Padding(padding: padding, child: _panel())
-        : SingleChildScrollView(
-            controller: scrollController,
-            primary: scrollController == null,
-            padding: padding,
-            child: _panel(),
-          );
-
+    final padding = const EdgeInsets.fromLTRB(16, 8, 16, 24);
     return AnimatedPanelSwitcher(
       switchKey: tool,
-      child: child,
+      child: SingleChildScrollView(
+        controller: scrollController,
+        primary: scrollController == null,
+        padding: padding,
+        physics: const ClampingScrollPhysics(),
+        child: _panel(),
+      ),
     );
   }
 }
@@ -187,10 +225,12 @@ class ImportPanel extends StatelessWidget {
     super.key,
     required this.session,
     this.allowBlankCanvas = true,
+    this.onBlankCanvas,
   });
 
   final EditorSession session;
   final bool allowBlankCanvas;
+  final VoidCallback? onBlankCanvas;
 
   Future<void> _pickFile(BuildContext context) async {
     try {
@@ -259,7 +299,13 @@ class ImportPanel extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: session.busy
                 ? null
-                : () => BlankCanvasSheet.show(context, session),
+                : () {
+                    if (onBlankCanvas != null) {
+                      onBlankCanvas!();
+                    } else {
+                      BlankCanvasSheet.show(context, session);
+                    }
+                  },
             icon: const Icon(Icons.crop_portrait_outlined),
             label: const Text('Create blank canvas'),
           ),
@@ -327,10 +373,12 @@ class TransformPanel extends StatefulWidget {
     super.key,
     required this.session,
     required this.crop,
+    this.stripHostedExternally = false,
   });
 
   final EditorSession session;
   final CropController crop;
+  final bool stripHostedExternally;
 
   @override
   State<TransformPanel> createState() => _TransformPanelState();
@@ -380,14 +428,16 @@ class _TransformPanelState extends State<TransformPanel> {
         return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ActionChipRow<CropAspect>(
-          horizontal: true,
-          items: CropAspect.values,
-          label: (a) => a.label,
-          selected: c.aspect,
-          onSelected: s.busy ? (_) {} : c.setAspect,
-        ),
-        const SizedBox(height: LuminaTokens.padMd),
+        if (!widget.stripHostedExternally) ...[
+          ActionChipRow<CropAspect>(
+            horizontal: true,
+            items: CropAspect.values,
+            label: (a) => a.label,
+            selected: c.aspect,
+            onSelected: s.busy ? (_) {} : c.setAspect,
+          ),
+          const SizedBox(height: LuminaTokens.padMd),
+        ],
         const SectionHeader('Resize'),
         LabeledSlider(
           label: 'Width',
@@ -598,9 +648,14 @@ class _TransformPanelState extends State<TransformPanel> {
 // --- Filters ---
 
 class FiltersPanel extends StatefulWidget {
-  const FiltersPanel({super.key, required this.session});
+  const FiltersPanel({
+    super.key,
+    required this.session,
+    this.stripHostedExternally = false,
+  });
 
   final EditorSession session;
+  final bool stripHostedExternally;
 
   @override
   State<FiltersPanel> createState() => _FiltersPanelState();
@@ -628,60 +683,62 @@ class _FiltersPanelState extends State<FiltersPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LuminaFilterStrip(
-          labels: presetLabels,
-          selectedIndex: _selectedPreset,
-          enabled: session.hasImage && !session.busy,
-          onSelected: (i) {
-            setState(() => _selectedPreset = i);
-            if (i == 0) return;
-            session.applyFilter(
-              label: 'Preset',
-              descriptor: FilterDescriptor.preset(
-                _presets[i - 1],
-                strength: _presetStrength / 100,
-              ),
-            );
-          },
-        ),
-        if (_selectedPreset > 0) ...[
-          const SizedBox(height: LuminaTokens.padMd),
-          LabeledSlider(
-            label: 'Filter intensity',
-            value: _presetStrength,
-            min: 0,
-            max: 100,
-            divisions: 20,
-            display: '${_presetStrength.round()}%',
-            onChanged: session.hasImage && !session.busy
-                ? (v) {
-                    setState(() => _presetStrength = v);
-                    final d = _activePresetDescriptor;
-                    if (d == null) return;
-                    session.applyFilter(
-                      label: 'Preview',
-                      descriptor: d,
-                      livePreview: true,
-                      fromBase: true,
-                    );
-                  }
-                : null,
-            onChangeEnd: session.hasImage && !session.busy
-                ? (_) {
-                    final d = _activePresetDescriptor;
-                    if (d == null) return;
-                    session.cancelDebounced();
-                    session.applyFilter(
-                      label: 'Preset',
-                      descriptor: d,
-                      saveUndo: true,
-                      fromBase: true,
-                    );
-                  }
-                : null,
+        if (!widget.stripHostedExternally) ...[
+          LuminaFilterStrip(
+            labels: presetLabels,
+            selectedIndex: _selectedPreset,
+            enabled: session.hasImage && !session.busy,
+            onSelected: (i) {
+              setState(() => _selectedPreset = i);
+              if (i == 0) return;
+              session.applyFilter(
+                label: 'Preset',
+                descriptor: FilterDescriptor.preset(
+                  _presets[i - 1],
+                  strength: _presetStrength / 100,
+                ),
+              );
+            },
           ),
+          if (_selectedPreset > 0) ...[
+            const SizedBox(height: LuminaTokens.padMd),
+            LabeledSlider(
+              label: 'Filter intensity',
+              value: _presetStrength,
+              min: 0,
+              max: 100,
+              divisions: 20,
+              display: '${_presetStrength.round()}%',
+              onChanged: session.hasImage && !session.busy
+                  ? (v) {
+                      setState(() => _presetStrength = v);
+                      final d = _activePresetDescriptor;
+                      if (d == null) return;
+                      session.applyFilter(
+                        label: 'Preview',
+                        descriptor: d,
+                        livePreview: true,
+                        fromBase: true,
+                      );
+                    }
+                  : null,
+              onChangeEnd: session.hasImage && !session.busy
+                  ? (_) {
+                      final d = _activePresetDescriptor;
+                      if (d == null) return;
+                      session.cancelDebounced();
+                      session.applyFilter(
+                        label: 'Preset',
+                        descriptor: d,
+                        saveUndo: true,
+                        fromBase: true,
+                      );
+                    }
+                  : null,
+            ),
+          ],
+          const SizedBox(height: LuminaTokens.padMd),
         ],
-        const SizedBox(height: LuminaTokens.padMd),
         const SectionHeader('Effects'),
         _EffectButton(
           session: session,
@@ -762,10 +819,46 @@ class _EffectButton extends StatelessWidget {
 
 // --- Adjust ---
 
+/// Primary adjust controls shown in the mobile context strip.
+enum AdjustControlKind {
+  brightness,
+  contrast,
+  saturation,
+  hue,
+  warmth,
+}
+
+extension AdjustControlKindX on AdjustControlKind {
+  String get stripLabel => switch (this) {
+        AdjustControlKind.brightness => 'Bright',
+        AdjustControlKind.contrast => 'Contrast',
+        AdjustControlKind.saturation => 'Saturate',
+        AdjustControlKind.hue => 'Hue',
+        AdjustControlKind.warmth => 'Warmth',
+      };
+
+  String get panelTitle => switch (this) {
+        AdjustControlKind.brightness => 'Brightness',
+        AdjustControlKind.contrast => 'Contrast',
+        AdjustControlKind.saturation => 'Saturation',
+        AdjustControlKind.hue => 'Hue rotate',
+        AdjustControlKind.warmth => 'Warmth',
+      };
+}
+
 class AdjustPanel extends StatefulWidget {
-  const AdjustPanel({super.key, required this.session});
+  const AdjustPanel({
+    super.key,
+    required this.session,
+    this.selectedKind = AdjustControlKind.brightness,
+    this.onSelectedKindChanged,
+    this.compactStripMode = false,
+  });
 
   final EditorSession session;
+  final AdjustControlKind selectedKind;
+  final ValueChanged<AdjustControlKind>? onSelectedKindChanged;
+  final bool compactStripMode;
 
   @override
   State<AdjustPanel> createState() => _AdjustPanelState();
@@ -782,10 +875,46 @@ class _AdjustPanelState extends State<AdjustPanel> {
   double _highlights = 0;
   double _shadows = 0;
   double _structure = 0;
+  bool _showMoreAdjustments = false;
 
   @override
   Widget build(BuildContext context) {
     final s = widget.session;
+    if (widget.compactStripMode) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.selectedKind.panelTitle,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: LuminaTokens.onSurface,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Live preview while dragging · commits on release',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuminaTokens.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: LuminaTokens.padSm),
+          _sliderForKind(widget.selectedKind, s),
+          if (_showMoreAdjustments) ...[
+            const SizedBox(height: LuminaTokens.padSm),
+            ..._moreSliders(s),
+          ] else
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => setState(() => _showMoreAdjustments = true),
+                child: const Text('More adjustments'),
+              ),
+            ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -969,6 +1098,186 @@ class _AdjustPanelState extends State<AdjustPanel> {
         ),
       ],
     );
+  }
+
+  Widget _sliderForKind(AdjustControlKind kind, EditorSession s) {
+    return switch (kind) {
+      AdjustControlKind.brightness => LabeledSlider(
+          label: 'Brightness',
+          value: _brightness,
+          min: -100,
+          max: 100,
+          divisions: 40,
+          display: _brightness.round().toString(),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _brightness = v);
+                  _preview(s, FilterDescriptor.brightness(amount: v.round()));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.brightness(amount: _brightness.round()))
+              : null,
+        ),
+      AdjustControlKind.contrast => LabeledSlider(
+          label: 'Contrast',
+          value: _contrast,
+          min: 0.2,
+          max: 2.5,
+          divisions: 23,
+          display: _contrast.toStringAsFixed(2),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _contrast = v);
+                  _preview(s, FilterDescriptor.contrast(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.contrast(amount: _contrast))
+              : null,
+        ),
+      AdjustControlKind.saturation => LabeledSlider(
+          label: 'Saturation',
+          value: _saturation,
+          min: 0,
+          max: 2.5,
+          divisions: 25,
+          display: _saturation.toStringAsFixed(2),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _saturation = v);
+                  _preview(s, FilterDescriptor.saturation(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.saturation(amount: _saturation))
+              : null,
+        ),
+      AdjustControlKind.hue => LabeledSlider(
+          label: 'Hue rotate',
+          value: _hue,
+          min: -180,
+          max: 180,
+          divisions: 36,
+          display: '${_hue.round()}°',
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _hue = v);
+                  _preview(s, FilterDescriptor.hueRotate(degrees: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.hueRotate(degrees: _hue))
+              : null,
+        ),
+      AdjustControlKind.warmth => LabeledSlider(
+          label: 'Warmth',
+          value: _warmth,
+          min: -100,
+          max: 100,
+          divisions: 40,
+          display: _warmth.round().toString(),
+          onChanged: s.hasImage
+              ? (v) {
+                  setState(() => _warmth = v);
+                  _preview(s, FilterDescriptor.warmth(amount: v));
+                }
+              : null,
+          onChangeEnd: s.hasImage
+              ? (_) => _commit(s, FilterDescriptor.warmth(amount: _warmth))
+              : null,
+        ),
+    };
+  }
+
+  List<Widget> _moreSliders(EditorSession s) {
+    return [
+      LabeledSlider(
+        label: 'Fade',
+        value: _fade,
+        min: 0,
+        max: 1,
+        divisions: 20,
+        display: _fade.toStringAsFixed(2),
+        onChanged: s.hasImage
+            ? (v) {
+                setState(() => _fade = v);
+                _preview(s, FilterDescriptor.fade(amount: v));
+              }
+            : null,
+        onChangeEnd: s.hasImage
+            ? (_) => _commit(s, FilterDescriptor.fade(amount: _fade))
+            : null,
+      ),
+      LabeledSlider(
+        label: 'Vignette',
+        value: _vignette,
+        min: 0,
+        max: 1,
+        divisions: 20,
+        display: _vignette.toStringAsFixed(2),
+        onChanged: s.hasImage
+            ? (v) {
+                setState(() => _vignette = v);
+                _preview(s, FilterDescriptor.vignette(amount: v));
+              }
+            : null,
+        onChangeEnd: s.hasImage
+            ? (_) => _commit(s, FilterDescriptor.vignette(amount: _vignette))
+            : null,
+      ),
+      LabeledSlider(
+        label: 'Highlights',
+        value: _highlights,
+        min: -100,
+        max: 100,
+        divisions: 40,
+        display: _highlights.round().toString(),
+        onChanged: s.hasImage
+            ? (v) {
+                setState(() => _highlights = v);
+                _preview(s, FilterDescriptor.highlights(amount: v));
+              }
+            : null,
+        onChangeEnd: s.hasImage
+            ? (_) => _commit(s, FilterDescriptor.highlights(amount: _highlights))
+            : null,
+      ),
+      LabeledSlider(
+        label: 'Shadows',
+        value: _shadows,
+        min: -100,
+        max: 100,
+        divisions: 40,
+        display: _shadows.round().toString(),
+        onChanged: s.hasImage
+            ? (v) {
+                setState(() => _shadows = v);
+                _preview(s, FilterDescriptor.shadows(amount: v));
+              }
+            : null,
+        onChangeEnd: s.hasImage
+            ? (_) => _commit(s, FilterDescriptor.shadows(amount: _shadows))
+            : null,
+      ),
+      LabeledSlider(
+        label: 'Structure',
+        value: _structure,
+        min: -100,
+        max: 100,
+        divisions: 40,
+        display: _structure.round().toString(),
+        onChanged: s.hasImage
+            ? (v) {
+                setState(() => _structure = v);
+                _preview(s, FilterDescriptor.structure(amount: v));
+              }
+            : null,
+        onChangeEnd: s.hasImage
+            ? (_) => _commit(s, FilterDescriptor.structure(amount: _structure))
+            : null,
+      ),
+    ];
   }
 
   void _preview(EditorSession session, FilterDescriptor descriptor) {

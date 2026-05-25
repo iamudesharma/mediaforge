@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'crop_controller.dart';
@@ -5,14 +7,18 @@ import 'draw_placement.dart';
 import 'editor_session.dart';
 import 'models/overlay_layer.dart';
 import 'layout/editor_layout.dart';
+import 'layout/editor_overlay_panel.dart';
+import 'layout/editor_overlay_state.dart';
+import 'layout/canvas_floating_chrome.dart';
 import 'layout/mobile_editor_chrome.dart';
+import 'layout/tool_context_strip.dart';
 import 'overlay_placement.dart';
+import 'panels/text_layer_edit_sheet.dart';
 import 'panels/tool_panels.dart';
 import 'rust_image_editor_config.dart';
 import 'theme/editor_motion.dart';
 import 'theme/lumina_tokens.dart';
 import 'widgets/compare_hold_button.dart';
-import 'panels/text_layer_edit_sheet.dart';
 import 'services/sticker_image_import.dart';
 import 'widgets/editor_tool_rail.dart';
 import 'widgets/live_preview.dart';
@@ -48,6 +54,10 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   final _cropController = CropController();
   late EditorTool _tool;
   bool _compareHeld = false;
+  EditorOverlayState _overlay = const EditorOverlayState.none();
+  int _stickersTab = 0;
+  AdjustControlKind _adjustKind = AdjustControlKind.brightness;
+  Completer<StickerShapeMask?>? _shapeMaskCompleter;
 
   EditorSession get _session => widget.session;
   List<EditorTool> get _tools => widget.config.enabledTools;
@@ -126,12 +136,47 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   void _startCompareHold() {
     if (!widget.config.showCompare || !_session.hasImage || _compareHeld) return;
     setState(() => _compareHeld = true);
+    widget.config.onCompareHoldStart?.call();
   }
 
   void _endCompareHold() {
     if (!_compareHeld) return;
     setState(() => _compareHeld = false);
+    widget.config.onCompareHoldEnd?.call();
   }
+
+  void _dismissOverlay() {
+    if (_overlay.kind == EditorOverlayKind.none) return;
+    _shapeMaskCompleter?.complete(null);
+    _shapeMaskCompleter = null;
+    setState(() => _overlay = const EditorOverlayState.none());
+  }
+
+  Future<StickerShapeMask?> _pickShapeMask({
+    required int imageCount,
+    String? title,
+    StickerShapeMask? initial,
+    void Function(StickerShapeMask mask)? onPicked,
+  }) {
+    _shapeMaskCompleter = Completer<StickerShapeMask?>();
+    setState(() {
+      _overlay = EditorOverlayState(
+        kind: EditorOverlayKind.shapeMask,
+        shapeMaskImageCount: imageCount,
+        shapeMaskTitle: title,
+        shapeMaskInitial: initial,
+        onShapeMaskSelected: (mask) {
+          onPicked?.call(mask);
+          _shapeMaskCompleter?.complete(mask);
+          _shapeMaskCompleter = null;
+          setState(() => _overlay = const EditorOverlayState.none());
+        },
+      );
+    });
+    return _shapeMaskCompleter!.future;
+  }
+
+  bool _useMobileChrome(BuildContext context) => !_useWideLayout(context);
 
   @override
   Widget build(BuildContext context) {
@@ -174,8 +219,6 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   }
 
   Widget _buildMobile(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom + 72;
-
     return MobileEditorLayout(
       config: widget.config,
       session: _session,
@@ -190,14 +233,34 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
           ? () => _session.exportAndSave(customSave: widget.config.onExport)
           : null,
       toolBarPlacement: widget.config.toolBarPlacement,
-      preview: _buildPreview(
+      showMobileMetaOverlay: widget.config.showMobileMetaOverlay,
+      canvasChrome: widget.config.showCanvasFloatingChrome
+          ? CanvasFloatingChrome(session: _session)
+          : null,
+      contextStripBuilder: (tool) => ToolContextStrip(
+        tool: tool,
+        session: _session,
+        cropController: _cropController,
+        stickersTabIndex: _stickersTab,
+        onStickersTabChanged: (i) => setState(() => _stickersTab = i),
+        adjustKind: _adjustKind,
+        onAdjustKindChanged: (k) => setState(() => _adjustKind = k),
+      ),
+      overlay: _overlay.kind != EditorOverlayKind.none
+          ? EditorOverlayPanel(
+              state: _overlay,
+              session: _session,
+              onDismiss: _dismissOverlay,
+            )
+          : null,
+      previewBuilder: (metrics) => _buildPreview(
         context,
         immersive: true,
-        overlayBottomInset: bottomInset,
+        overlayBottomInset: metrics.bottomInset,
       ),
-      toolPanelBuilder: (scroll) => _toolPanelHost(
-        scrollController: scroll,
+      toolPanelBuilder: () => _toolPanelHost(
         compact: true,
+        stripHostedExternally: true,
       ),
     );
   }
@@ -205,6 +268,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   ToolPanelHost _toolPanelHost({
     ScrollController? scrollController,
     bool compact = false,
+    bool stripHostedExternally = false,
   }) {
     return ToolPanelHost(
       tool: _tool,
@@ -215,6 +279,18 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       cropController: _cropController,
       scrollController: scrollController,
       compact: compact,
+      stripHostedExternally: stripHostedExternally,
+      stickersTabIndex: _stickersTab,
+      onStickersTabChanged: (i) => setState(() => _stickersTab = i),
+      selectedAdjustKind: _adjustKind,
+      onAdjustKindChanged: (k) => setState(() => _adjustKind = k),
+      onBlankCanvas: _useMobileChrome(context)
+          ? () => setState(() {
+                _overlay = const EditorOverlayState(
+                  kind: EditorOverlayKind.blankCanvas,
+                );
+              })
+          : null,
     );
   }
 
@@ -284,13 +360,40 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       imageHeight: ih,
       onLayerStackChanged: _session.notifyLayerChanged,
       onTransformBegin: _session.pushLayerUndo,
-      onUserImageStickerTap: (layer) =>
-          StickerImageImport.pickShapeForLayer(context, _session, layer),
-      onTextLayerDoubleTap: (layer) => TextLayerEditSheet.show(
+      onUserImageStickerTap: (layer) {
+        if (_useMobileChrome(context)) {
+          StickerImageImport.pickShapeForLayer(
+            context,
+            _session,
+            layer,
+            pickShapeMask: () => _pickShapeMask(
+              imageCount: 1,
+              title: 'Sticker shape',
+              initial: layer.shapeMask,
+            ),
+          );
+        } else {
+          StickerImageImport.pickShapeForLayer(context, _session, layer);
+        }
+      },
+      onTextLayerDoubleTap: (layer) {
+        _session.layerStack.select(layer.id);
+        _session.notifyLayerChanged();
+        if (_useMobileChrome(context)) {
+          setState(() {
+            _overlay = EditorOverlayState(
+              kind: EditorOverlayKind.textEdit,
+              textLayer: layer,
+            );
+          });
+        } else {
+          TextLayerEditSheet.show(
             context,
             session: _session,
             layer: layer,
-          ),
+          );
+        }
+      },
       onPaintStroke: (pts, {required Size childSize}) => _session.addPaintStroke(
             pts,
             imageWidth: iw,
@@ -396,7 +499,7 @@ class _MetaChips extends StatelessWidget {
           children: [
             for (var i = 0; i < labels.length; i++)
               _AnimatedChip(
-                key: ValueKey(labels[i]),
+                key: ValueKey('meta-$i-${labels[i]}'),
                 label: labels[i],
                 index: i,
               ),

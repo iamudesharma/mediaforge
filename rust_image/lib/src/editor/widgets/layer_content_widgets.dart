@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../models/overlay_layer.dart';
+import '../services/text_paint_style.dart';
 import '../services/shape_paths.dart';
 import '../services/sticker_catalog.dart';
 import '../services/sticker_image_cache.dart';
@@ -24,35 +25,36 @@ class LayerContentWidget extends StatelessWidget {
             style: TextStyle(fontSize: fontSize, shadows: const []),
           ),
         ),
-      TextLayer(
-        :final text,
-        :final fontSize,
-        :final color,
-        :final backgroundStyle,
-        :final backgroundColor,
-        :final padding,
-        :final cornerRadius,
-      ) =>
-        FittedBox(
+      TextLayer layer => FittedBox(
           fit: BoxFit.contain,
-          child: Container(
-            padding: EdgeInsets.all(padding),
-            decoration: backgroundStyle == TextBackgroundStyle.none
-                ? null
-                : BoxDecoration(
-                    color: backgroundColor,
-                    borderRadius: BorderRadius.circular(cornerRadius),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final lw = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+                  ? constraints.maxWidth
+                  : 200.0;
+              final lh = constraints.maxHeight.isFinite && constraints.maxHeight > 0
+                  ? constraints.maxHeight
+                  : 80.0;
+              return Container(
+                padding: EdgeInsets.all(layer.padding),
+                decoration: layer.backgroundStyle == TextBackgroundStyle.none
+                    ? null
+                    : BoxDecoration(
+                        color: layer.backgroundColor,
+                        borderRadius:
+                            BorderRadius.circular(layer.cornerRadius),
+                      ),
+                child: Text(
+                  layer.text,
+                  style: textPaintStyle(
+                    layer,
+                    layoutWidth: lw,
+                    layoutHeight: lh,
                   ),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: color,
-                fontSize: fontSize,
-                fontWeight: FontWeight.w600,
-                shadows: const [],
-              ),
-              textAlign: TextAlign.center,
-            ),
+                  textAlign: TextAlign.center,
+                ),
+              );
+            },
           ),
         ),
       StickerLayer sticker => _StickerLayerImage(layer: sticker),

@@ -29,6 +29,7 @@ class LayerEditorOverlay extends StatefulWidget {
     this.activePaintWidth,
     this.activePaintOpacity,
     this.activePaintBrush,
+    this.hiddenTextLayerId,
   });
 
   final LayerStack stack;
@@ -49,6 +50,9 @@ class LayerEditorOverlay extends StatefulWidget {
   final double? activePaintWidth;
   final double? activePaintOpacity;
   final PaintBrushKind? activePaintBrush;
+
+  /// Hide rasterized text while inline edit overlay is open.
+  final String? hiddenTextLayerId;
 
   @override
   State<LayerEditorOverlay> createState() => _LayerEditorOverlayState();
@@ -185,7 +189,9 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
           ),
         if (stackBox != null)
           for (final layer in _hitTestLayersList())
-            if (layer.visible && layer is! PaintStrokeLayer)
+            if (layer.visible &&
+                layer is! PaintStrokeLayer &&
+                layer.id != widget.hiddenTextLayerId)
               TransformableLayer(
                 key: ValueKey(layer.id),
                 layer: layer,

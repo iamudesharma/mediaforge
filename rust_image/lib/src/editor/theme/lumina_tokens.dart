@@ -36,5 +36,14 @@ abstract final class LuminaTokens {
   /// Tool sheet max height as fraction of viewport (DESIGN.md: 40%).
   static const sheetMaxViewportFraction = 0.4;
 
+  /// Draggable child sizes within the sheet container (peek / default / full).
+  /// Peek must fit grabber + context strip + one control row (~200px on phone).
+  static const sheetPeekChildSize = 0.38;
+  static const sheetExpandedChildSize = 0.72;
+  static const sheetMaxChildSize = 1.0;
+
+  /// Chip row embedded in the mobile tool sheet (not a separate band).
+  static const contextStripHeight = 52.0;
+
   static const sheetBlurSigma = 20.0;
 }
