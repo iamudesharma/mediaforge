@@ -78,7 +78,8 @@ abstract final class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(LuminaTokens.controlHeight),
+          // Avoid Size.fromHeight — it sets width to infinity and breaks buttons in Rows.
+          minimumSize: Size(0, LuminaTokens.controlHeight),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusLg)),
           elevation: 0,
@@ -94,7 +95,7 @@ abstract final class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(LuminaTokens.controlHeight),
+          minimumSize: Size(0, LuminaTokens.controlHeight),
           foregroundColor: LuminaTokens.onSurface,
           side: const BorderSide(color: LuminaTokens.outlineVariant),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(LuminaTokens.radiusLg)),

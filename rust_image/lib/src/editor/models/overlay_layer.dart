@@ -15,6 +15,9 @@ enum OverlayLayerKind {
 
 enum TextBackgroundStyle { none, solid, rounded }
 
+/// Solid fill or linear gradient on text glyphs.
+enum TextFillMode { solid, gradient }
+
 enum ShapeKind { rect, ellipse, line, arrow }
 
 enum PaintBrushKind { pen, marker, highlighter, eraser, neon }
@@ -143,6 +146,12 @@ class TextLayer extends OverlayLayer {
     required this.text,
     this.fontSize = 32,
     this.color = Colors.white,
+    this.fillMode = TextFillMode.solid,
+    this.gradientEnd = const Color(0xFFFF4081),
+    this.gradientAngleDeg = 0,
+    this.fontWeight = FontWeight.w600,
+    this.fontStyle = FontStyle.normal,
+    this.fontFamily,
     this.backgroundStyle = TextBackgroundStyle.rounded,
     this.backgroundColor = const Color(0xE6000000),
     this.padding = 12,
@@ -155,6 +164,12 @@ class TextLayer extends OverlayLayer {
   final String text;
   final double fontSize;
   final Color color;
+  final TextFillMode fillMode;
+  final Color gradientEnd;
+  final double gradientAngleDeg;
+  final FontWeight fontWeight;
+  final FontStyle fontStyle;
+  final String? fontFamily;
   final TextBackgroundStyle backgroundStyle;
   final Color backgroundColor;
   final double padding;
@@ -171,6 +186,12 @@ class TextLayer extends OverlayLayer {
         text: text,
         fontSize: fontSize,
         color: color,
+        fillMode: fillMode,
+        gradientEnd: gradientEnd,
+        gradientAngleDeg: gradientAngleDeg,
+        fontWeight: fontWeight,
+        fontStyle: fontStyle,
+        fontFamily: fontFamily,
         backgroundStyle: backgroundStyle,
         backgroundColor: backgroundColor,
         padding: padding,

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../models/overlay_layer.dart';
 import 'shape_paths.dart';
+import 'text_paint_style.dart';
 import 'sticker_catalog.dart';
 
 /// Rasterize overlay layers to RGBA bytes for preview cache / export bake.
@@ -29,19 +30,32 @@ abstract final class LayerRasterizer {
   static Future<({Uint8List pixels, int width, int height})> rasterizeText(
     TextLayer layer,
   ) async {
-    final style = TextStyle(
-      color: layer.color,
-      fontSize: layer.fontSize,
-      fontWeight: FontWeight.w600,
+    final pad = layer.padding;
+    final probe = TextPainter(
+      text: TextSpan(
+        text: layer.text,
+        style: TextStyle(
+          fontSize: layer.fontSize,
+          fontWeight: layer.fontWeight,
+          fontStyle: layer.fontStyle,
+          fontFamily: layer.fontFamily,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final w = (probe.width + pad * 2).ceil().clamp(1, 2048);
+    final h = (probe.height + pad * 2).ceil().clamp(1, 2048);
+
+    final style = textPaintStyle(
+      layer,
+      layoutWidth: w.toDouble(),
+      layoutHeight: h.toDouble(),
     );
     final tp = TextPainter(
       text: TextSpan(text: layer.text, style: style),
       textDirection: TextDirection.ltr,
     )..layout();
-
-    final pad = layer.padding;
-    final w = (tp.width + pad * 2).ceil().clamp(1, 2048);
-    final h = (tp.height + pad * 2).ceil().clamp(1, 2048);
 
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);

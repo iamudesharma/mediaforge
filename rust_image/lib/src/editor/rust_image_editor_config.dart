@@ -30,6 +30,8 @@ class RustImageEditorConfig {
     this.pickFromCamera,
     this.onImageChanged,
     this.onExport,
+    this.onCompareHoldStart,
+    this.onCompareHoldEnd,
     this.showCompare = true,
     this.allowBlankCanvas = true,
     this.defaultBackend = ProcessingBackend.auto,
@@ -40,6 +42,7 @@ class RustImageEditorConfig {
     this.layoutMode = EditorLayoutMode.auto,
     this.toolBarPlacement = EditorToolBarPlacement.auto,
     this.showMobileMetaOverlay = true,
+    this.showCanvasFloatingChrome = true,
     this.session,
   });
 
@@ -68,6 +71,12 @@ class RustImageEditorConfig {
   /// Photos/gallery (mobile) or Downloads (desktop) via [ImageExportSaver].
   final void Function(Uint8List bytes, ImageInfo info)? onExport;
 
+  /// Example / host apps: snackbars or analytics when the user holds compare.
+  final VoidCallback? onCompareHoldStart;
+
+  /// Called when compare hold / hover ends.
+  final VoidCallback? onCompareHoldEnd;
+
   final bool showCompare;
 
   /// Sprint 8 — show "Create blank canvas" on the Import tool.
@@ -94,6 +103,9 @@ class RustImageEditorConfig {
 
   /// Small dimensions pill over the canvas on mobile (immersive layout).
   final bool showMobileMetaOverlay;
+
+  /// Flip + compact layers popover on the canvas (mobile); layers omitted from bottom nav.
+  final bool showCanvasFloatingChrome;
 
   /// Optional external session (you manage [EditorSession.dispose]).
   final EditorSession? session;

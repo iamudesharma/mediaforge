@@ -15,6 +15,7 @@ import 'services/layer_bake.dart';
 import 'rust_image_editor_config.dart';
 import 'services/filter_descriptor.dart';
 import 'services/image_buffer_utils.dart';
+import 'services/image_bytes_normalizer.dart';
 import 'services/image_export_saver.dart';
 import 'services/rust_worker.dart';
 import 'widgets/paint_stroke_painter.dart';
@@ -363,6 +364,11 @@ class EditorSession extends ChangeNotifier {
     status = 'Loading…';
     notifyListeners();
     try {
+      if (ImageBytesNormalizer.isHeicOrHeif(bytes)) {
+        status = 'Converting HEIC…';
+        notifyListeners();
+        bytes = await ImageBytesNormalizer.prepareForEditor(bytes);
+      }
       final info = RustImageEditor.probe(bytes);
       sourceBytes = bytes;
       displayBytes = bytes;
@@ -1005,41 +1011,46 @@ class EditorSession extends ChangeNotifier {
 
     final sw = Stopwatch()..start();
     try {
-      _pushUndo();
+      if (rgbaPipeline) {
+        _pushGraphUndo();
+      } else {
+        _pushUndo();
+      }
+      _undoLayers.add(layerStack.copy());
+      if (_undoLayers.length > _maxUndo) {
+        _undoLayers.removeAt(0);
+      }
+
       await RustWorker.ensureStarted();
       await _bakeGraphIntoFullBase();
 
-      var working = rgbaBase ?? rgbaBuffer;
+      // Crop edit-scale pixels (matches overlay); avoid full-res [rgbaBase] on UI thread.
+      final working = rgbaBuffer ?? rgbaEditBase ?? rgbaBase;
       if (working == null) return;
 
-      if (straighten.abs() >= 0.05) {
-        working = rotateRgbaArbitrary(buffer: working, degrees: straighten);
-        crop.syncImageSize(working.width, working.height);
-      }
-
       final rect = cropRectForBuffer(crop: crop, buffer: working);
-      final cropped = RustImageEditor.cropRgba(
-        working,
+      final result = await RustWorker.applyCropRgba(
+        buffer: working,
+        straightenDegrees: straighten,
         x: rect.x,
         y: rect.y,
         width: rect.width,
         height: rect.height,
+        liveEditMaxEdge: liveEditMaxEdge,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
       );
       if (gen != _opGeneration) return;
 
-      rgbaBase = _cloneRgba(cropped);
-      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-      rgbaBuffer = _cloneRgba(rgbaEditBase!);
+      rgbaBase = result.base;
+      rgbaEditBase = result.edit;
+      rgbaBuffer = result.edit;
       previewRgba = rgbaBuffer;
       rgbaPipeline = true;
-      displayBytes = await RustWorker.encodePreview(
-        buffer: cropped,
-        previewMaxEdge: previewMaxEdge,
-        quality: previewQuality,
-      );
+      displayBytes = result.preview;
       imageInfo = ImageInfo(
-        width: cropped.width,
-        height: cropped.height,
+        width: result.base.width,
+        height: result.base.height,
         format: imageInfo?.format,
       );
       notifyPreviewChanged();

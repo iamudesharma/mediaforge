@@ -20,8 +20,11 @@ import 'crop_overlay.dart';
 import 'placement_overlay.dart';
 
 class LivePreview extends StatefulWidget {
+  /// For widget tests (mobile chrome / sheet insets).
+  static const widgetKey = Key('lumina_live_preview');
+
   const LivePreview({
-    super.key,
+    super.key = widgetKey,
     required this.bytes,
     required this.compareBytes,
     required this.showCompare,
@@ -52,6 +55,7 @@ class LivePreview extends StatefulWidget {
     this.activePaintWidth,
     this.activePaintOpacity,
     this.activePaintBrush,
+    this.hiddenTextLayerId,
   });
 
   final Uint8List? bytes;
@@ -90,6 +94,7 @@ class LivePreview extends StatefulWidget {
   final double? activePaintWidth;
   final double? activePaintOpacity;
   final PaintBrushKind? activePaintBrush;
+  final String? hiddenTextLayerId;
 
   @override
   State<LivePreview> createState() => _LivePreviewState();
@@ -199,6 +204,7 @@ class _LivePreviewState extends State<LivePreview> {
                     activePaintWidth: widget.activePaintWidth,
                     activePaintOpacity: widget.activePaintOpacity,
                     activePaintBrush: widget.activePaintBrush,
+                    hiddenTextLayerId: widget.hiddenTextLayerId,
                   ),
           ),
           AnimatedSwitcher(
@@ -306,6 +312,7 @@ class _PreviewContent extends StatelessWidget {
     this.activePaintWidth,
     this.activePaintOpacity,
     this.activePaintBrush,
+    this.hiddenTextLayerId,
   });
 
   final Uint8List? bytes;
@@ -335,6 +342,7 @@ class _PreviewContent extends StatelessWidget {
   final double? activePaintWidth;
   final double? activePaintOpacity;
   final PaintBrushKind? activePaintBrush;
+  final String? hiddenTextLayerId;
 
   Widget _buildPreviewImage() {
     if (useRgbaPreview && previewRgba != null) {
@@ -461,6 +469,7 @@ class _PreviewContent extends StatelessWidget {
                       activePaintWidth: activePaintWidth,
                       activePaintOpacity: activePaintOpacity,
                       activePaintBrush: activePaintBrush,
+                      hiddenTextLayerId: hiddenTextLayerId,
                     );
                   },
                 )
@@ -482,6 +491,7 @@ class _PreviewContent extends StatelessWidget {
                   activePaintWidth: activePaintWidth,
                   activePaintOpacity: activePaintOpacity,
                   activePaintBrush: activePaintBrush,
+                  hiddenTextLayerId: hiddenTextLayerId,
                 );
           content = Stack(
             fit: StackFit.expand,

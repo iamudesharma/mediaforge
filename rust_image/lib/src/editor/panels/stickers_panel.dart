@@ -8,20 +8,29 @@ import '../services/layer_rasterizer.dart';
 import '../services/sticker_image_import.dart';
 import '../services/sticker_catalog.dart';
 import '../theme/lumina_tokens.dart';
+import '../models/text_style_draft.dart';
 import '../widgets/control_widgets.dart';
+import '../widgets/text_style_controls.dart';
 import 'shape_mask_sheet.dart';
+import 'text_layer_edit_sheet.dart';
 
 class StickersPanel extends StatefulWidget {
   const StickersPanel({
     super.key,
     required this.session,
     this.scrollController,
+    this.stripHostedExternally = false,
+    this.tabIndex = 0,
+    this.onTabChanged,
   });
 
   final EditorSession session;
 
   /// When set (mobile tool sheet), this panel owns scrolling — no nested scroll views.
   final ScrollController? scrollController;
+  final bool stripHostedExternally;
+  final int tabIndex;
+  final ValueChanged<int>? onTabChanged;
 
   @override
   State<StickersPanel> createState() => _StickersPanelState();
@@ -32,11 +41,14 @@ class _StickersPanelState extends State<StickersPanel> {
   static const double _defaultEmojiLayerScale = 1.25;
   static const double _defaultBuiltinStickerScale = 1.4;
 
-  int _tab = 0;
+  int get _tab => widget.tabIndex;
   final _textCtrl = TextEditingController(text: 'Hello');
-  Color _textColor = Colors.white;
+  TextStyleDraft _textStyle = const TextStyleDraft();
   TextBackgroundStyle _bgStyle = TextBackgroundStyle.rounded;
   double _textOpacity = 1;
+
+  /// Live text on canvas while the Text tab is active.
+  String? _canvasTextLayerId;
 
   EditorSession get s => widget.session;
 
@@ -50,9 +62,99 @@ class _StickersPanelState extends State<StickersPanel> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _textCtrl.addListener(_onTextDraftChanged);
+    if (widget.tabIndex == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureLiveTextLayer();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant StickersPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tabIndex != widget.tabIndex && widget.tabIndex == 2) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _ensureLiveTextLayer();
+      });
+    }
+  }
+
+  @override
   void dispose() {
+    _textCtrl.removeListener(_onTextDraftChanged);
     _textCtrl.dispose();
     super.dispose();
+  }
+
+  void _onTextDraftChanged() {
+    if (_tab == 2) _syncLiveTextToCanvas();
+  }
+
+  void _ensureLiveTextLayer() {
+    if (_tab != 2 || !s.hasImage || s.busy) return;
+
+    if (_canvasTextLayerId != null) {
+      final exists =
+          s.layerStack.layers.any((l) => l.id == _canvasTextLayerId);
+      if (exists) {
+        _syncLiveTextToCanvas();
+        return;
+      }
+      _canvasTextLayerId = null;
+    }
+
+    final info = s.imageInfo;
+    final cx = (info?.width ?? 400) / 2;
+    final cy = (info?.height ?? 600) / 2;
+    final id = newLayerId();
+    _canvasTextLayerId = id;
+    s.pushLayerUndo();
+    final layer = _textStyle.toLayer(
+      id: id,
+      transform: LayerTransform(
+        centerX: cx,
+        centerY: cy,
+        opacity: _textOpacity,
+      ),
+      text: _textCtrl.text,
+      backgroundStyle: _bgStyle,
+    );
+    s.layerStack.add(layer, select: true);
+    s.layerStack.bumpRevision();
+    s.notifyLayerChanged();
+  }
+
+  void _syncLiveTextToCanvas() {
+    if (!s.hasImage || s.busy) return;
+    if (_canvasTextLayerId == null) {
+      _ensureLiveTextLayer();
+      return;
+    }
+    if (!s.layerStack.layers.any((l) => l.id == _canvasTextLayerId)) {
+      _canvasTextLayerId = null;
+      _ensureLiveTextLayer();
+      return;
+    }
+
+    replaceTextLayerInStack(
+      session: s,
+      layerId: _canvasTextLayerId!,
+      style: _textStyle,
+      text: _textCtrl.text,
+      backgroundStyle: _bgStyle,
+      backgroundColor: const Color(0xE6000000),
+    );
+
+    final j = s.layerStack.layers.indexWhere((l) => l.id == _canvasTextLayerId);
+    if (j >= 0 && s.layerStack.layers[j] is TextLayer) {
+      final layer = s.layerStack.layers[j] as TextLayer;
+      layer.transform = layer.transform.copyWith(opacity: _textOpacity);
+      s.layerStack.bumpRevision();
+      s.notifyLayerChanged();
+    }
   }
 
   void _addEmoji(String glyph) {
@@ -110,19 +212,26 @@ class _StickersPanelState extends State<StickersPanel> {
   }
 
   void _addText() {
+    if (_canvasTextLayerId != null) {
+      _syncLiveTextToCanvas();
+      s.layerStack.select(_canvasTextLayerId);
+      _canvasTextLayerId = null;
+      s.notifyLayerChanged();
+      return;
+    }
+
     final info = s.imageInfo;
     final cx = (info?.width ?? 400) / 2;
     final cy = (info?.height ?? 600) / 2;
     s.pushLayerUndo();
     s.layerStack.add(
-      TextLayer(
+      _textStyle.toLayer(
         id: newLayerId(),
         transform: LayerTransform(centerX: cx, centerY: cy, opacity: _textOpacity),
         text: _textCtrl.text,
-        fontSize: 36,
-        color: _textColor,
         backgroundStyle: _bgStyle,
       ),
+      select: true,
     );
     s.notifyLayerChanged();
   }
@@ -130,8 +239,10 @@ class _StickersPanelState extends State<StickersPanel> {
   @override
   Widget build(BuildContext context) {
     final children = [
-      _tabRow(),
-      const SizedBox(height: LuminaTokens.padMd),
+      if (!widget.stripHostedExternally) ...[
+        _tabRow(),
+        const SizedBox(height: LuminaTokens.padMd),
+      ],
       if (_selectedSticker != null &&
           _selectedSticker!.userBytes != null &&
           _selectedSticker!.userBytes!.isNotEmpty) ...[
@@ -147,15 +258,6 @@ class _StickersPanelState extends State<StickersPanel> {
       ],
       ..._tabBodyChildren(context),
     ];
-
-    final controller = widget.scrollController;
-    if (controller != null) {
-      return ListView(
-        controller: controller,
-        padding: EdgeInsets.zero,
-        children: children,
-      );
-    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -176,6 +278,10 @@ class _StickersPanelState extends State<StickersPanel> {
     );
   }
 
+  void _selectTab(int i) {
+    widget.onTabChanged?.call(i);
+  }
+
   Widget _tabChip(int i, String label) {
     final selected = _tab == i;
     return Expanded(
@@ -185,7 +291,7 @@ class _StickersPanelState extends State<StickersPanel> {
             : LuminaTokens.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
         child: InkWell(
-          onTap: () => setState(() => _tab = i),
+          onTap: () => _selectTab(i),
           borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -219,12 +325,27 @@ class _StickersPanelState extends State<StickersPanel> {
           ),
         ],
       _ => [
+          Text(
+            'Text appears on the image as you type',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuminaTokens.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 8),
           TextField(
             controller: _textCtrl,
             decoration: const InputDecoration(
               labelText: 'Caption',
               border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 12),
+          TextStyleControls(
+            value: _textStyle,
+            onChanged: (d) {
+              setState(() => _textStyle = d);
+              _syncLiveTextToCanvas();
+            },
           ),
           const SizedBox(height: 12),
           const SectionHeader('Background'),
@@ -237,7 +358,10 @@ class _StickersPanelState extends State<StickersPanel> {
               TextBackgroundStyle.rounded => 'Rounded',
             },
             selected: _bgStyle,
-            onSelected: (v) => setState(() => _bgStyle = v),
+            onSelected: (v) {
+              setState(() => _bgStyle = v);
+              _syncLiveTextToCanvas();
+            },
           ),
           LabeledSlider(
             label: 'Opacity',
@@ -246,11 +370,14 @@ class _StickersPanelState extends State<StickersPanel> {
             max: 1,
             divisions: 8,
             display: _textOpacity.toStringAsFixed(2),
-            onChanged: (v) => setState(() => _textOpacity = v),
+            onChanged: (v) {
+              setState(() => _textOpacity = v);
+              _syncLiveTextToCanvas();
+            },
           ),
           PrimaryActionButton(
             icon: Icons.text_fields,
-            label: 'Add text',
+            label: _canvasTextLayerId != null ? 'Place text' : 'Add text',
             enabled: s.hasImage && !s.busy,
             onPressed: _addText,
           ),

@@ -4,12 +4,19 @@ import '../editor_session.dart';
 import '../models/overlay_layer.dart';
 import '../theme/lumina_tokens.dart';
 import '../widgets/control_widgets.dart';
+import '../widgets/lumina_color_picker.dart';
 
 class PaintPanel extends StatefulWidget {
-  const PaintPanel({super.key, required this.session, this.scrollController});
+  const PaintPanel({
+    super.key,
+    required this.session,
+    this.scrollController,
+    this.stripHostedExternally = false,
+  });
 
   final EditorSession session;
   final ScrollController? scrollController;
+  final bool stripHostedExternally;
 
   @override
   State<PaintPanel> createState() => _PaintPanelState();
@@ -55,38 +62,18 @@ class _PaintPanelState extends State<PaintPanel> {
           _applyToSession();
         }),
       ),
-      const SizedBox(height: LuminaTokens.padMd),
-      Wrap(
-        spacing: 8,
-        children: [
-          for (final c in [
-            const Color(0xFF4EDEA3),
-            Colors.white,
-            Colors.red,
-            Colors.yellow,
-            Colors.blue,
-            Colors.black,
-          ])
-            GestureDetector(
-              onTap: () => setState(() {
-                _color = c;
-                _applyToSession();
-              }),
-              child: Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: c,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _color == c ? LuminaTokens.primary : LuminaTokens.outlineVariant,
-                    width: _color == c ? 2 : 1,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+      if (!widget.stripHostedExternally) ...[
+        const SizedBox(height: LuminaTokens.padMd),
+        Text('Color', style: Theme.of(context).textTheme.labelMedium),
+        const SizedBox(height: 8),
+        LuminaColorSwatchRow(
+          selected: _color,
+          onSelected: (c) => setState(() {
+            _color = c;
+            _applyToSession();
+          }),
+        ),
+      ],
       LabeledSlider(
         label: 'Size',
         value: _size,
@@ -138,15 +125,6 @@ class _PaintPanelState extends State<PaintPanel> {
         label: const Text('Clear all strokes'),
       ),
     ];
-
-    final controller = widget.scrollController;
-    if (controller != null) {
-      return ListView(
-        controller: controller,
-        padding: EdgeInsets.zero,
-        children: children,
-      );
-    }
 
     return Column(
       mainAxisSize: MainAxisSize.min,

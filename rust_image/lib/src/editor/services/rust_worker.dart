@@ -245,6 +245,52 @@ abstract final class RustWorker {
     ]);
   }
 
+  /// Straighten (optional), crop, fit edit max edge, and JPEG preview — all off the UI thread.
+  static Future<
+      ({
+        RgbaImageBuffer base,
+        RgbaImageBuffer edit,
+        Uint8List preview,
+      })> applyCropRgba({
+    required RgbaImageBuffer buffer,
+    required double straightenDegrees,
+    required int x,
+    required int y,
+    required int width,
+    required int height,
+    required int liveEditMaxEdge,
+    required int previewMaxEdge,
+    required int previewQuality,
+  }) async {
+    final raw = await _request<Map<String, Object>>([
+      'applyCropRgba',
+      buffer.width,
+      buffer.height,
+      TransferableTypedData.fromList([buffer.pixels]),
+      straightenDegrees,
+      x,
+      y,
+      width,
+      height,
+      liveEditMaxEdge,
+      previewMaxEdge,
+      previewQuality,
+    ]);
+    return (
+      base: RgbaImageBuffer(
+        width: raw['base_width']! as int,
+        height: raw['base_height']! as int,
+        pixels: _bytesFromPayload(raw['base_pixels']!),
+      ),
+      edit: RgbaImageBuffer(
+        width: raw['edit_width']! as int,
+        height: raw['edit_height']! as int,
+        pixels: _bytesFromPayload(raw['edit_pixels']!),
+      ),
+      preview: _bytesFromPayload(raw['preview']!),
+    );
+  }
+
   static Future<({RgbaImageBuffer buffer, Uint8List preview})> resizeRgba({
     required RgbaImageBuffer buffer,
     required int width,
@@ -795,6 +841,46 @@ Future<Object?> _handleMessage(Object message) async {
         backend: backend,
       );
       return out.last;
+
+    case 'applyCropRgba':
+      final width = message[1] as int;
+      final height = message[2] as int;
+      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
+      final straighten = message[4] as double;
+      final cropX = message[5] as int;
+      final cropY = message[6] as int;
+      final cropW = message[7] as int;
+      final cropH = message[8] as int;
+      final liveEditMaxEdge = message[9] as int;
+      final previewMaxEdge = message[10] as int;
+      final previewQuality = message[11] as int;
+      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
+      if (straighten.abs() >= 0.05) {
+        buffer = rotateRgbaArbitrary(buffer: buffer, degrees: straighten);
+      }
+      buffer = RustImageEditor.cropRgba(
+        buffer,
+        x: cropX,
+        y: cropY,
+        width: cropW,
+        height: cropH,
+      );
+      final base = buffer;
+      final edit = RustImageEditor.fitMaxEdgeRgba(
+        buffer,
+        maxEdge: liveEditMaxEdge,
+        previewQuality: PreviewQuality.fast,
+      );
+      final preview = _encodePreviewBuffer(edit, previewMaxEdge, previewQuality);
+      return {
+        'base_width': base.width,
+        'base_height': base.height,
+        'base_pixels': TransferableTypedData.fromList([base.pixels]),
+        'edit_width': edit.width,
+        'edit_height': edit.height,
+        'edit_pixels': TransferableTypedData.fromList([edit.pixels]),
+        'preview': TransferableTypedData.fromList([preview]),
+      };
 
     case 'resizeRgba':
       final width = message[1] as int;

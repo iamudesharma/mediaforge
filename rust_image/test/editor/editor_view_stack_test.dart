@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart' hide ImageInfo;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rust_image/src/editor/editor_screen.dart';
+import 'package:rust_image/src/editor/widgets/live_preview.dart';
 import 'package:rust_image/src/editor/widgets/editor_tool_rail.dart';
 import 'package:rust_image/src/editor/editor_session.dart';
 import 'package:rust_image/src/editor/layout/editor_layout.dart';
@@ -62,6 +63,56 @@ void main() {
     session.notifyLayerChanged();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+  });
+
+  testWidgets('mobile tool sheet keeps preview visible without full-screen scrim', (tester) async {
+    final session = EditorSession();
+    session
+      ..imageInfo = const ImageInfo(width: 400, height: 300, format: 'jpeg')
+      ..sourceBytes = Uint8List(8)
+      ..displayBytes = Uint8List(8);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(390, 844)),
+          child: RustImageEditorView(
+            config: const RustImageEditorConfig(
+              title: 'Test',
+              layoutMode: EditorLayoutMode.immersive,
+              showMobileMetaOverlay: true,
+            ),
+            session: session,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
+    expect(find.text('Import'), findsOneWidget);
+
+    await tester.tap(find.text('Filters'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
+    expect(find.text('Original'), findsOneWidget);
+
+    await tester.tap(find.text('Filters'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Re-tap same tool collapses/expands sheet — preview still present.
+    expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
+
+    await tester.tap(find.text('Adjust'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
   });
 
   testWidgets('RustImageEditorView wide rail does not overflow with default tools', (tester) async {

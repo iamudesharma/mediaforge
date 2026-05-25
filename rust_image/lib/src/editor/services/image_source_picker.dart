@@ -33,7 +33,16 @@ abstract final class ImageSourcePicker {
   static const _imageTypes = XTypeGroup(
     label: 'Images',
     extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'heic', 'avif'],
-    mimeTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff'],
+    mimeTypes: [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/bmp',
+      'image/tiff',
+      'image/heic',
+      'image/heif',
+    ],
     uniformTypeIdentifiers: ['public.image'],
   );
 
