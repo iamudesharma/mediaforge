@@ -41,12 +41,79 @@ double paintStrokeWidthInStack({
   required int imageWidth,
   required int imageHeight,
   required Size childSize,
+  PaintBrushKind brush = PaintBrushKind.pen,
 }) {
   final iw = imageWidth.toDouble();
   final ih = imageHeight.toDouble();
   final scale = math.min(childSize.width / iw, childSize.height / ih);
   final rectW = iw * scale;
-  return imagePixelWidth * (rectW / imageWidth);
+  final base = imagePixelWidth * (rectW / imageWidth);
+  return switch (brush) {
+    PaintBrushKind.marker => base * 1.4,
+    PaintBrushKind.highlighter => base * 2.2,
+    PaintBrushKind.neon => base * 1.25,
+    _ => base,
+  };
+}
+
+({Paint paint, bool useLayer}) paintConfigForBrush({
+  required PaintBrushKind brush,
+  required Color color,
+  required double opacity,
+  required double strokeWidth,
+}) {
+  final isEraser = brush == PaintBrushKind.eraser;
+  if (isEraser) {
+    return (
+      paint: Paint()
+        ..color = Colors.transparent
+        ..strokeWidth = strokeWidth
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..blendMode = BlendMode.clear,
+      useLayer: true,
+    );
+  }
+
+  var effectiveColor = color.withValues(alpha: opacity);
+  var blend = BlendMode.srcOver;
+  var width = strokeWidth;
+  MaskFilter? mask;
+
+  switch (brush) {
+    case PaintBrushKind.marker:
+      width = strokeWidth * 1.4;
+    case PaintBrushKind.highlighter:
+      width = strokeWidth * 2.2;
+      effectiveColor = color.withValues(alpha: opacity * 0.35);
+      blend = BlendMode.plus;
+    case PaintBrushKind.neon:
+      width = strokeWidth * 1.25;
+      effectiveColor = Color.fromARGB(
+        (opacity * 255).round().clamp(0, 255),
+        color.red.clamp(0, 255),
+        color.green.clamp(0, 255),
+        (color.blue + 80).clamp(0, 255),
+      );
+      mask = const MaskFilter.blur(BlurStyle.normal, 6);
+    case PaintBrushKind.pen:
+    case PaintBrushKind.eraser:
+      break;
+  }
+
+  final paint = Paint()
+    ..color = effectiveColor
+    ..strokeWidth = width
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..blendMode = blend;
+  if (mask != null) {
+    paint.maskFilter = mask;
+  }
+
+  return (paint: paint, useLayer: brush == PaintBrushKind.highlighter || brush == PaintBrushKind.neon);
 }
 
 /// Committed paint strokes only (RepaintBoundary-friendly).
@@ -66,6 +133,7 @@ class CommittedPaintStrokePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     for (final layer in stack.layers) {
+      if (!layer.visible) continue;
       if (layer is! PaintStrokeLayer || layer.points.length < 2) continue;
       final path = layer.displayPath ??
           buildPaintStrokePath(
@@ -79,14 +147,30 @@ class CommittedPaintStrokePainter extends CustomPainter {
         imageWidth: imageWidth,
         imageHeight: imageHeight,
         childSize: childSize,
+        brush: layer.brush,
       );
-      final paint = Paint()
-        ..color = layer.color.withValues(alpha: layer.opacity)
-        ..strokeWidth = strokeW
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(path, paint);
+      final cfg = paintConfigForBrush(
+        brush: layer.brush,
+        color: layer.color,
+        opacity: layer.opacity,
+        strokeWidth: strokeW,
+      );
+      if (cfg.useLayer) {
+        canvas.saveLayer(Offset.zero & size, Paint());
+      }
+      if (layer.brush == PaintBrushKind.neon) {
+        final glow = paintConfigForBrush(
+          brush: PaintBrushKind.neon,
+          color: layer.color,
+          opacity: layer.opacity * 0.25,
+          strokeWidth: strokeW * 2.2,
+        );
+        canvas.drawPath(path, glow.paint);
+      }
+      canvas.drawPath(path, cfg.paint);
+      if (cfg.useLayer) {
+        canvas.restore();
+      }
     }
   }
 
@@ -109,6 +193,7 @@ class ActivePaintStrokePainter extends CustomPainter {
     required this.color,
     required this.width,
     required this.opacity,
+    this.brush = PaintBrushKind.pen,
   });
 
   final int imageWidth;
@@ -118,6 +203,7 @@ class ActivePaintStrokePainter extends CustomPainter {
   final Color color;
   final double width;
   final double opacity;
+  final PaintBrushKind brush;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -133,14 +219,30 @@ class ActivePaintStrokePainter extends CustomPainter {
       imageWidth: imageWidth,
       imageHeight: imageHeight,
       childSize: childSize,
+      brush: brush,
     );
-    final paint = Paint()
-      ..color = color.withValues(alpha: opacity)
-      ..strokeWidth = strokeW
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(path, paint);
+    final cfg = paintConfigForBrush(
+      brush: brush,
+      color: color,
+      opacity: opacity,
+      strokeWidth: strokeW,
+    );
+    if (cfg.useLayer) {
+      canvas.saveLayer(Offset.zero & size, Paint());
+    }
+    if (brush == PaintBrushKind.neon) {
+      final glow = paintConfigForBrush(
+        brush: PaintBrushKind.neon,
+        color: color,
+        opacity: opacity * 0.25,
+        strokeWidth: strokeW * 2.2,
+      );
+      canvas.drawPath(path, glow.paint);
+    }
+    canvas.drawPath(path, cfg.paint);
+    if (cfg.useLayer) {
+      canvas.restore();
+    }
   }
 
   @override
@@ -152,6 +254,7 @@ class ActivePaintStrokePainter extends CustomPainter {
         old.color != color ||
         old.width != width ||
         old.opacity != opacity ||
+        old.brush != brush ||
         old.imageWidth != imageWidth ||
         old.imageHeight != imageHeight ||
         old.childSize != childSize;

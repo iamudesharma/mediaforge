@@ -64,6 +64,15 @@ RgbaImageBuffer cropRgbaBuffer({
   height: height,
 );
 
+/// Arbitrary straighten rotation (degrees), expanding canvas with transparency.
+RgbaImageBuffer rotateRgbaArbitrary({
+  required RgbaImageBuffer buffer,
+  required double degrees,
+}) => RustLib.instance.api.crateApiAdvancedRotateRgbaArbitrary(
+  buffer: buffer,
+  degrees: degrees,
+);
+
 RgbaImageBuffer filterRgbaBuffer({
   required RgbaImageBuffer buffer,
   required ImageFilter filter,

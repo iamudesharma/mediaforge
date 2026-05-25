@@ -76,73 +76,65 @@ class _BlankCanvasSheetState extends State<BlankCanvasSheet> {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(LuminaTokens.padMd),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Create blank canvas',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Create blank canvas',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: _creating ? null : () => Navigator.pop(context),
-                ),
-              ],
-            ),
-            const SectionHeader('Aspect ratio'),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final a in BlankAspect.values)
-                  ChoiceChip(
-                    label: Text(a.label),
-                    selected: _aspect == a,
-                    onSelected: _creating
-                        ? null
-                        : (_) => setState(() => _aspect = a),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: _creating ? null : () => Navigator.pop(context),
                   ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _aspect.subtitle,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            _AspectPreview(aspect: _aspect, background: _background),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _bgTabChip(0, 'Solid'),
-                const SizedBox(width: 8),
-                _bgTabChip(1, 'Gradient'),
-                const SizedBox(width: 8),
-                _bgTabChip(2, 'Custom'),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 220,
-              child: SingleChildScrollView(
-                child: _bgTabBody(),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            PrimaryActionButton(
-              icon: Icons.add,
-              label: _creating ? 'Creating…' : 'Create canvas',
-              enabled: !_creating,
-              onPressed: _creating ? null : _create,
-            ),
-          ],
+              const SectionHeader('Aspect ratio'),
+              ActionChipRow<BlankAspect>(
+                items: BlankAspect.values,
+                label: (a) => a.label,
+                selected: _aspect,
+                onSelected: _creating ? (_) {} : (a) => setState(() => _aspect = a),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _aspect.subtitle,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              _AspectPreview(aspect: _aspect, background: _background),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _bgTabChip(0, 'Solid'),
+                  const SizedBox(width: 8),
+                  _bgTabChip(1, 'Gradient'),
+                  const SizedBox(width: 8),
+                  _bgTabChip(2, 'Custom'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 220,
+                child: SingleChildScrollView(
+                  child: _bgTabBody(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              PrimaryActionButton(
+                icon: Icons.add,
+                label: _creating ? 'Creating…' : 'Create canvas',
+                enabled: !_creating,
+                onPressed: _creating ? null : _create,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -167,6 +159,7 @@ class _BlankCanvasSheetState extends State<BlankCanvasSheet> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
+                shadows: const [],
                 color: selected ? LuminaTokens.primary : LuminaTokens.onSurfaceVariant,
               ),
             ),

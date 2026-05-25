@@ -28,6 +28,12 @@ class PaintStrokeInput {
   final double width;
   final double opacity;
 
+  /// When true, clears painted pixels along the stroke (Sprint 9 eraser).
+  final bool erase;
+
+  /// 0=pen, 1=marker, 2=highlighter, 3=eraser, 4=neon (Sprint 10).
+  final int brushKind;
+
   const PaintStrokeInput({
     required this.points,
     required this.colorR,
@@ -36,6 +42,8 @@ class PaintStrokeInput {
     required this.colorA,
     required this.width,
     required this.opacity,
+    required this.erase,
+    required this.brushKind,
   });
 
   @override
@@ -46,7 +54,9 @@ class PaintStrokeInput {
       colorB.hashCode ^
       colorA.hashCode ^
       width.hashCode ^
-      opacity.hashCode;
+      opacity.hashCode ^
+      erase.hashCode ^
+      brushKind.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -59,7 +69,9 @@ class PaintStrokeInput {
           colorB == other.colorB &&
           colorA == other.colorA &&
           width == other.width &&
-          opacity == other.opacity;
+          opacity == other.opacity &&
+          erase == other.erase &&
+          brushKind == other.brushKind;
 }
 
 class RasterLayerInput {

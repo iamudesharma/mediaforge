@@ -84,6 +84,12 @@ pub fn crop_rgba_buffer(
     buffer::crop_rgba(buffer, x, y, width, height)
 }
 
+/// Arbitrary straighten rotation (degrees), expanding canvas with transparency.
+#[flutter_rust_bridge::frb(sync)]
+pub fn rotate_rgba_arbitrary(buffer: RgbaImageBuffer, degrees: f32) -> Result<RgbaImageBuffer, String> {
+    crate::rotate::rotate_rgba_arbitrary(buffer, degrees)
+}
+
 #[flutter_rust_bridge::frb(sync)]
 pub fn filter_rgba_buffer(
     buffer: RgbaImageBuffer,

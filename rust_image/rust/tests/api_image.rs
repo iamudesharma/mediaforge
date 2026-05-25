@@ -3,6 +3,7 @@ mod common;
 use common::{
     decode_dims, mean_r_channel, plain_jpeg, synthetic_jpeg, synthetic_png, tiny_rgba,
 };
+use rust_image_core::api::advanced::{decode_to_rgba_buffer, filter_rgba_buffer};
 use rust_image_core::api::image::{
     add_watermark, apply_filter, batch_resize_images, compress_image, create_thumbnail, crop_image,
     draw_circle_on_image, draw_line_on_image, draw_text_on_image, fix_exif_orientation,
@@ -261,7 +262,10 @@ fn apply_filter_all_presets() {
     for p in presets {
         let out = apply_filter(
             src.clone(),
-            ImageFilter::Preset(p),
+            ImageFilter::Preset {
+                preset: p,
+                strength: 1.0,
+            },
             OutputFormat::Jpeg,
             85,
             false,
@@ -269,6 +273,57 @@ fn apply_filter_all_presets() {
         .expect("preset");
         assert!(!out.is_empty());
     }
+}
+
+#[test]
+fn tone_filters_at_zero_are_near_identity() {
+    init_app();
+    let buf = decode_to_rgba_buffer(synthetic_png(32, 32), false, None).expect("decode");
+    let mean_before = mean_r_channel(&buf);
+    for filter in [
+        ImageFilter::Highlights { amount: 0.0 },
+        ImageFilter::Shadows { amount: 0.0 },
+        ImageFilter::Structure { amount: 0.0 },
+    ] {
+        let out = filter_rgba_buffer(buf.clone(), filter, ProcessingBackend::Cpu)
+            .expect("filter");
+        let mean_after = mean_r_channel(&out);
+        assert!(
+            (mean_before - mean_after).abs() < 2.0,
+            "filter at 0 should be near identity: {mean_before} vs {mean_after}"
+        );
+    }
+}
+
+#[test]
+fn rotate_rgba_arbitrary_changes_dimensions() {
+    init_app();
+    use rust_image_core::api::advanced::rotate_rgba_arbitrary;
+    let buf = decode_to_rgba_buffer(synthetic_png(40, 30), false, None).expect("decode");
+    let out = rotate_rgba_arbitrary(buf, 5.0).expect("rotate");
+    assert!(out.width >= 40 && out.height >= 30);
+}
+
+#[test]
+fn preset_strength_zero_is_near_identity() {
+    init_app();
+    let src = synthetic_png(32, 32);
+    let buf = decode_to_rgba_buffer(src, false, None).expect("decode");
+    let mean_before = mean_r_channel(&buf);
+    let out = filter_rgba_buffer(
+        buf,
+        ImageFilter::Preset {
+            preset: FilterPreset::Dramatic,
+            strength: 0.0,
+        },
+        ProcessingBackend::Cpu,
+    )
+    .expect("filter");
+    let mean_after = mean_r_channel(&out);
+    assert!(
+        (mean_before - mean_after).abs() < 2.0,
+        "strength 0 should barely change image: {mean_before} vs {mean_after}"
+    );
 }
 
 #[test]

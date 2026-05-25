@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/overlay_layer.dart';
 import '../theme/lumina_tokens.dart';
+import '../widgets/control_widgets.dart';
 
 /// Pick a clip shape for imported image stickers.
 class ShapeMaskSheet extends StatelessWidget {
@@ -71,17 +72,11 @@ class ShapeMaskSheet extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final mask in StickerShapeMask.values)
-                  ChoiceChip(
-                    label: Text(label(mask)),
-                    selected: initial == mask,
-                    onSelected: (_) => Navigator.pop(context, mask),
-                  ),
-              ],
+            ActionChipRow<StickerShapeMask>(
+              items: StickerShapeMask.values,
+              label: label,
+              selected: initial ?? StickerShapeMask.none,
+              onSelected: (mask) => Navigator.pop(context, mask),
             ),
             const SizedBox(height: 8),
           ],

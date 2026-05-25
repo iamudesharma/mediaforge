@@ -14,6 +14,7 @@ class OverlayPlacementController extends ChangeNotifier {
 
   void syncImageSize(int width, int height) {
     if (width <= 0 || height <= 0) return;
+    if (imageWidth == width && imageHeight == height) return;
     imageWidth = width;
     imageHeight = height;
     notifyListeners();

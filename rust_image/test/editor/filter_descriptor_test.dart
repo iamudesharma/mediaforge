@@ -12,7 +12,25 @@ void _expectRoundTrip(FilterDescriptor original) {
 void main() {
   group('FilterDescriptor round-trips', () {
     test('preset', () {
-      _expectRoundTrip(FilterDescriptor.preset(FilterPreset.cali));
+      _expectRoundTrip(FilterDescriptor.preset(FilterPreset.cali, strength: 0.75));
+    });
+
+    test('warmth fade vignette', () {
+      _expectRoundTrip(FilterDescriptor.warmth(amount: 25));
+      _expectRoundTrip(FilterDescriptor.fade(amount: 0.4));
+      _expectRoundTrip(FilterDescriptor.vignette(amount: 0.6));
+    });
+
+    test('highlights shadows structure', () {
+      _expectRoundTrip(FilterDescriptor.highlights(amount: 30));
+      _expectRoundTrip(FilterDescriptor.shadows(amount: -20));
+      _expectRoundTrip(FilterDescriptor.structure(amount: 15));
+    });
+
+    test('highlights shadows structure', () {
+      _expectRoundTrip(FilterDescriptor.highlights(amount: 30));
+      _expectRoundTrip(FilterDescriptor.shadows(amount: -20));
+      _expectRoundTrip(FilterDescriptor.structure(amount: 45));
     });
 
     test('blur', () {

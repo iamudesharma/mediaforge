@@ -17,7 +17,7 @@ enum TextBackgroundStyle { none, solid, rounded }
 
 enum ShapeKind { rect, ellipse, line, arrow }
 
-enum PaintBrushKind { pen, marker, highlighter, eraser }
+enum PaintBrushKind { pen, marker, highlighter, eraser, neon }
 
 /// Clip mask for image stickers (Sprint 8).
 enum StickerShapeMask {
@@ -36,6 +36,7 @@ abstract class OverlayLayer {
   OverlayLayer({
     required this.id,
     required this.transform,
+    this.visible = true,
     this.cachedPixels,
     this.cachedWidth = 0,
     this.cachedHeight = 0,
@@ -43,6 +44,9 @@ abstract class OverlayLayer {
 
   final String id;
   LayerTransform transform;
+
+  /// When false, layer is hidden on canvas and skipped at export bake.
+  bool visible;
 
   /// Pre-rasterized RGBA for export bake (optional until first bake).
   Uint8List? cachedPixels;
@@ -58,6 +62,7 @@ class EmojiLayer extends OverlayLayer {
   EmojiLayer({
     required super.id,
     required super.transform,
+    super.visible,
     required this.glyph,
     this.fontSize = 64,
     super.cachedPixels,
@@ -75,6 +80,7 @@ class EmojiLayer extends OverlayLayer {
   EmojiLayer copy() => EmojiLayer(
         id: id,
         transform: transform.copyWith(),
+        visible: visible,
         glyph: glyph,
         fontSize: fontSize,
         cachedPixels: cachedPixels != null ? Uint8List.fromList(cachedPixels!) : null,
@@ -87,6 +93,7 @@ class StickerLayer extends OverlayLayer {
   StickerLayer({
     required super.id,
     required super.transform,
+    super.visible,
     this.assetKey,
     this.userBytes,
     this.userSourceWidth = 0,
@@ -115,6 +122,7 @@ class StickerLayer extends OverlayLayer {
   StickerLayer copy() => StickerLayer(
         id: id,
         transform: transform.copyWith(),
+        visible: visible,
         assetKey: assetKey,
         userBytes: userBytes != null ? Uint8List.fromList(userBytes!) : null,
         userSourceWidth: userSourceWidth,
@@ -131,6 +139,7 @@ class TextLayer extends OverlayLayer {
   TextLayer({
     required super.id,
     required super.transform,
+    super.visible,
     required this.text,
     this.fontSize = 32,
     this.color = Colors.white,
@@ -158,6 +167,7 @@ class TextLayer extends OverlayLayer {
   TextLayer copy() => TextLayer(
         id: id,
         transform: transform.copyWith(),
+        visible: visible,
         text: text,
         fontSize: fontSize,
         color: color,
@@ -175,6 +185,7 @@ class ShapeLayer extends OverlayLayer {
   ShapeLayer({
     required super.id,
     required super.transform,
+    super.visible,
     required this.shapeKind,
     this.width = 120,
     this.height = 80,
@@ -200,6 +211,7 @@ class ShapeLayer extends OverlayLayer {
   ShapeLayer copy() => ShapeLayer(
         id: id,
         transform: transform.copyWith(),
+        visible: visible,
         shapeKind: shapeKind,
         width: width,
         height: height,
@@ -216,6 +228,7 @@ class PaintStrokeLayer extends OverlayLayer {
   PaintStrokeLayer({
     required super.id,
     required super.transform,
+    super.visible,
     required this.points,
     this.color = const Color(0xFF4EDEA3),
     this.width = 8,
@@ -243,6 +256,7 @@ class PaintStrokeLayer extends OverlayLayer {
   PaintStrokeLayer copy() => PaintStrokeLayer(
         id: id,
         transform: transform.copyWith(),
+        visible: visible,
         points: List<Offset>.from(points),
         color: color,
         width: width,

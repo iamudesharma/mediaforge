@@ -36,13 +36,21 @@ section() {
   echo "=============================================================="
 }
 
-section "Rust: cargo test --features ${TEST_RUST_FEATURES}"
+RUST_DIR="${SCRIPT_DIR}/rust_image/rust"
+DYLIB_DEBUG="${RUST_DIR}/target/debug/librust_image_core.dylib"
+
+section "Rust: cargo test + build --features ${TEST_RUST_FEATURES}"
 (
-  cd "${SCRIPT_DIR}/rust_image/rust"
+  cd "${RUST_DIR}"
   cargo test --features "${TEST_RUST_FEATURES}"
+  cargo build --features "${TEST_RUST_FEATURES}"
 )
 
 section "Dart unit tests: flutter test test/editor/"
+if [[ "${SKIP_NATIVE_SYNC:-0}" != "1" && -f "${DYLIB_DEBUG}" ]]; then
+  export RUST_IMAGE_DYLIB="${DYLIB_DEBUG}"
+  echo "  RUST_IMAGE_DYLIB=${RUST_IMAGE_DYLIB} (for apps/benchmarks; widget smoke may still use cached plugin FFI)"
+fi
 (
   cd "${SCRIPT_DIR}/rust_image"
   flutter test test/editor/

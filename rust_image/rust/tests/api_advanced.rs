@@ -269,7 +269,10 @@ fn filter_rgba_buffer_every_variant_runs() {
         ImageFilter::FrostedGlass,
         ImageFilter::Pixelize { size: 4 },
         ImageFilter::Solarize,
-        ImageFilter::Preset(FilterPreset::Lofi),
+        ImageFilter::Preset {
+            preset: FilterPreset::Lofi,
+            strength: 1.0,
+        },
     ];
     for filter in filters {
         let buf = common::synthetic_rgba(48, 48);

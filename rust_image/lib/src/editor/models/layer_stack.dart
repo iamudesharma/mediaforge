@@ -60,6 +60,53 @@ class LayerStack {
     bumpRevision();
   }
 
+  void sendToBack(String id) {
+    final i = layers.indexWhere((l) => l.id == id);
+    if (i <= 0) return;
+    final layer = layers.removeAt(i);
+    layers.insert(0, layer);
+    selectedId = id;
+    bumpRevision();
+  }
+
+  void moveUp(String id) {
+    final i = layers.indexWhere((l) => l.id == id);
+    if (i < 0 || i >= layers.length - 1) return;
+    final layer = layers.removeAt(i);
+    layers.insert(i + 1, layer);
+    selectedId = id;
+    bumpRevision();
+  }
+
+  void moveDown(String id) {
+    final i = layers.indexWhere((l) => l.id == id);
+    if (i <= 0) return;
+    final layer = layers.removeAt(i);
+    layers.insert(i - 1, layer);
+    selectedId = id;
+    bumpRevision();
+  }
+
+  void insertAt(int index, String id) {
+    final i = layers.indexWhere((l) => l.id == id);
+    if (i < 0) return;
+    final layer = layers.removeAt(i);
+    final clamped = index.clamp(0, layers.length);
+    layers.insert(clamped, layer);
+    selectedId = id;
+    bumpRevision();
+  }
+
+  void setVisible(String id, bool visible) {
+    final layer = layers.cast<OverlayLayer?>().firstWhere(
+      (l) => l!.id == id,
+      orElse: () => null,
+    );
+    if (layer == null || layer.visible == visible) return;
+    layer.visible = visible;
+    bumpRevision();
+  }
+
   void select(String? id) {
     if (selectedId == id) return;
     selectedId = id;

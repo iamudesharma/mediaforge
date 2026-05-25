@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'crop_controller.dart';
 import 'draw_placement.dart';
 import 'editor_session.dart';
 import 'models/overlay_layer.dart';
@@ -11,7 +12,9 @@ import 'rust_image_editor_config.dart';
 import 'theme/editor_motion.dart';
 import 'theme/lumina_tokens.dart';
 import 'widgets/compare_hold_button.dart';
+import 'panels/text_layer_edit_sheet.dart';
 import 'services/sticker_image_import.dart';
+import 'widgets/editor_tool_rail.dart';
 import 'widgets/live_preview.dart';
 
 /// Full-screen editor layout (preview + tool rail). Prefer [RustImageEditorWidget] for drop-in use.
@@ -42,6 +45,7 @@ typedef EditorScreen = RustImageEditorView;
 class _RustImageEditorViewState extends State<RustImageEditorView> {
   final _drawPlacement = DrawPlacementController();
   final _overlayPlacement = OverlayPlacementController();
+  final _cropController = CropController();
   late EditorTool _tool;
   bool _compareHeld = false;
 
@@ -60,13 +64,6 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     final tools = _tools;
     if (tools.isEmpty) return _fallbackTool;
     return tools.contains(_tool) ? _tool : tools.first;
-  }
-
-  int get _railSelectedIndex {
-    final tools = _tools;
-    if (tools.isEmpty) return 0;
-    final i = tools.indexOf(_tool);
-    return i < 0 ? 0 : i;
   }
 
   bool _useWideLayout(BuildContext context) {
@@ -99,14 +96,26 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     _session.removeListener(_onSessionChanged);
     _drawPlacement.dispose();
     _overlayPlacement.dispose();
+    _cropController.dispose();
     super.dispose();
   }
 
   void _onSessionChanged() {
     final info = _session.imageInfo;
     if (info != null) {
-      _drawPlacement.syncImageSize(info.width, info.height);
-      _overlayPlacement.syncImageSize(info.width, info.height);
+      // Defer placement sync so we never notify nested listenables during
+      // [ChangeNotifier.notifyListeners] (avoids rebuild feedback loops).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _drawPlacement.syncImageSize(info.width, info.height);
+        _overlayPlacement.syncImageSize(info.width, info.height);
+        // Crop overlay maps to preview pixels (may be ≤ full image when RGBA pipeline).
+        final preview = _session.previewRgba;
+        _cropController.syncImageSize(
+          preview?.width ?? info.width,
+          preview?.height ?? info.height,
+        );
+      });
     }
     final bytes = _session.displayBytes;
     if (bytes != null) {
@@ -145,23 +154,11 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     final extended = MediaQuery.sizeOf(context).width >= 1100;
     return Row(
       children: [
-        NavigationRail(
+        EditorToolRail(
+          tools: _tools,
+          selectedTool: _tool,
           extended: extended,
-          selectedIndex: _railSelectedIndex,
-          onDestinationSelected: (i) => setState(() => _tool = _tools[i]),
-          labelType: extended
-              ? NavigationRailLabelType.none
-              : NavigationRailLabelType.all,
-          destinations: [
-            for (final t in _tools)
-              NavigationRailDestination(
-                icon: _AnimatedRailIcon(
-                  icon: t.icon,
-                  selected: t == _tool,
-                ),
-                label: Text(t.label),
-              ),
-          ],
+          onSelected: (t) => setState(() => _tool = t),
         ),
         const VerticalDivider(width: 1),
         Expanded(flex: 3, child: _buildPreviewColumn(context, immersive: false)),
@@ -182,6 +179,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     return MobileEditorLayout(
       config: widget.config,
       session: _session,
+      cropController: _cropController,
       tools: _tools,
       selectedTool: _tool,
       onToolSelected: (t) => setState(() => _tool = t),
@@ -214,6 +212,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       config: widget.config,
       drawPlacement: _drawPlacement,
       overlayPlacement: _overlayPlacement,
+      cropController: _cropController,
       scrollController: scrollController,
       compact: compact,
     );
@@ -252,6 +251,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     );
     final layerTool = _tool == EditorTool.stickers ||
         _tool == EditorTool.paint ||
+        _tool == EditorTool.layers ||
         hasUserImageStickers;
     final info = _session.imageInfo;
     final iw = info?.width ?? _session.previewRgba?.width ?? 0;
@@ -268,6 +268,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       processing: _session.processing,
       blocking: _session.blocking,
       placement: _tool == EditorTool.draw ? _drawPlacement : null,
+      cropController: _tool == EditorTool.transform ? _cropController : null,
       overlayPlacement:
           _tool == EditorTool.overlay ? _overlayPlacement : null,
       onOverlayPositionChanged: _tool == EditorTool.overlay
@@ -285,6 +286,11 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       onTransformBegin: _session.pushLayerUndo,
       onUserImageStickerTap: (layer) =>
           StickerImageImport.pickShapeForLayer(context, _session, layer),
+      onTextLayerDoubleTap: (layer) => TextLayerEditSheet.show(
+            context,
+            session: _session,
+            layer: layer,
+          ),
       onPaintStroke: (pts, {required Size childSize}) => _session.addPaintStroke(
             pts,
             imageWidth: iw,
@@ -296,6 +302,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       activePaintColor: _session.paintColor,
       activePaintWidth: _session.paintStrokeWidth,
       activePaintOpacity: _session.paintStrokeOpacity,
+      activePaintBrush: _session.paintBrush,
       emptyHint: immersive ? 'Tap Import to open a photo' : 'No image selected',
     );
   }
@@ -329,6 +336,13 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
               ],
             ),
           ),
+          if (_tool == EditorTool.transform && _session.hasImage)
+            FilledButton(
+              onPressed: _session.busy
+                  ? null
+                  : () => _session.applyCrop(crop: _cropController),
+              child: const Text('Done'),
+            ),
           IconButton(
             tooltip: 'Undo',
             onPressed: _session.canUndo && !_session.busy ? _session.undo : null,
@@ -445,19 +459,3 @@ class _AnimatedChip extends StatelessWidget {
   }
 }
 
-class _AnimatedRailIcon extends StatelessWidget {
-  const _AnimatedRailIcon({required this.icon, required this.selected});
-
-  final IconData icon;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedScale(
-      scale: selected ? 1.12 : 1,
-      duration: EditorMotion.fast,
-      curve: EditorMotion.spring,
-      child: Icon(icon),
-    );
-  }
-}

@@ -273,7 +273,7 @@ class _StickersPanelState extends State<StickersPanel> {
               child: Center(
                 child: Text(
                   StickerCatalog.emojis[i],
-                  style: const TextStyle(fontSize: 28),
+                  style: const TextStyle(fontSize: 28, shadows: []),
                 ),
               ),
             ),

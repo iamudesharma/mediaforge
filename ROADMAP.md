@@ -2,8 +2,8 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** Sprint 8 (Blank canvas + shaped stickers)  
-**Status:** Sprint 8 **done** — IG blank canvas, shape masks, multi-image sticker import
+**Current sprint:** Sprint 10 (Layers, draw polish, tone depth, straighten)  
+**Status:** Sprint 9 **done** — IG crop overlay, filter strength, warmth/fade/vignette, paint eraser
 
 ---
 
@@ -199,6 +199,58 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 
 ---
 
+## Sprint 9 — Interactive crop + filter intensity (done)
+
+**Goal:** Instagram-style crop UX and filter strength; warmth/fade/vignette adjust; paint eraser + tests.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `CropController` + `CropOverlay` | Done | Drag box + corners; aspects Free, 1:1, 4:5, 9:16, 16:9, Original |
+| Transform panel wired to shared crop state | Done | [`crop_controller.dart`](rust_image/lib/src/editor/crop_controller.dart), preview when Crop tool active |
+| Filter preset strength 0–100% | Done | `ImageFilter.preset { strength }` + lerp in Rust [`filters.rs`](rust_image/rust/src/filters.rs) |
+| Warmth / Fade / Vignette adjust | Done | New `ImageFilter` variants + Adjust panel sliders |
+| Paint eraser (stroke erase) | Done | `PaintStrokeInput.erase` + preview `BlendMode.clear` + export bake |
+| Widget / unit tests | Done | `crop_controller_test`, `filters_panel_preset_test`, `editor_crop_filters_widget_test` |
+
+**Acceptance:** Interactive crop on preview; filter intensity slider; adjust warmth/fade/vignette; eraser removes paint strokes — **met**.
+
+---
+
+## Sprint 10 — Layers, draw polish, tone depth, straighten (done)
+
+**Goal:** Layer panel UX; text re-edit sheet; distinct brush preview/export; arrow sticker; highlights/shadows/structure; straighten slider with crop re-fit.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `LayerStack` visibility + reorder APIs | Done | `visible`, `sendToBack`, `moveUp`/`moveDown`, `insertAt` |
+| Layers panel + `EditorTool.layers` | Done | [`layers_panel.dart`](rust_image/lib/src/editor/panels/layers_panel.dart) |
+| Text layer double-tap edit sheet | Done | [`text_layer_edit_sheet.dart`](rust_image/lib/src/editor/panels/text_layer_edit_sheet.dart) |
+| Marker / highlighter / neon brushes | Done | Preview + `PaintStrokeInput.brushKind` export |
+| Arrow on canvas | Done | Shapes panel → builtin `arrow` sticker |
+| Highlights / Shadows / Structure | Done | CPU [`filters.rs`](rust_image/rust/src/filters.rs) + Adjust panel |
+| Straighten slider + apply | Done | `rotate_rgba_arbitrary` + [`CropController`](rust_image/lib/src/editor/crop_controller.dart) |
+| Tests | Done | `layer_stack_test`, `filter_descriptor_test`, `paint_stroke_painter_test` |
+
+**Acceptance:** Layer list reorder/hide/delete; text double-tap opens edit; brush personalities in preview and export; tone sliders; straighten bakes rotation — **met**.
+
+---
+
+## Sprint 10b — Follow-on (planned)
+
+| Track | Notes |
+|-------|-------|
+| Straighten gestures | Two-finger refine on trackpad |
+| GPU vignette + LUT pack | Sprint 2b (`vignette.wgsl`, `.cube` presets) |
+| Metal texture preview | Sprint 4b (`Texture` + shared wgpu handle) |
+
+---
+
+## Sprint 11 — Beauty / face (planned)
+
+Regional tone masks from face landmarks (ML Kit / native); not a small FRB filter.
+
+---
+
 ## Architecture target (end state)
 
 ```text
@@ -249,4 +301,4 @@ Run in **rust_image Studio** after changes; record status-line timings.
 
 ---
 
-*Last updated: Sprint 8 complete*
+*Last updated: Sprint 10 complete*

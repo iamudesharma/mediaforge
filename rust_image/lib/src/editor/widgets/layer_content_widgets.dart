@@ -21,7 +21,7 @@ class LayerContentWidget extends StatelessWidget {
           fit: BoxFit.contain,
           child: Text(
             glyph,
-            style: TextStyle(fontSize: fontSize),
+            style: TextStyle(fontSize: fontSize, shadows: const []),
           ),
         ),
       TextLayer(
@@ -49,6 +49,7 @@ class LayerContentWidget extends StatelessWidget {
                 color: color,
                 fontSize: fontSize,
                 fontWeight: FontWeight.w600,
+                shadows: const [],
               ),
               textAlign: TextAlign.center,
             ),

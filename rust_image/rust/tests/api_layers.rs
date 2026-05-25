@@ -66,6 +66,8 @@ fn bake_layers_with_only_paint_stroke_shifts_endpoint_pixel() {
         color_a: 255,
         width: 4.0,
         opacity: 1.0,
+        erase: false,
+        brush_kind: 0,
     };
     let out = bake_layers_on_rgba(base, vec![], vec![stroke]).expect("bake ok");
     assert_eq!((out.width, out.height), (80, 80));
@@ -97,6 +99,8 @@ fn bake_layers_combined_raster_and_stroke() {
         color_a: 255,
         width: 3.0,
         opacity: 1.0,
+        erase: false,
+        brush_kind: 0,
     };
     let out = bake_layers_on_rgba(base, vec![layer], vec![stroke]).expect("bake ok");
     assert_eq!((out.width, out.height), (80, 80));
@@ -164,6 +168,8 @@ fn bake_layers_short_stroke_is_skipped() {
         color_a: 255,
         width: 2.0,
         opacity: 1.0,
+        erase: false,
+        brush_kind: 0,
     };
     let out = bake_layers_on_rgba(base.clone(), vec![], vec![stroke]).expect("bake ok");
     assert_eq!(out.pixels, base.pixels);

@@ -2,21 +2,15 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// What the user is placing on the canvas (Draw tab).
-enum DrawPlaceKind { text, line, circle }
+/// What the user is placing on the canvas (Shapes tab).
+enum DrawPlaceKind { line, circle }
 
-/// Shared placement state — synced with Draw panel sliders and canvas drags.
+/// Shared placement state — synced with Shapes panel sliders and canvas drags.
 class DrawPlacementController extends ChangeNotifier {
-  DrawPlaceKind kind = DrawPlaceKind.text;
+  DrawPlaceKind kind = DrawPlaceKind.line;
 
   int imageWidth = 1;
   int imageHeight = 1;
-
-  // Text
-  int textX = 40;
-  int textY = 40;
-  double fontSize = 48;
-  String text = 'rust_image';
 
   // Line
   int lineX0 = 0;
@@ -48,12 +42,6 @@ class DrawPlacementController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setTextPos(int x, int y) {
-    textX = x.clamp(0, imageWidth);
-    textY = y.clamp(0, imageHeight);
-    notifyListeners();
-  }
-
   void setLineStart(int x, int y) {
     lineX0 = x.clamp(0, imageWidth);
     lineY0 = y.clamp(0, imageHeight);
@@ -74,16 +62,6 @@ class DrawPlacementController extends ChangeNotifier {
 
   void setCircleRadius(int r) {
     circleRadius = r.clamp(4, imageWidth);
-    notifyListeners();
-  }
-
-  void setText(String value) {
-    text = value;
-    notifyListeners();
-  }
-
-  void setFontSize(double value) {
-    fontSize = value;
     notifyListeners();
   }
 

@@ -198,7 +198,10 @@ class RustImageBenchmark {
       await rgbaOp('filter_rgba_preset_dramatic', label, (buf) {
         RustImageEditor.filterRgba(
           buf,
-          const ImageFilter.preset(FilterPreset.dramatic),
+          const ImageFilter.preset(
+            preset: FilterPreset.dramatic,
+            strength: 1.0,
+          ),
           backend: backend,
         );
       }, pb: backend);
@@ -353,7 +356,10 @@ class RustImageBenchmark {
       return const ImageFilter.saturation(amount: 1.3);
     }
     if (name.contains('dramatic')) {
-      return const ImageFilter.preset(FilterPreset.dramatic);
+      return const ImageFilter.preset(
+        preset: FilterPreset.dramatic,
+        strength: 1.0,
+      );
     }
     return const ImageFilter.blur(radius: 4);
   }

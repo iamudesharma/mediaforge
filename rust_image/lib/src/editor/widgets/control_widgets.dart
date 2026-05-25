@@ -183,21 +183,15 @@ class _LuminaChip extends StatelessWidget {
               color: selected
                   ? LuminaTokens.primary.withValues(alpha: 0.7)
                   : LuminaTokens.outlineVariant,
+              width: selected ? 2 : 1,
             ),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: LuminaTokens.primary.withValues(alpha: 0.2),
-                      blurRadius: 12,
-                    ),
-                  ]
-                : null,
           ),
           child: Text(
             label,
             style: TextStyle(
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              shadows: const [],
               color: selected ? LuminaTokens.primary : LuminaTokens.onSurface,
             ),
           ),
@@ -280,14 +274,6 @@ class LuminaFilterStrip extends StatelessWidget {
                       : LuminaTokens.outlineVariant,
                   width: selected ? 2 : 1,
                 ),
-                boxShadow: selected
-                    ? [
-                        BoxShadow(
-                          color: LuminaTokens.primary.withValues(alpha: 0.25),
-                          blurRadius: 10,
-                        ),
-                      ]
-                    : null,
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -307,6 +293,7 @@ class LuminaFilterStrip extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
+                      shadows: const [],
                       color: selected
                           ? LuminaTokens.primary
                           : LuminaTokens.onSurfaceVariant,

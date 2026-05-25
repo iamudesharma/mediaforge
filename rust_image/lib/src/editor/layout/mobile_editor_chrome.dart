@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../crop_controller.dart';
 import '../editor_session.dart';
 import '../panels/tool_panels.dart';
 import '../rust_image_editor_config.dart';
@@ -27,6 +28,7 @@ class MobileEditorLayout extends StatefulWidget {
     required this.onCompareHoldStart,
     required this.onCompareHoldEnd,
     this.onExport,
+    this.cropController,
     this.toolBarPlacement = EditorToolBarPlacement.auto,
   });
 
@@ -41,6 +43,7 @@ class MobileEditorLayout extends StatefulWidget {
   final VoidCallback onCompareHoldStart;
   final VoidCallback onCompareHoldEnd;
   final Future<void> Function()? onExport;
+  final CropController? cropController;
   final EditorToolBarPlacement toolBarPlacement;
 
   @override
@@ -100,6 +103,11 @@ class _MobileEditorLayoutState extends State<MobileEditorLayout> {
             onCompareHoldStart: widget.onCompareHoldStart,
             onCompareHoldEnd: widget.onCompareHoldEnd,
             onExport: widget.onExport,
+            showCropDone: widget.selectedTool == EditorTool.transform &&
+                widget.cropController != null,
+            onCropDone: widget.cropController != null
+                ? () => widget.session.applyCrop(crop: widget.cropController!)
+                : null,
             allowBlankCanvas: widget.config.allowBlankCanvas,
             onImportPhoto: widget.tools.contains(EditorTool.import)
                 ? () {
@@ -236,6 +244,8 @@ class _LuminaTopBar extends StatelessWidget {
     this.onCreateBlank,
     this.onAddImageSticker,
     this.allowBlankCanvas = false,
+    this.showCropDone = false,
+    this.onCropDone,
   });
 
   final String title;
@@ -249,6 +259,8 @@ class _LuminaTopBar extends StatelessWidget {
   final VoidCallback? onCreateBlank;
   final VoidCallback? onAddImageSticker;
   final bool allowBlankCanvas;
+  final bool showCropDone;
+  final VoidCallback? onCropDone;
 
   @override
   Widget build(BuildContext context) {
@@ -278,6 +290,18 @@ class _LuminaTopBar extends StatelessWidget {
               tooltip: 'Redo',
               onPressed: session.canRedo && !session.busy ? session.redo : null,
             ),
+            if (showCropDone && onCropDone != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: FilledButton(
+                  onPressed: session.busy ? null : onCropDone,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  ),
+                  child: const Text('Done'),
+                ),
+              ),
             if (onAddImageSticker != null)
               IconButton(
                 icon: const Icon(Icons.add_photo_alternate_outlined, size: 22),

@@ -32,6 +32,30 @@ pub fn apply_rgba(mut buffer: RgbaImageBuffer, filter: ImageFilter) -> Result<Rg
             crate::parallel_ops::par_hue_rotate(&mut buffer.pixels, degrees);
             Ok(buffer)
         }
+        ImageFilter::Warmth { amount } => {
+            apply_warmth_rgba(&mut buffer.pixels, amount);
+            Ok(buffer)
+        }
+        ImageFilter::Fade { amount } => {
+            apply_fade_rgba(&mut buffer.pixels, amount);
+            Ok(buffer)
+        }
+        ImageFilter::Vignette { amount } => {
+            apply_vignette_rgba(&mut buffer, amount);
+            Ok(buffer)
+        }
+        ImageFilter::Highlights { amount } => {
+            apply_highlights_rgba(&mut buffer.pixels, amount);
+            Ok(buffer)
+        }
+        ImageFilter::Shadows { amount } => {
+            apply_shadows_rgba(&mut buffer.pixels, amount);
+            Ok(buffer)
+        }
+        ImageFilter::Structure { amount } => {
+            apply_structure_rgba(&mut buffer, amount);
+            Ok(buffer)
+        }
         other_filter => {
             let RgbaImageBuffer {
                 width,
@@ -69,8 +93,215 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
         ImageFilter::FrostedGlass => effects::frosted_glass(photon),
         ImageFilter::Pixelize { size } => effects::pixelize(photon, size as i32),
         ImageFilter::Solarize => effects::solarize(photon),
-        ImageFilter::Preset(preset) => apply_preset(photon, preset),
+        ImageFilter::Preset { preset, strength } => {
+            apply_preset_with_strength(photon, preset, strength);
+        }
+        ImageFilter::Warmth { amount } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut px = photon.get_raw_pixels().to_vec();
+            apply_warmth_rgba(&mut px, amount);
+            *photon = PhotonImage::new(px, w, h);
+        }
+        ImageFilter::Fade { amount } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut px = photon.get_raw_pixels().to_vec();
+            apply_fade_rgba(&mut px, amount);
+            *photon = PhotonImage::new(px, w, h);
+        }
+        ImageFilter::Vignette { amount } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut px = photon.get_raw_pixels().to_vec();
+            let mut buf = RgbaImageBuffer {
+                width: w,
+                height: h,
+                pixels: px,
+            };
+            apply_vignette_rgba(&mut buf, amount);
+            *photon = PhotonImage::new(buf.pixels, w, h);
+        }
+        ImageFilter::Highlights { amount } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut px = photon.get_raw_pixels().to_vec();
+            apply_highlights_rgba(&mut px, amount);
+            *photon = PhotonImage::new(px, w, h);
+        }
+        ImageFilter::Shadows { amount } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut px = photon.get_raw_pixels().to_vec();
+            apply_shadows_rgba(&mut px, amount);
+            *photon = PhotonImage::new(px, w, h);
+        }
+        ImageFilter::Structure { amount } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut px = photon.get_raw_pixels().to_vec();
+            let mut buf = RgbaImageBuffer {
+                width: w,
+                height: h,
+                pixels: px,
+            };
+            apply_structure_rgba(&mut buf, amount);
+            *photon = PhotonImage::new(buf.pixels, w, h);
+        }
     }
+}
+
+fn pixel_luminance(chunk: &[u8]) -> f32 {
+    (0.299 * chunk[0] as f32 + 0.587 * chunk[1] as f32 + 0.114 * chunk[2] as f32) / 255.0
+}
+
+fn scale_rgb(chunk: &mut [u8], factor: f32) {
+    let f = factor.clamp(0.0, 2.0);
+    for c in 0..3 {
+        chunk[c] = (chunk[c] as f32 * f).round().clamp(0.0, 255.0) as u8;
+    }
+}
+
+fn apply_highlights_rgba(pixels: &mut [u8], amount: f32) {
+    let t = (amount / 100.0).clamp(-1.0, 1.0);
+    if t.abs() < 0.001 {
+        return;
+    }
+    for chunk in pixels.chunks_exact_mut(4) {
+        let l = pixel_luminance(chunk);
+        if l > 0.55 {
+            let influence = ((l - 0.55) / 0.45).clamp(0.0, 1.0);
+            let factor = 1.0 - t * influence * 0.45;
+            scale_rgb(chunk, factor);
+        }
+    }
+}
+
+fn apply_shadows_rgba(pixels: &mut [u8], amount: f32) {
+    let t = (amount / 100.0).clamp(-1.0, 1.0);
+    if t.abs() < 0.001 {
+        return;
+    }
+    for chunk in pixels.chunks_exact_mut(4) {
+        let l = pixel_luminance(chunk);
+        if l < 0.45 {
+            let influence = ((0.45 - l) / 0.45).clamp(0.0, 1.0);
+            let lift = t * influence * 0.5;
+            for c in 0..3 {
+                let v = chunk[c] as f32 / 255.0;
+                let out = if t > 0.0 {
+                    v + (1.0 - v) * lift
+                } else {
+                    v * (1.0 + lift)
+                };
+                chunk[c] = (out * 255.0).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+}
+
+fn apply_structure_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
+    let t = (amount / 100.0).clamp(-1.0, 1.0);
+    if t.abs() < 0.001 || buffer.width < 3 || buffer.height < 3 {
+        return;
+    }
+    let w = buffer.width as usize;
+    let h = buffer.height as usize;
+    let src = buffer.pixels.clone();
+    let strength = t * 0.35;
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let i = (y * w + x) * 4;
+            let mut blur = [0f32; 3];
+            for dy in -1i32..=1 {
+                for dx in -1i32..=1 {
+                    let j = ((y as i32 + dy) as usize * w + (x as i32 + dx) as usize) * 4;
+                    for c in 0..3 {
+                        blur[c] += src[j + c] as f32;
+                    }
+                }
+            }
+            for c in 0..3 {
+                blur[c] /= 9.0;
+                let orig = src[i + c] as f32;
+                let detail = orig - blur[c];
+                let out = (orig + detail * strength).round().clamp(0.0, 255.0) as u8;
+                buffer.pixels[i + c] = out;
+            }
+        }
+    }
+}
+
+fn apply_warmth_rgba(pixels: &mut [u8], amount: f32) {
+    let t = (amount / 100.0).clamp(-1.0, 1.0);
+    if t.abs() < 0.001 {
+        return;
+    }
+    let dr = (t * 28.0).round() as i16;
+    let db = (-t * 28.0).round() as i16;
+    for chunk in pixels.chunks_exact_mut(4) {
+        chunk[0] = (chunk[0] as i16 + dr).clamp(0, 255) as u8;
+        chunk[2] = (chunk[2] as i16 + db).clamp(0, 255) as u8;
+    }
+}
+
+fn apply_fade_rgba(pixels: &mut [u8], amount: f32) {
+    let a = amount.clamp(0.0, 1.0);
+    if a < 0.001 {
+        return;
+    }
+    for chunk in pixels.chunks_exact_mut(4) {
+        for c in 0..3 {
+            let v = chunk[c] as f32;
+            chunk[c] = (v + (128.0 - v) * a).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
+fn apply_vignette_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
+    let a = amount.clamp(0.0, 1.0);
+    if a < 0.001 || buffer.width == 0 || buffer.height == 0 {
+        return;
+    }
+    let w = buffer.width as f32;
+    let h = buffer.height as f32;
+    let cx = w * 0.5;
+    let cy = h * 0.5;
+    let max_r = (cx * cx + cy * cy).sqrt();
+    for y in 0..buffer.height {
+        for x in 0..buffer.width {
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cy;
+            let dist = (dx * dx + dy * dy).sqrt() / max_r;
+            let darken = (dist * dist * a * 0.85).clamp(0.0, 0.95);
+            let i = ((y * buffer.width + x) * 4) as usize;
+            for c in 0..3 {
+                let v = buffer.pixels[i + c] as f32;
+                buffer.pixels[i + c] = (v * (1.0 - darken)).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+}
+
+fn apply_preset_with_strength(img: &mut PhotonImage, preset: FilterPreset, strength: f32) {
+    let t = strength.clamp(0.0, 1.0);
+    if t < 0.001 {
+        return;
+    }
+    if t >= 0.999 {
+        apply_preset(img, preset);
+        return;
+    }
+    let before = img.get_raw_pixels().to_vec();
+    apply_preset(img, preset);
+    let after = img.get_raw_pixels();
+    let mut blended = Vec::with_capacity(before.len());
+    for (b, a) in before.iter().zip(after.iter()) {
+        blended.push((*b as f32 * (1.0 - t) + *a as f32 * t).round() as u8);
+    }
+    let w = img.get_width();
+    let h = img.get_height();
+    *img = PhotonImage::new(blended, w, h);
 }
 
 fn apply_preset(img: &mut PhotonImage, preset: FilterPreset) {

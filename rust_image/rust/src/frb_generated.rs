@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1459419909;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1228250518;
 
 // Section: executor
 
@@ -1459,6 +1459,38 @@ fn wire__crate__api__image__rotate_image_impl(
         },
     )
 }
+fn wire__crate__api__advanced__rotate_rgba_arbitrary_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "rotate_rgba_arbitrary",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_buffer = <crate::api::image::RgbaImageBuffer>::sse_decode(&mut deserializer);
+            let api_degrees = <f32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::api::advanced::rotate_rgba_arbitrary(api_buffer, api_degrees)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -1712,8 +1744,36 @@ impl SseDecode for crate::api::image::ImageFilter {
                 return crate::api::image::ImageFilter::Solarize;
             }
             10 => {
-                let mut var_field0 = <crate::api::image::FilterPreset>::sse_decode(deserializer);
-                return crate::api::image::ImageFilter::Preset(var_field0);
+                let mut var_preset = <crate::api::image::FilterPreset>::sse_decode(deserializer);
+                let mut var_strength = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Preset {
+                    preset: var_preset,
+                    strength: var_strength,
+                };
+            }
+            11 => {
+                let mut var_amount = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Warmth { amount: var_amount };
+            }
+            12 => {
+                let mut var_amount = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Fade { amount: var_amount };
+            }
+            13 => {
+                let mut var_amount = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Vignette { amount: var_amount };
+            }
+            14 => {
+                let mut var_amount = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Highlights { amount: var_amount };
+            }
+            15 => {
+                let mut var_amount = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Shadows { amount: var_amount };
+            }
+            16 => {
+                let mut var_amount = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Structure { amount: var_amount };
             }
             _ => {
                 unimplemented!("");
@@ -1885,6 +1945,8 @@ impl SseDecode for crate::api::layers::PaintStrokeInput {
         let mut var_colorA = <u8>::sse_decode(deserializer);
         let mut var_width = <f32>::sse_decode(deserializer);
         let mut var_opacity = <f32>::sse_decode(deserializer);
+        let mut var_erase = <bool>::sse_decode(deserializer);
+        let mut var_brushKind = <u8>::sse_decode(deserializer);
         return crate::api::layers::PaintStrokeInput {
             points: var_points,
             color_r: var_colorR,
@@ -1893,6 +1955,8 @@ impl SseDecode for crate::api::layers::PaintStrokeInput {
             color_a: var_colorA,
             width: var_width,
             opacity: var_opacity,
+            erase: var_erase,
+            brush_kind: var_brushKind,
         };
     }
 }
@@ -2150,6 +2214,7 @@ fn pde_ffi_dispatcher_sync_impl(
         37 => wire__crate__api__image__resize_image_impl(ptr, rust_vec_len, data_len),
         38 => wire__crate__api__advanced__resize_rgba_buffer_impl(ptr, rust_vec_len, data_len),
         39 => wire__crate__api__image__rotate_image_impl(ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__advanced__rotate_rgba_arbitrary_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2378,8 +2443,29 @@ impl flutter_rust_bridge::IntoDart for crate::api::image::ImageFilter {
                 [8.into_dart(), size.into_into_dart().into_dart()].into_dart()
             }
             crate::api::image::ImageFilter::Solarize => [9.into_dart()].into_dart(),
-            crate::api::image::ImageFilter::Preset(field0) => {
-                [10.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            crate::api::image::ImageFilter::Preset { preset, strength } => [
+                10.into_dart(),
+                preset.into_into_dart().into_dart(),
+                strength.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::image::ImageFilter::Warmth { amount } => {
+                [11.into_dart(), amount.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::image::ImageFilter::Fade { amount } => {
+                [12.into_dart(), amount.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::image::ImageFilter::Vignette { amount } => {
+                [13.into_dart(), amount.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::image::ImageFilter::Highlights { amount } => {
+                [14.into_dart(), amount.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::image::ImageFilter::Shadows { amount } => {
+                [15.into_dart(), amount.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::image::ImageFilter::Structure { amount } => {
+                [16.into_dart(), amount.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -2452,6 +2538,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::layers::PaintStrokeInput {
             self.color_a.into_into_dart().into_dart(),
             self.width.into_into_dart().into_dart(),
             self.opacity.into_into_dart().into_dart(),
+            self.erase.into_into_dart().into_dart(),
+            self.brush_kind.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2872,9 +2960,34 @@ impl SseEncode for crate::api::image::ImageFilter {
             crate::api::image::ImageFilter::Solarize => {
                 <i32>::sse_encode(9, serializer);
             }
-            crate::api::image::ImageFilter::Preset(field0) => {
+            crate::api::image::ImageFilter::Preset { preset, strength } => {
                 <i32>::sse_encode(10, serializer);
-                <crate::api::image::FilterPreset>::sse_encode(field0, serializer);
+                <crate::api::image::FilterPreset>::sse_encode(preset, serializer);
+                <f32>::sse_encode(strength, serializer);
+            }
+            crate::api::image::ImageFilter::Warmth { amount } => {
+                <i32>::sse_encode(11, serializer);
+                <f32>::sse_encode(amount, serializer);
+            }
+            crate::api::image::ImageFilter::Fade { amount } => {
+                <i32>::sse_encode(12, serializer);
+                <f32>::sse_encode(amount, serializer);
+            }
+            crate::api::image::ImageFilter::Vignette { amount } => {
+                <i32>::sse_encode(13, serializer);
+                <f32>::sse_encode(amount, serializer);
+            }
+            crate::api::image::ImageFilter::Highlights { amount } => {
+                <i32>::sse_encode(14, serializer);
+                <f32>::sse_encode(amount, serializer);
+            }
+            crate::api::image::ImageFilter::Shadows { amount } => {
+                <i32>::sse_encode(15, serializer);
+                <f32>::sse_encode(amount, serializer);
+            }
+            crate::api::image::ImageFilter::Structure { amount } => {
+                <i32>::sse_encode(16, serializer);
+                <f32>::sse_encode(amount, serializer);
             }
             _ => {
                 unimplemented!("");
@@ -3021,6 +3134,8 @@ impl SseEncode for crate::api::layers::PaintStrokeInput {
         <u8>::sse_encode(self.color_a, serializer);
         <f32>::sse_encode(self.width, serializer);
         <f32>::sse_encode(self.opacity, serializer);
+        <bool>::sse_encode(self.erase, serializer);
+        <u8>::sse_encode(self.brush_kind, serializer);
     }
 }
 
