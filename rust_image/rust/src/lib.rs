@@ -2,7 +2,7 @@ pub mod api;
 pub mod benchmark;
 mod frb_generated;
 
-mod backend;
+pub mod backend;
 mod buffer;
 mod compress;
 mod crop;
@@ -26,3 +26,5 @@ pub mod gpu;
 
 #[cfg(feature = "blurhash")]
 mod blurhash;
+
+pub mod test_support;

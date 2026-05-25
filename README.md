@@ -205,3 +205,35 @@ cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic --i
 **Dart / Flutter** (not `dart run`): `cd rust_image/benchmark && ./run_dart_benchmark.sh` — use `BENCH_PIPELINE=worker` for the editor isolate path
 
 See [benchmark/README.md](rust_image/benchmark/README.md) for full options and CSV export.
+
+## Running tests
+
+`rust_image` ships three test layers. Run any of them individually, or run all
+of them via the repo-root convenience script:
+
+```bash
+chmod +x test_all.sh   # one time
+./test_all.sh
+```
+
+| Layer | Command | What it covers |
+|-------|---------|----------------|
+| Rust  | `cd rust_image/rust && cargo test --features gpu,blurhash` | Core image API (resize, crop, rotate, EXIF, compress, filters, draw, overlay, blurhash, RGBA pipeline, edit graph, batch, pool, backend). |
+| Dart unit | `cd rust_image && flutter test test/editor/` | Pure-Dart editor logic (edit graph, layer stack, filter descriptors, config defaults) — no device, no native lib. |
+| Integration | `cd rust_image/example && flutter test integration_test/ -d <device>` | End-to-end `RustImageEditor` API on a real Flutter engine (smoke, thorough, RGBA pipeline, edit pipeline, BlendMode matrix + BlurHash). Requires a connected device or simulator. |
+
+### `test_all.sh` environment knobs
+
+- `TEST_RUST_FEATURES` — cargo `--features` list for the Rust crate. Default
+  `gpu,blurhash`. Set to `gpu,blurhash,avif` if your host has NASM and you want
+  AVIF coverage; the AVIF encoder otherwise fails to build.
+- `RUN_INTEGRATION=1` — enables the on-device integration layer (off by default
+  because it needs a Flutter device/simulator and rebuilds native code).
+- `TEST_DEVICE` — Flutter device id passed to `flutter test -d`. Default
+  `macos`. Use `flutter devices` to list available targets.
+
+Example: everything, including integration on the iOS simulator:
+
+```bash
+TEST_RUST_FEATURES=gpu,blurhash,avif RUN_INTEGRATION=1 TEST_DEVICE="iPhone 15" ./test_all.sh
+```
