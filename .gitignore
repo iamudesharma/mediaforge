@@ -1,0 +1,25 @@
+# Rust
+**/target/
+**/*.rs.bk
+
+# Flutter / Dart
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+**/build/
+**/.pub-cache/
+**/.pub/
+**/pubspec.lock
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Keep plugin lockfiles for reproducible CI (optional — remove if you prefer)
+!rust_image/pubspec.lock
+!rust_image/example/pubspec.lock

@@ -1,0 +1,10 @@
+targets:
+  $default:
+    sources:
+      include:
+        - $package$
+        - lib/**
+        - benchmark/**
+        - test/**
+      exclude:
+        - example/**

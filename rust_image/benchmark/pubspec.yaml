@@ -1,0 +1,17 @@
+name: rust_image_benchmark_runner
+description: Benchmark rust_image Dart/FRB APIs — 10 cold iterations, CPU vs GPU.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter_rust_bridge: 2.12.0
+  rust_image:
+    path: ../
+
+dev_dependencies:
+  lints: ^6.0.0
+
+executables:
+  rust_image_benchmark:

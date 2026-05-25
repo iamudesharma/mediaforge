@@ -1,0 +1,207 @@
+# rust_image
+
+Flutter image editor plugin with a **Rust** processing core and **flutter_rust_bridge** FFI.
+
+## Package location
+
+The Flutter plugin lives in [`rust_image/`](rust_image/).
+
+## Stack
+
+| Purpose | Crate |
+|---------|--------|
+| Core decode/encode | `image` |
+| Fast resize | `fast_image_resize` |
+| Geometry / draw | `imageproc` |
+| Filters | `photon-rs` |
+| EXIF | `kamadak-exif` |
+| Parallel batch | `rayon` |
+| JPEG | `mozjpeg` |
+| PNG optimize | `oxipng` |
+| Bridge | `flutter_rust_bridge` |
+| GPU compute | `wgpu` (Metal on Apple, Vulkan on Android/Linux) |
+
+Default features: `avif`, `blurhash`, `gpu` (disable with `default-features: false` if needed).
+
+## Quick start — drop-in editor widget
+
+```yaml
+dependencies:
+  rust_image:
+    path: ../rust_image/rust_image   # or pub.dev when published
+```
+
+```dart
+import 'package:rust_image/rust_image.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(MaterialApp(
+    theme: AppTheme.dark(),
+    home: RustImageEditorWidget(
+      config: RustImageEditorConfig(
+        title: 'Edit photo',
+        initialImageBytes: await File('photo.jpg').readAsBytes(), // optional
+        onExport: (bytes, info) async {
+          await File('edited.jpg').writeAsBytes(bytes);
+        },
+        // Optional: custom picker instead of file_selector / image_picker
+        // pickImage: () => myGalleryPicker(),
+        // Limit tools:
+        // enabledTools: [EditorTool.import, EditorTool.filters, EditorTool.export_],
+      ),
+    ),
+  ));
+}
+```
+
+The widget includes import, transform, filters, adjust, draw, overlay, export, and advanced (RGBA/GPU) tabs — same UI as the studio demo, configurable via [RustImageEditorConfig](rust_image/lib/src/editor/rust_image_editor_config.dart).
+
+## Quick start — APIs only
+
+Use [RustImageEditor] when you build your own UI and only need Rust processing:
+
+```dart
+await RustImageEditor.ensureInitialized();
+final thumb = RustImageEditor.thumbnail(bytes: bytes, maxEdge: 512);
+final filtered = RustImageEditor.filter(
+  bytes: bytes,
+  filter: const ImageFilter.blur(radius: 4),
+);
+```
+
+See **[ROADMAP.md](../ROADMAP.md)** for the performance sprint plan (Phase 0–5).
+
+## GPU vs CPU
+
+With `ProcessingBackend.auto` (default) on macOS, **Metal** is used when the `gpu` feature is enabled:
+
+| Operation | GPU (Metal) | CPU |
+|-----------|-------------|-----|
+| Resize / thumbnail | Yes (bilinear/nearest; not Lanczos) | `fast_image_resize` (full algorithms) |
+| Brightness / contrast / saturation | Yes | photon-rs |
+| Blur, sharpen, presets, hue, oil, etc. | No | photon-rs (direct RGBA, no PNG round-trip) |
+
+Blur and most filters are **CPU-only** by design today; the editor keeps an **RGBA pipeline** and JPEG previews so filters avoid re-decoding JPEG/PNG each time.
+
+## Example app
+
+Runs the packaged [RustImageEditorWidget] (studio demo).
+
+```bash
+cd rust_image/example
+flutter run
+```
+
+## Android prerequisites
+
+Install Rust via [rustup](https://rustup.rs) (not only Homebrew `rustc`). The repo includes `rust/rust-toolchain.toml` so Android targets are installed automatically.
+
+If you see `can't find crate for core` / `aarch64-linux-android target may not be installed`:
+
+```bash
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+# If you use Homebrew Rust, unlink it so rustup is used:
+# brew unlink rust
+```
+
+Then clean and rebuild:
+
+```bash
+cd rust_image/example
+flutter clean
+flutter run
+```
+
+## Android / Gradle 9
+
+If you see `Could not find method exec()` from `cargokit/gradle/plugin.gradle`, the bundled CargoKit script is already patched to use `ExecOperations` (required for Gradle 9+). The first Android build compiles Rust for each ABI and can take several minutes.
+
+## Regenerate bindings
+
+After changing `rust/src/api/*.rs`:
+
+```bash
+cd rust_image
+flutter_rust_bridge_codegen generate
+```
+
+## Project layout
+
+```
+rust_image/
+├── rust/                 # Rust core (rust_image_core)
+│   └── src/
+│       ├── api/          # FRB exports
+│       ├── resize.rs
+│       ├── filters.rs
+│       ├── exif.rs
+│       └── ...
+├── lib/
+│   ├── rust_image.dart
+│   └── src/rust_image_editor.dart
+└── example/
+```
+
+## Roadmap
+
+- **Phase 1** ✓ resize, thumbnail, crop, rotate, compress, EXIF, filters, draw/text, batch
+- **Phase 2** ✓ BlurHash, AVIF, duotone presets, oil/glass/pixelize/solarize, overlay blend modes
+- **Phase 3** ✓ RGBA buffer pipeline, progressive decode (preview JPEG + full RGBA), buffer pool, metadata probe
+- **GPU** ✓ **wgpu** compute (Metal/Vulkan). `ProcessingBackend.gpu` / `.auto`. GPU today: resize, **blur**, **sharpen**, brightness/contrast/saturation/**hue**; presets, oil/glass, Lanczos export resize stay on CPU.
+- **Perf tuning** — `RUST_IMAGE_RAYON_THREADS`, `RAYON_NUM_THREADS`, `RUST_IMAGE_NO_POOL` (see [ROADMAP.md](ROADMAP.md) Sprint 1.5).
+
+### GPU API (Dart)
+
+```dart
+final gpu = RustImageEditor.gpuInfo();
+if (gpu.available) {
+  print('${gpu.api} — ${gpu.device}');
+}
+
+final thumb = RustImageEditor.thumbnail(
+  bytes: bytes,
+  maxEdge: 512,
+  backend: ProcessingBackend.gpu, // or .auto
+);
+```
+
+### Phase 2 API (Dart)
+
+```dart
+final hash = RustImageEditor.blurHashEncode(bytes);
+final out = RustImageEditor.overlay(
+  baseBytes: base,
+  overlayBytes: logo,
+  x: 40,
+  y: 40,
+  blendMode: BlendMode.multiply,
+);
+RustImageEditor.compress(bytes: bytes, format: OutputFormat.avif, quality: 75);
+```
+
+### Phase 3 API (Dart)
+
+```dart
+final info = RustImageEditor.probe(bytes);
+final prog = RustImageEditor.decodeProgressive(bytes, previewMaxEdge: 128);
+// Show prog.previewJpeg immediately, then edit prog.buffer:
+var rgba = prog.buffer;
+rgba = RustImageEditor.filterRgba(rgba, const ImageFilter.blur(radius: 3));
+final jpeg = RustImageEditor.encodeRgba(rgba, format: OutputFormat.jpeg);
+```
+
+## Benchmarks
+
+Cold API benchmarks (10 runs per op, CPU vs GPU, no caching) live in [`rust_image/benchmark/`](rust_image/benchmark/README.md).
+
+**Rust CLI (fastest):**
+
+```bash
+cd rust_image/rust
+cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic --iterations 10
+```
+
+**Dart / Flutter** (not `dart run`): `cd rust_image/benchmark && ./run_dart_benchmark.sh` — use `BENCH_PIPELINE=worker` for the editor isolate path
+
+See [benchmark/README.md](rust_image/benchmark/README.md) for full options and CSV export.
