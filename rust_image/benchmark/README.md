@@ -56,7 +56,7 @@ BENCH_PIPELINE=worker flutter run -d macos -t lib/benchmark_main.dart --release
 ### Pipelines explained
 
 1. **`direct`** — `RustImageEditor.*` on the **main isolate**. Measures FRB + Rust only (no worker queue).
-2. **`worker`** — `RustWorker.*` on a **background isolate** + preview encode. This is what **live filters and preview** use in the editor.
+2. **`worker`** — `RustWorker.*` on a **Squadron worker pool** (2–4 isolates) + preview encode. This is what **live filters and preview** use in the editor.
 
 Use **`worker`** when you care about slider/filter responsiveness in the app.
 

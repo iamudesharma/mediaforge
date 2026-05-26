@@ -37,7 +37,7 @@ public class RustImageTexturePlugin: NSObject, FlutterPlugin {
       guard let args = call.arguments as? [String: Any],
             let width = args["width"] as? Int,
             let height = args["height"] as? Int,
-            let handle = args["handle"] as? Int64,
+            let handle = Self.handleFromArgs(args["handle"]),
             let registry = textureRegistry
       else {
         result(FlutterError(code: "bad_args", message: "width/height/handle required", details: nil))
@@ -64,7 +64,7 @@ public class RustImageTexturePlugin: NSObject, FlutterPlugin {
 
     case "updateTexture":
       guard let args = call.arguments as? [String: Any],
-            let handle = args["handle"] as? Int64,
+            let handle = Self.handleFromArgs(args["handle"]),
             let data = args["pixels"] as? FlutterStandardTypedData,
             let tex = textures[handle],
             let pb = tex.pixelBuffer,
@@ -107,9 +107,21 @@ public class RustImageTexturePlugin: NSObject, FlutterPlugin {
       registry.textureFrameAvailable(texId)
       result(nil)
 
+    case "notifyFrameAvailable":
+      guard let args = call.arguments as? [String: Any],
+            let handle = Self.handleFromArgs(args["handle"]),
+            let registry = textureRegistry,
+            let texId = textureIds[handle]
+      else {
+        result(FlutterError(code: "bad_args", message: "handle required", details: nil))
+        return
+      }
+      registry.textureFrameAvailable(texId)
+      result(nil)
+
     case "disposeTexture":
       guard let args = call.arguments as? [String: Any],
-            let handle = args["handle"] as? Int64,
+            let handle = Self.handleFromArgs(args["handle"]),
             let registry = textureRegistry,
             let texId = textureIds.removeValue(forKey: handle)
       else {
@@ -123,5 +135,12 @@ public class RustImageTexturePlugin: NSObject, FlutterPlugin {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  private static func handleFromArgs(_ value: Any?) -> Int64? {
+    if let handle = value as? Int64 { return handle }
+    if let handle = value as? Int { return Int64(handle) }
+    if let number = value as? NSNumber { return number.int64Value }
+    return nil
   }
 }

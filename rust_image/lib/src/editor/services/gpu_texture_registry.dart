@@ -29,6 +29,17 @@ abstract final class GpuTextureRegistry {
     }
   }
 
+  static Future<void> notifyFrameAvailable(int handle) async {
+    if (!isSupported) return;
+    try {
+      await _channel.invokeMethod<void>('notifyFrameAvailable', {
+        'handle': handle,
+      });
+    } on MissingPluginException {
+      // Fallback: no-op when plugin not registered.
+    }
+  }
+
   static Future<void> updateTexture({
     required int handle,
     required Uint8List pixels,

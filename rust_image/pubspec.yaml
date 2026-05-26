@@ -20,7 +20,9 @@ dependencies:
   camera: ^0.11.1
   gal: ^2.3.2
   path_provider: ^2.1.5
+  squadron: ^7.4.3
 dev_dependencies:
+  squadron_builder: ^9.2.0
   ffi: ^2.2.0
   ffigen: ^20.1.1
   flutter_test:

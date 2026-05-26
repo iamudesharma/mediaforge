@@ -2,8 +2,8 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** All tracked sprints complete  
-**Status:** Nexus + Sprint 10b + Sprint 2 P2 + Sprint 5 shipped — optional MediaPipe download, live GPU texture, teeth whiten, straighten gestures, GPU overlay blend
+**Current sprint:** All tracked sprints complete (Sprint 13)  
+**Status:** Sprint 13 + Nexus + Sprint 10b + Sprint 2 P2 + Sprint 5 shipped — Squadron worker pool, parallel pipelines, offload camera YUV conversion, MediaPipe download, live GPU texture, teeth whiten
 
 ---
 
@@ -378,11 +378,23 @@ Example recipes (face-only, not global grade):
 ### Nexus E — Polish — done
 
 | Item | Status | Notes |
-|------|--------|-------|
+|-------|--------|-------|
 | Under-eye softening | Done | `under_eye` in `BeautyParams`; `build_under_eye_mask` |
-| Teeth whiten | Done | `teeth_whiten` CPU + [`teeth_whiten.wgsl`](rust_image/rust/src/gpu/shaders/teeth_whiten.wgsl) |
+| Teeth whiten | Done | teeth_whiten CPU + [`teeth_whiten.wgsl`](rust_image/rust/src/gpu/shaders/teeth_whiten.wgsl) |
 | Compare-hold for beauty | Done | Compare shows pre-beauty RGBA on Beauty tool |
 | Preset thumbnails | Done | Gradient look chips in Beauty panel |
+
+---
+
+## Sprint 13 — Squadron Worker Pool Integration (done)
+
+**Goal:** Replace hand-rolled isolate with Squadron-managed multithreaded worker pool and dedicated camera worker for peak performance and UI smoothness.
+
+| Phase | Tasks / Deliverables | Status | Notes |
+|-------|----------------------|--------|-------|
+| Phase 1 | Foundation: `@SquadronService` + single worker proxy | Done | Added squadron/builder to pubspec; generated proxy/workers; preserved static RustWorker API |
+| Phase 2 | Parallelization: Worker pool + parallel loading & export | Done | Created auto-scaling pool config (2-4 workers); coalesce tracker for preview operations; parallel loading and export pipelines |
+| Phase 3 | Live Camera: Offload YUV conversion & dedicated isolate | Done | Maintained separate dedicated camera worker to isolate camera stream processing from editor preview pipeline |
 
 ---
 
@@ -442,4 +454,4 @@ Run in **rust_image Studio** after changes; record status-line timings.
 
 ---
 
-*Last updated: All tracked sprints complete (Nexus, 10b, 2 P2, 5)*
+*Last updated: All tracked sprints complete (Sprint 13, Nexus, 10b, 2 P2, 5)*

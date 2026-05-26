@@ -67,6 +67,17 @@ See the [root README](../README.md) for macOS sandbox entitlements (file picker)
 
 Status line (`showPerformanceInStatus: true`): filter path, stage ms, `gpu_*` / `cpu_*` beauty hints, live fps.
 
+## Worker pool (Sprint 13)
+
+Heavy image work runs in a **Squadron** worker pool (`RustWorker`) so the UI isolate stays responsive. Live camera uses a dedicated worker for YUV→RGBA.
+
+After changing `@SquadronMethod` in `lib/src/editor/services/rust_worker_service.dart`:
+
+```bash
+cd rust_image
+dart run build_runner build
+```
+
 ## Benchmarks
 
 [`benchmark/`](benchmark/README.md) — cold API runs (10× default, CPU vs GPU). Rust: `cd rust && cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic`. Dart/FRB: `cd benchmark && ./run_dart_benchmark.sh`.

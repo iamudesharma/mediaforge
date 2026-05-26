@@ -46,7 +46,7 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
 
     case "analyzeImage":
       guard let args = call.arguments as? [String: Any],
-            let bytes = args["bytes"] as? FlutterStandardTypedData,
+            let imageData = RustImageImageDecode.dataFromChannel(args["bytes"]),
             let width = args["width"] as? Int,
             let height = args["height"] as? Int
       else {
@@ -62,7 +62,7 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
             let payload: [String: Any]
             if let dir = modelDir, RustImageMediaPipeAnalyzer.modelsReady(at: dir) {
               payload = try RustImageMediaPipeAnalyzer.analyze(
-                imageData: bytes.data,
+                imageData: imageData,
                 pixelFormat: pixelFormat,
                 targetWidth: width,
                 targetHeight: height,
@@ -70,7 +70,7 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
               )
             } else {
               payload = try Self.analyzeVision(
-                jpegOrPng: bytes.data,
+                imageData: imageData,
                 pixelFormat: pixelFormat,
                 targetWidth: width,
                 targetHeight: height,
@@ -95,7 +95,7 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
 
   @available(macOS 12.0, iOS 15.0, *)
   private static func analyzeVision(
-    jpegOrPng: Data,
+    imageData: Data,
     pixelFormat: String,
     targetWidth: Int,
     targetHeight: Int,
@@ -103,17 +103,16 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
   ) throws -> [String: Any] {
     let tw = max(1, targetWidth)
     let th = max(1, targetHeight)
-    let cgImage: CGImage
-    if pixelFormat == "rgba", tw > 0, th > 0, jpegOrPng.count >= tw * th * 4 {
-      guard let decoded = decodeRgba(jpegOrPng, width: tw, height: th) else {
-        throw NSError(domain: "rust_image", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not decode RGBA"])
-      }
-      cgImage = decoded
-    } else {
-      guard let decoded = decodeImage(jpegOrPng) else {
-        throw NSError(domain: "rust_image", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not decode image"])
-      }
-      cgImage = decoded
+    guard let cgImage = RustImageImageDecode.cgImage(
+      from: imageData,
+      pixelFormat: pixelFormat,
+      width: tw,
+      height: th
+    ) else {
+      let detail = pixelFormat == "rgba"
+        ? "Could not decode RGBA (\(imageData.count) bytes, \(tw)×\(th))"
+        : "Could not decode image"
+      throw NSError(domain: "rust_image", code: 1, userInfo: [NSLocalizedDescriptionKey: detail])
     }
     guard let scaled = Self.resize(cgImage, width: tw, height: th) else {
       throw NSError(domain: "rust_image", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not scale image"])
@@ -138,36 +137,6 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
         "bytes": FlutterStandardTypedData(bytes: mask),
       ],
     ]
-  }
-
-  private static func decodeRgba(_ data: Data, width: Int, height: Int) -> CGImage? {
-    let colorSpace = CGColorSpaceCreateDeviceRGB()
-    return data.withUnsafeBytes { raw -> CGImage? in
-      guard let base = raw.baseAddress else { return nil }
-      guard let ctx = CGContext(
-        data: UnsafeMutableRawPointer(mutating: base),
-        width: width,
-        height: height,
-        bitsPerComponent: 8,
-        bytesPerRow: width * 4,
-        space: colorSpace,
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-      ) else { return nil }
-      return ctx.makeImage()
-    }
-  }
-
-  private static func decodeImage(_ data: Data) -> CGImage? {
-    #if canImport(UIKit)
-    guard let img = UIImage(data: data) else { return nil }
-    return img.cgImage
-    #elseif canImport(AppKit)
-    guard let img = NSImage(data: data) else { return nil }
-    var rect = CGRect(origin: .zero, size: img.size)
-    return img.cgImage(forProposedRect: &rect, context: nil, hints: nil)
-    #else
-    return nil
-    #endif
   }
 
   private static func resize(_ image: CGImage, width: Int, height: Int) -> CGImage? {

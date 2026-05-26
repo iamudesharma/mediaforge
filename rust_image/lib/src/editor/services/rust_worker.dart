@@ -1,50 +1,43 @@
 import 'dart:async';
 import 'dart:isolate';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:squadron/squadron.dart';
 import 'package:rust_image/src/rust/api/face.dart';
+import 'package:rust_image/src/rust/api/layers.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
 import '../models/beauty_params.dart';
 import '../models/operation_profile.dart';
 import 'filter_descriptor.dart';
+import 'rust_worker_service.dart';
+import 'rust_worker_pool_config.dart';
+import 'coalesce_tracker.dart';
 
-/// Long-lived isolate for Rust image work so the UI thread stays responsive.
+/// Long-lived isolate worker pool for Rust image work so the UI thread stays responsive.
 abstract final class RustWorker {
-  static SendPort? _commands;
-  static Isolate? _isolate;
-  static int _requestId = 0;
-  static final Map<int, Completer<Object?>> _pending = {};
-  static ReceivePort? _replyPort;
+  static RustWorkerServiceWorkerPool? _pool;
+  static RustWorkerServiceWorker? _cameraWorker;
+  static final _coalesce = CoalesceTracker();
 
   static Future<void> ensureStarted() async {
-    if (_commands != null) return;
-
-    _replyPort = ReceivePort();
-    _replyPort!.listen((raw) {
-      final id = raw[0] as int;
-      final result = raw[1];
-      _pending.remove(id)?.complete(result);
-    });
-
-    final initPort = ReceivePort();
-    _isolate = await Isolate.spawn(_isolateMain, initPort.sendPort);
-    _commands = await initPort.first as SendPort;
-    initPort.close();
+    if (_pool != null) return;
+    final config = RustWorkerPoolConfig.auto();
+    _pool = RustWorkerServiceWorkerPool(
+      concurrencySettings: ConcurrencySettings(
+        minWorkers: config.minWorkers,
+        maxWorkers: config.maxWorkers,
+        maxParallel: 1,
+      ),
+    );
+    await _pool!.start();
   }
 
-  static Future<T> _request<T>(Object message) async {
-    await ensureStarted();
-    final id = ++_requestId;
-    final completer = Completer<Object?>();
-    _pending[id] = completer;
-
-    _commands!.send([id, message, _replyPort!.sendPort]);
-
-    final result = await completer.future;
-    if (result is String && result.startsWith('error:')) {
-      throw StateError(result.substring(6));
-    }
-    return result as T;
+  /// Dedicated isolate for live camera frames — never contends with editor ops.
+  static Future<void> ensureCameraWorkerStarted() async {
+    if (_cameraWorker != null) return;
+    _cameraWorker = RustWorkerServiceWorker();
+    await _cameraWorker!.start();
   }
 
   static Future<Uint8List> filterBytes({
@@ -52,15 +45,15 @@ abstract final class RustWorker {
     required FilterDescriptor filter,
     required OutputFormat format,
     required int quality,
-  }) {
-    return _request<Uint8List>([
-      'filterBytes',
-      TransferableTypedData.fromList([bytes]),
-      filter.kind,
-      filter.params,
-      format.index,
-      quality,
-    ]);
+  }) async {
+    await ensureStarted();
+    return _pool!.filterBytes(
+      bytes: TransferableTypedData.fromList([bytes]),
+      filterKind: filter.kind,
+      filterParams: filter.params,
+      formatIndex: format.index,
+      quality: quality,
+    );
   }
 
   /// Replay [ops] on [base] (Sprint 3 edit graph). Optional JPEG for legacy preview.
@@ -76,35 +69,37 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = false,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'replayEditPipeline',
-      base.width,
-      base.height,
-      TransferableTypedData.fromList([base.pixels]),
-      ops,
-      backend.index,
-      previewMaxEdge,
-      previewQuality,
-      encodePreviewJpeg,
-    ]);
-    OperationProfile? profile;
-    if (raw.containsKey('filter_ms')) {
-      profile = OperationProfile(
-        totalMs: (raw['total_ms'] as num?)?.toInt() ?? 0,
-        filterMs: (raw['filter_ms'] as num).toInt(),
-        previewEncodeMs: (raw['preview_ms'] as num?)?.toInt() ?? 0,
-        executionPath: raw['path'] as String? ?? '',
+  }) {
+    return _coalesce.execute('replayEditPipeline', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.replayEditPipeline(
+        width: base.width,
+        height: base.height,
+        pixels: TransferableTypedData.fromList([base.pixels]),
+        ops: ops,
+        backendIndex: backend.index,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: encodePreviewJpeg,
       );
-    }
-    final previewPayload = raw['preview'];
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: previewPayload == null
-          ? null
-          : _bytesFromPayload(previewPayload),
-      profile: profile,
-    );
+      OperationProfile? profile;
+      if (raw.containsKey('filter_ms')) {
+        profile = OperationProfile(
+          totalMs: (raw['total_ms'] as num?)?.toInt() ?? 0,
+          filterMs: (raw['filter_ms'] as num).toInt(),
+          previewEncodeMs: (raw['preview_ms'] as num?)?.toInt() ?? 0,
+          executionPath: raw['path'] as String? ?? '',
+        );
+      }
+      final previewPayload = raw['preview'];
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: previewPayload == null
+            ? null
+            : _bytesFromPayload(previewPayload),
+        profile: profile,
+      );
+    });
   }
 
   /// Full-resolution replay for export (no preview JPEG).
@@ -113,14 +108,14 @@ abstract final class RustWorker {
     required List<EditOp> ops,
     required ProcessingBackend backend,
   }) async {
-    final raw = await _request<Map<String, Object>>([
-      'applyEditPipelineFull',
-      base.width,
-      base.height,
-      TransferableTypedData.fromList([base.pixels]),
-      ops,
-      backend.index,
-    ]);
+    await ensureStarted();
+    final raw = await _pool!.applyEditPipelineFull(
+      width: base.width,
+      height: base.height,
+      pixels: TransferableTypedData.fromList([base.pixels]),
+      ops: ops,
+      backendIndex: backend.index,
+    );
     return _bufferFromPayload(raw);
   }
 
@@ -136,51 +131,53 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = true,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'filterRgba',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      filter.kind,
-      filter.params,
-      backend.index,
-      previewMaxEdge,
-      previewQuality,
-      encodePreviewJpeg,
-    ]);
-    OperationProfile? profile;
-    if (raw.containsKey('filter_ms')) {
-      profile = OperationProfile(
-        totalMs: (raw['total_ms'] as num?)?.toInt() ?? 0,
-        filterMs: (raw['filter_ms'] as num).toInt(),
-        previewEncodeMs: (raw['preview_ms'] as num).toInt(),
-        executionPath: raw['path'] as String? ?? '',
+  }) {
+    return _coalesce.execute('filterRgba', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.filterRgba(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        filterKind: filter.kind,
+        filterParams: filter.params,
+        backendIndex: backend.index,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: encodePreviewJpeg,
       );
-    }
-    final previewPayload = raw['preview'];
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: previewPayload == null
-          ? null
-          : _bytesFromPayload(previewPayload),
-      profile: profile,
-    );
+      OperationProfile? profile;
+      if (raw.containsKey('filter_ms')) {
+        profile = OperationProfile(
+          totalMs: (raw['total_ms'] as num?)?.toInt() ?? 0,
+          filterMs: (raw['filter_ms'] as num).toInt(),
+          previewEncodeMs: (raw['preview_ms'] as num).toInt(),
+          executionPath: raw['path'] as String? ?? '',
+        );
+      }
+      final previewPayload = raw['preview'];
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: previewPayload == null
+            ? null
+            : _bytesFromPayload(previewPayload),
+        profile: profile,
+      );
+    });
   }
 
   static Future<Uint8List> encodePreview({
     required RgbaImageBuffer buffer,
     required int previewMaxEdge,
     required int quality,
-  }) {
-    return _request<Uint8List>([
-      'encodePreview',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      previewMaxEdge,
-      quality,
-    ]);
+  }) async {
+    await ensureStarted();
+    return _pool!.encodePreview(
+      width: buffer.width,
+      height: buffer.height,
+      pixels: TransferableTypedData.fromList([buffer.pixels]),
+      previewMaxEdge: previewMaxEdge,
+      quality: quality,
+    );
   }
 
   /// Full-resolution encode for export (runs in worker isolate).
@@ -188,15 +185,15 @@ abstract final class RustWorker {
     required RgbaImageBuffer buffer,
     required OutputFormat format,
     required int quality,
-  }) {
-    return _request<Uint8List>([
-      'encodeFullRgba',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      format.index,
-      quality,
-    ]);
+  }) async {
+    await ensureStarted();
+    return _pool!.encodeFullRgba(
+      width: buffer.width,
+      height: buffer.height,
+      pixels: TransferableTypedData.fromList([buffer.pixels]),
+      formatIndex: format.index,
+      quality: quality,
+    );
   }
 
   /// Regional skin smooth (Sprint 12) — runs in worker isolate.
@@ -204,18 +201,20 @@ abstract final class RustWorker {
     required RgbaImageBuffer buffer,
     required SegmentationMask mask,
     required double strength,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'applySkinSmooth',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      mask.width,
-      mask.height,
-      TransferableTypedData.fromList([mask.pixels]),
-      strength,
-    ]);
-    return _bufferFromPayload(raw);
+  }) {
+    return _coalesce.execute('applySkinSmooth', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.applySkinSmooth(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        maskW: mask.width,
+        maskH: mask.height,
+        maskPixels: TransferableTypedData.fromList([mask.pixels]),
+        strength: strength,
+      );
+      return _bufferFromPayload(raw);
+    });
   }
 
   /// Full regional beauty (Nexus B) — runs in worker isolate.
@@ -225,32 +224,70 @@ abstract final class RustWorker {
     required SegmentationMask skinMask,
     required BeautyParams params,
     SegmentationMask? excludeMask,
+  }) {
+    return _coalesce.execute('applyBeauty', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.applyBeauty(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        landmarks: analysis.landmarks,
+        faceContourCount: analysis.faceContourCount,
+        regionCounts: regionCountsForAnalysis(analysis),
+        maskW: skinMask.width,
+        maskH: skinMask.height,
+        maskPixels: TransferableTypedData.fromList([skinMask.pixels]),
+        skinSmooth: params.skinSmooth,
+        eyeBrighten: params.eyeBrighten,
+        lipTintIndex: params.lipTint.index,
+        lipTintStrength: params.lipTintStrength,
+        lipPlump: params.lipPlump,
+        blush: params.blush,
+        underEye: params.underEye,
+        teethWhiten: params.teethWhiten,
+        exW: excludeMask?.width ?? 0,
+        exH: excludeMask?.height ?? 0,
+        exRaw: excludeMask != null
+            ? TransferableTypedData.fromList([excludeMask.pixels])
+            : null,
+      );
+      return _bufferFromPayload(raw);
+    });
+  }
+
+  /// Dedicated beauty method for live camera loops.
+  static Future<RgbaImageBuffer> applyBeautyCamera({
+    required RgbaImageBuffer buffer,
+    required FaceAnalysisResult analysis,
+    required SegmentationMask skinMask,
+    required BeautyParams params,
+    SegmentationMask? excludeMask,
   }) async {
-    final raw = await _request<Map<String, Object>>([
-      'applyBeauty',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      analysis.landmarks,
-      analysis.faceContourCount,
-      regionCountsForAnalysis(analysis),
-      skinMask.width,
-      skinMask.height,
-      TransferableTypedData.fromList([skinMask.pixels]),
-      params.skinSmooth,
-      params.eyeBrighten,
-      params.lipTint.index,
-      params.lipTintStrength,
-      params.lipPlump,
-      params.blush,
-      params.underEye,
-      params.teethWhiten,
-      excludeMask?.width ?? 0,
-      excludeMask?.height ?? 0,
-      excludeMask != null
+    await ensureCameraWorkerStarted();
+    final raw = await _cameraWorker!.applyBeauty(
+      width: buffer.width,
+      height: buffer.height,
+      pixels: TransferableTypedData.fromList([buffer.pixels]),
+      landmarks: analysis.landmarks,
+      faceContourCount: analysis.faceContourCount,
+      regionCounts: regionCountsForAnalysis(analysis),
+      maskW: skinMask.width,
+      maskH: skinMask.height,
+      maskPixels: TransferableTypedData.fromList([skinMask.pixels]),
+      skinSmooth: params.skinSmooth,
+      eyeBrighten: params.eyeBrighten,
+      lipTintIndex: params.lipTint.index,
+      lipTintStrength: params.lipTintStrength,
+      lipPlump: params.lipPlump,
+      blush: params.blush,
+      underEye: params.underEye,
+      teethWhiten: params.teethWhiten,
+      exW: excludeMask?.width ?? 0,
+      exH: excludeMask?.height ?? 0,
+      exRaw: excludeMask != null
           ? TransferableTypedData.fromList([excludeMask.pixels])
           : null,
-    ]);
+    );
     return _bufferFromPayload(raw);
   }
 
@@ -260,18 +297,18 @@ abstract final class RustWorker {
     required int width,
     required int height,
   }) async {
+    await ensureStarted();
     final seg = analysis.segmentation;
-    final raw = await _request<Map<String, Object>>([
-      'buildSkinMask',
-      analysis.landmarks,
-      analysis.faceContourCount,
-      regionCountsForAnalysis(analysis),
-      seg?.width ?? 0,
-      seg?.height ?? 0,
-      seg != null ? TransferableTypedData.fromList([seg.pixels]) : null,
-      width,
-      height,
-    ]);
+    final raw = await _pool!.buildSkinMask(
+      landmarks: analysis.landmarks,
+      faceContourCount: analysis.faceContourCount,
+      regionCounts: regionCountsForAnalysis(analysis),
+      segW: seg?.width ?? 0,
+      segH: seg?.height ?? 0,
+      segRaw: seg != null ? TransferableTypedData.fromList([seg.pixels]) : null,
+      width: width,
+      height: height,
+    );
     return SegmentationMask(
       width: raw['width']! as int,
       height: raw['height']! as int,
@@ -279,27 +316,55 @@ abstract final class RustWorker {
     );
   }
 
-  static Future<String> blurHashEncode(Uint8List bytes) {
-    return _request<String>([
-      'blurHashEncode',
+  /// Dedicated skin mask method for live camera loops.
+  static Future<SegmentationMask> buildSkinMaskFromAnalysisCamera({
+    required FaceAnalysisResult analysis,
+    required int width,
+    required int height,
+  }) async {
+    await ensureCameraWorkerStarted();
+    final seg = analysis.segmentation;
+    final raw = await _cameraWorker!.buildSkinMask(
+      landmarks: analysis.landmarks,
+      faceContourCount: analysis.faceContourCount,
+      regionCounts: regionCountsForAnalysis(analysis),
+      segW: seg?.width ?? 0,
+      segH: seg?.height ?? 0,
+      segRaw: seg != null ? TransferableTypedData.fromList([seg.pixels]) : null,
+      width: width,
+      height: height,
+    );
+    return SegmentationMask(
+      width: raw['width']! as int,
+      height: raw['height']! as int,
+      pixels: _bytesFromPayload(raw['pixels']!),
+    );
+  }
+
+  static Future<String> blurHashEncode(Uint8List bytes) async {
+    await ensureStarted();
+    return _pool!.blurHashEncode(
       TransferableTypedData.fromList([bytes]),
-    ]);
+    );
   }
 
   static Future<
       ({
         RgbaImageBuffer previewRgba,
-        RgbaImageBuffer buffer,
+        RgbaImageBuffer base,
+        RgbaImageBuffer edit,
         ImageInfo info,
       })> decodeProgressive({
     required Uint8List bytes,
     int previewMaxEdge = 200,
+    required int liveEditMaxEdge,
   }) async {
-    final raw = await _request<Map<String, Object>>([
-      'decodeProgressive',
-      TransferableTypedData.fromList([bytes]),
-      previewMaxEdge,
-    ]);
+    await ensureStarted();
+    final raw = await _pool!.decodeProgressive(
+      bytes: TransferableTypedData.fromList([bytes]),
+      previewMaxEdge: previewMaxEdge,
+      liveEditMaxEdge: liveEditMaxEdge,
+    );
     final previewRgba = RgbaImageBuffer(
       width: raw['preview_width']! as int,
       height: raw['preview_height']! as int,
@@ -307,7 +372,16 @@ abstract final class RustWorker {
     );
     return (
       previewRgba: previewRgba,
-      buffer: _bufferFromPayload(raw),
+      base: RgbaImageBuffer(
+        width: raw['width']! as int,
+        height: raw['height']! as int,
+        pixels: _bytesFromPayload(raw['pixels']!),
+      ),
+      edit: RgbaImageBuffer(
+        width: raw['edit_width']! as int,
+        height: raw['edit_height']! as int,
+        pixels: _bytesFromPayload(raw['edit_pixels']!),
+      ),
       info: ImageInfo(
         width: raw['info_width']! as int,
         height: raw['info_height']! as int,
@@ -316,15 +390,99 @@ abstract final class RustWorker {
     );
   }
 
+  /// Decode full-res RGBA + edit-scale downscale in one worker round-trip.
+  static Future<
+      ({
+        RgbaImageBuffer base,
+        RgbaImageBuffer edit,
+      })> decodeAndPrepareEditBase({
+    required Uint8List bytes,
+    required int liveEditMaxEdge,
+  }) async {
+    await ensureStarted();
+    final raw = await _pool!.decodeAndPrepareEditBase(
+      bytes: TransferableTypedData.fromList([bytes]),
+      liveEditMaxEdge: liveEditMaxEdge,
+    );
+    return (
+      base: RgbaImageBuffer(
+        width: raw['base_width']! as int,
+        height: raw['base_height']! as int,
+        pixels: _bytesFromPayload(raw['base_pixels']!),
+      ),
+      edit: RgbaImageBuffer(
+        width: raw['edit_width']! as int,
+        height: raw['edit_height']! as int,
+        pixels: _bytesFromPayload(raw['edit_pixels']!),
+      ),
+    );
+  }
+
+  /// Fit existing full-res RGBA to edit max edge off the UI thread.
+  static Future<
+      ({
+        RgbaImageBuffer base,
+        RgbaImageBuffer edit,
+      })> prepareEditBaseFromRgba({
+    required RgbaImageBuffer buffer,
+    required int liveEditMaxEdge,
+  }) async {
+    await ensureStarted();
+    final raw = await _pool!.prepareEditBaseFromRgba(
+      width: buffer.width,
+      height: buffer.height,
+      pixels: TransferableTypedData.fromList([buffer.pixels]),
+      liveEditMaxEdge: liveEditMaxEdge,
+    );
+    return (
+      base: RgbaImageBuffer(
+        width: raw['base_width']! as int,
+        height: raw['base_height']! as int,
+        pixels: _bytesFromPayload(raw['base_pixels']!),
+      ),
+      edit: RgbaImageBuffer(
+        width: raw['edit_width']! as int,
+        height: raw['edit_height']! as int,
+        pixels: _bytesFromPayload(raw['edit_pixels']!),
+      ),
+    );
+  }
+
+  /// HEIC/HEIF → PNG in worker isolate.
+  static Future<Uint8List> transcribeHeicToPng(Uint8List bytes) async {
+    await ensureStarted();
+    final td = await _pool!.transcribeHeicToPng(
+      TransferableTypedData.fromList([bytes]),
+    );
+    return td.materialize().asUint8List();
+  }
+
+  /// Bake raster layers + paint strokes onto [buffer] in worker isolate.
+  static Future<RgbaImageBuffer> bakeLayersRgba({
+    required RgbaImageBuffer buffer,
+    required List<RasterLayerInput> rasterLayers,
+    required List<PaintStrokeInput> paintStrokes,
+  }) async {
+    await ensureStarted();
+    final raw = await _pool!.bakeLayersRgba(
+      width: buffer.width,
+      height: buffer.height,
+      pixels: TransferableTypedData.fromList([buffer.pixels]),
+      rasterLayers: rasterLayers,
+      paintStrokes: paintStrokes,
+    );
+    return _bufferFromPayload(raw);
+  }
+
   static Future<Uint8List> batchResizeDemo({
     required Uint8List bytes,
     required ProcessingBackend backend,
-  }) {
-    return _request<Uint8List>([
-      'batchResizeDemo',
-      TransferableTypedData.fromList([bytes]),
-      backend.index,
-    ]);
+  }) async {
+    await ensureStarted();
+    return _pool!.batchResizeDemo(
+      bytes: TransferableTypedData.fromList([bytes]),
+      backendIndex: backend.index,
+    );
   }
 
   /// Straighten (optional), crop, fit edit max edge, and JPEG preview — all off the UI thread.
@@ -344,20 +502,20 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
   }) async {
-    final raw = await _request<Map<String, Object>>([
-      'applyCropRgba',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      straightenDegrees,
-      x,
-      y,
-      width,
-      height,
-      liveEditMaxEdge,
-      previewMaxEdge,
-      previewQuality,
-    ]);
+    await ensureStarted();
+    final raw = await _pool!.applyCropRgba(
+      width: buffer.width,
+      height: buffer.height,
+      pixels: TransferableTypedData.fromList([buffer.pixels]),
+      straighten: straightenDegrees,
+      cropX: x,
+      cropY: y,
+      cropW: width,
+      cropH: height,
+      liveEditMaxEdge: liveEditMaxEdge,
+      previewMaxEdge: previewMaxEdge,
+      previewQuality: previewQuality,
+    );
     return (
       base: RgbaImageBuffer(
         width: raw['base_width']! as int,
@@ -381,23 +539,25 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     ResizeAlgorithm algorithm = ResizeAlgorithm.lanczos3,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'resizeRgba',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      width,
-      height,
-      algorithm.index,
-      backend.index,
-      previewMaxEdge,
-      previewQuality,
-    ]);
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: _bytesFromPayload(raw['preview']!),
-    );
+  }) {
+    return _coalesce.execute('resizeRgba', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.resizeRgba(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        targetW: width,
+        targetH: height,
+        algorithmIndex: algorithm.index,
+        backendIndex: backend.index,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+      );
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: _bytesFromPayload(raw['preview']!),
+      );
+    });
   }
 
   /// Heavy byte-path ops off the UI thread (compress, crop, resize, …).
@@ -405,13 +565,13 @@ abstract final class RustWorker {
     required Uint8List bytes,
     required String op,
     required Map<String, Object?> params,
-  }) {
-    return _request<Uint8List>([
-      'bytesTransform',
-      op,
-      TransferableTypedData.fromList([bytes]),
-      params,
-    ]);
+  }) async {
+    await ensureStarted();
+    return _pool!.bytesTransform(
+      op: op,
+      bytes: TransferableTypedData.fromList([bytes]),
+      params: params,
+    );
   }
 
   static Future<({RgbaImageBuffer buffer, Uint8List? preview})> drawLine({
@@ -420,31 +580,33 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = true,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'drawLine',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      line.x0,
-      line.y0,
-      line.x1,
-      line.y1,
-      line.colorR,
-      line.colorG,
-      line.colorB,
-      line.colorA,
-      previewMaxEdge,
-      previewQuality,
-      encodePreviewJpeg,
-    ]);
-    final previewPayload = raw['preview'];
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: previewPayload == null
-          ? null
-          : _bytesFromPayload(previewPayload),
-    );
+  }) {
+    return _coalesce.execute('drawLine', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.drawLine(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        x0: line.x0,
+        y0: line.y0,
+        x1: line.x1,
+        y1: line.y1,
+        colorR: line.colorR,
+        colorG: line.colorG,
+        colorB: line.colorB,
+        colorA: line.colorA,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: encodePreviewJpeg,
+      );
+      final previewPayload = raw['preview'];
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: previewPayload == null
+            ? null
+            : _bytesFromPayload(previewPayload),
+      );
+    });
   }
 
   static Future<({RgbaImageBuffer buffer, Uint8List? preview})> drawCircle({
@@ -453,30 +615,32 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = true,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'drawCircle',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      circle.centerX,
-      circle.centerY,
-      circle.radius,
-      circle.colorR,
-      circle.colorG,
-      circle.colorB,
-      circle.colorA,
-      previewMaxEdge,
-      previewQuality,
-      encodePreviewJpeg,
-    ]);
-    final previewPayload = raw['preview'];
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: previewPayload == null
-          ? null
-          : _bytesFromPayload(previewPayload),
-    );
+  }) {
+    return _coalesce.execute('drawCircle', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.drawCircle(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        centerX: circle.centerX,
+        centerY: circle.centerY,
+        radius: circle.radius,
+        colorR: circle.colorR,
+        colorG: circle.colorG,
+        colorB: circle.colorB,
+        colorA: circle.colorA,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: encodePreviewJpeg,
+      );
+      final previewPayload = raw['preview'];
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: previewPayload == null
+            ? null
+            : _bytesFromPayload(previewPayload),
+      );
+    });
   }
 
   static Future<({RgbaImageBuffer buffer, Uint8List? preview})> drawText({
@@ -485,31 +649,33 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = true,
-  }) async {
-    final raw = await _request<Map<String, Object>>([
-      'drawText',
-      buffer.width,
-      buffer.height,
-      TransferableTypedData.fromList([buffer.pixels]),
-      overlay.text,
-      overlay.x,
-      overlay.y,
-      overlay.fontSize,
-      overlay.colorR,
-      overlay.colorG,
-      overlay.colorB,
-      overlay.colorA,
-      previewMaxEdge,
-      previewQuality,
-      encodePreviewJpeg,
-    ]);
-    final previewPayload = raw['preview'];
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: previewPayload == null
-          ? null
-          : _bytesFromPayload(previewPayload),
-    );
+  }) {
+    return _coalesce.execute('drawText', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.drawText(
+        width: buffer.width,
+        height: buffer.height,
+        pixels: TransferableTypedData.fromList([buffer.pixels]),
+        text: overlay.text,
+        x: overlay.x,
+        y: overlay.y,
+        fontSize: overlay.fontSize,
+        colorR: overlay.colorR,
+        colorG: overlay.colorG,
+        colorB: overlay.colorB,
+        colorA: overlay.colorA,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: encodePreviewJpeg,
+      );
+      final previewPayload = raw['preview'];
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: previewPayload == null
+            ? null
+            : _bytesFromPayload(previewPayload),
+      );
+    });
   }
 
   static Future<({RgbaImageBuffer buffer, Uint8List? preview})> overlayComposite({
@@ -523,36 +689,57 @@ abstract final class RustWorker {
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = true,
+  }) {
+    return _coalesce.execute('overlayRgba', (_) async {
+      await ensureStarted();
+      final raw = await _pool!.overlayRgba(
+        width: base.width,
+        height: base.height,
+        pixels: TransferableTypedData.fromList([base.pixels]),
+        overlayBytes: TransferableTypedData.fromList([overlayBytes]),
+        x: x,
+        y: y,
+        blendModeIndex: blendMode.index,
+        overlayWidth: overlayWidth,
+        overlayHeight: overlayHeight,
+        previewMaxEdge: previewMaxEdge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: encodePreviewJpeg,
+      );
+      final previewPayload = raw['preview'];
+      return (
+        buffer: _bufferFromPayload(raw),
+        preview: previewPayload == null
+            ? null
+            : _bytesFromPayload(previewPayload),
+      );
+    });
+  }
+
+  static Future<Map<String, Object>> convertCameraImage({
+    required int width,
+    required int height,
+    required List<TransferableTypedData> planesData,
+    required List<int> planesBytesPerRow,
+    required List<int?> planesBytesPerPixel,
+    required int liveCameraMaxEdge,
+    required bool isAndroid,
   }) async {
-    final raw = await _request<Map<String, Object>>([
-      'overlayRgba',
-      base.width,
-      base.height,
-      TransferableTypedData.fromList([base.pixels]),
-      TransferableTypedData.fromList([overlayBytes]),
-      x,
-      y,
-      blendMode.index,
-      overlayWidth,
-      overlayHeight,
-      previewMaxEdge,
-      previewQuality,
-      encodePreviewJpeg,
-    ]);
-    final previewPayload = raw['preview'];
-    return (
-      buffer: _bufferFromPayload(raw),
-      preview: previewPayload == null
-          ? null
-          : _bytesFromPayload(previewPayload),
+    await ensureCameraWorkerStarted();
+    return _cameraWorker!.convertCameraImage(
+      width: width,
+      height: height,
+      planesData: planesData,
+      planesBytesPerRow: planesBytesPerRow,
+      planesBytesPerPixel: planesBytesPerPixel,
+      liveCameraMaxEdge: liveCameraMaxEdge,
+      isAndroid: isAndroid,
     );
   }
 
   static Future<RgbaImageBuffer> decodeRgba(Uint8List bytes) async {
-    final raw = await _request<Map<String, Object>>([
-      'decodeRgba',
-      TransferableTypedData.fromList([bytes]),
-    ]);
+    await ensureStarted();
+    final raw = await _pool!.decodeRgba(TransferableTypedData.fromList([bytes]));
     return _bufferFromPayload(raw);
   }
 
@@ -569,674 +756,13 @@ abstract final class RustWorker {
   }
 
   static Future<void> shutdown() async {
-    if (_commands == null) return;
-    try {
-      await _request<void>('shutdown');
-    } catch (_) {}
-    _isolate?.kill(priority: Isolate.immediate);
-    _isolate = null;
-    _commands = null;
-    _replyPort?.close();
-    _replyPort = null;
-  }
-}
-
-const _coalesceOps = {
-  'replayEditPipeline',
-  'filterRgba',
-  'overlayRgba',
-  'applySkinSmooth',
-  'applyBeauty',
-};
-
-@pragma('vm:entry-point')
-Future<void> _isolateMain(SendPort mainSendPort) async {
-  await RustImageEditor.ensureInitialized();
-
-  final commands = ReceivePort();
-  mainSendPort.send(commands.sendPort);
-
-  List<Object?>? _coalescePending;
-  var _coalesceBusy = false;
-
-  Future<void> _drainCoalesce() async {
-    if (_coalesceBusy) return;
-    _coalesceBusy = true;
-    while (_coalescePending != null) {
-      final raw = _coalescePending!;
-      _coalescePending = null;
-      final id = raw[0] as int;
-      final message = raw[1];
-      final replyTo = raw[2] as SendPort;
-      try {
-        final result = await _handleMessage(message as Object);
-        replyTo.send([id, result]);
-      } catch (e, st) {
-        debugPrint('RustWorker error: $e\n$st');
-        replyTo.send([id, 'error:$e']);
-      }
+    if (_pool != null) {
+      _pool!.stop();
+      _pool = null;
     }
-    _coalesceBusy = false;
-  }
-
-  void _enqueueCoalesce(List<Object?> raw) {
-    _coalescePending = raw;
-    scheduleMicrotask(_drainCoalesce);
-  }
-
-  await for (final raw in commands) {
-    final id = raw[0] as int;
-    final message = raw[1];
-    final replyTo = raw[2] as SendPort;
-
-    try {
-      if (message == 'shutdown') {
-        replyTo.send([id, null]);
-        break;
-      }
-      if (message is List && _coalesceOps.contains(message[0])) {
-        _enqueueCoalesce(raw);
-        continue;
-      }
-      final result = await _handleMessage(message);
-      replyTo.send([id, result]);
-    } catch (e, st) {
-      debugPrint('RustWorker error: $e\n$st');
-      replyTo.send([id, 'error:$e']);
+    if (_cameraWorker != null) {
+      _cameraWorker!.stop();
+      _cameraWorker = null;
     }
   }
-}
-
-Future<Object?> _handleMessage(Object message) async {
-  if (message is! List) return null;
-  final op = message[0] as String;
-
-  switch (op) {
-    case 'filterBytes':
-      final bytes = message[1] as TransferableTypedData;
-      final filter = FilterDescriptor(
-        message[2] as String,
-        Map<String, num>.from(message[3] as Map),
-      );
-      final format = OutputFormat.values[message[4] as int];
-      final quality = message[5] as int;
-      return RustImageEditor.filter(
-        bytes: bytes.materialize().asUint8List(),
-        filter: filter.toImageFilter(),
-        format: format,
-        quality: quality,
-      );
-
-    case 'filterRgba':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final filter = FilterDescriptor(
-        message[4] as String,
-        Map<String, num>.from(message[5] as Map),
-      );
-      final backend = ProcessingBackend.values[message[6] as int];
-      final previewMaxEdge = message[7] as int;
-      final previewQuality = message[8] as int;
-      final encodePreviewJpeg = message[9] as bool;
-
-      final total = Stopwatch()..start();
-      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      final filterSw = Stopwatch()..start();
-      buffer = RustImageEditor.filterRgba(
-        buffer,
-        filter.toImageFilter(),
-        backend: backend,
-      );
-      final filterMs = filterSw.elapsedMilliseconds;
-      var previewMs = 0;
-      TransferableTypedData? previewTd;
-      if (encodePreviewJpeg) {
-        final previewSw = Stopwatch()..start();
-        final preview = _encodePreviewBuffer(buffer, previewMaxEdge, previewQuality);
-        previewMs = previewSw.elapsedMilliseconds;
-        previewTd = TransferableTypedData.fromList([preview]);
-      }
-      final path = RustImageEditor.filterExecutionPath(
-        filter.toImageFilter(),
-        backend,
-      );
-      return {
-        'width': buffer.width,
-        'height': buffer.height,
-        'pixels': TransferableTypedData.fromList([buffer.pixels]),
-        if (previewTd != null) 'preview': previewTd,
-        'filter_ms': filterMs,
-        'preview_ms': previewMs,
-        'path': path,
-        'total_ms': total.elapsedMilliseconds,
-      };
-
-    case 'replayEditPipeline':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final ops = (message[4] as List).cast<EditOp>();
-      final backend = ProcessingBackend.values[message[5] as int];
-      final previewMaxEdge = message[6] as int;
-      final previewQuality = message[7] as int;
-      final encodePreviewJpeg = message[8] as bool;
-
-      final total = Stopwatch()..start();
-      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      final filterSw = Stopwatch()..start();
-      if (ops.isNotEmpty) {
-        buffer = RustImageEditor.applyEditGraph(
-          buffer,
-          ops,
-          backend: backend,
-        );
-      }
-      final filterMs = filterSw.elapsedMilliseconds;
-      var previewMs = 0;
-      TransferableTypedData? previewTd;
-      if (encodePreviewJpeg) {
-        final previewSw = Stopwatch()..start();
-        final preview = _encodePreviewBuffer(buffer, previewMaxEdge, previewQuality);
-        previewMs = previewSw.elapsedMilliseconds;
-        previewTd = TransferableTypedData.fromList([preview]);
-      }
-      return {
-        'width': buffer.width,
-        'height': buffer.height,
-        'pixels': TransferableTypedData.fromList([buffer.pixels]),
-        if (previewTd != null) 'preview': previewTd,
-        'filter_ms': filterMs,
-        'preview_ms': previewMs,
-        'path': ops.isEmpty ? '' : 'pipeline',
-        'total_ms': total.elapsedMilliseconds,
-      };
-
-    case 'applyEditPipelineFull':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final ops = (message[4] as List).cast<EditOp>();
-      final backend = ProcessingBackend.values[message[5] as int];
-      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      if (ops.isNotEmpty) {
-        buffer = RustImageEditor.applyEditGraph(
-          buffer,
-          ops,
-          backend: backend,
-        );
-      }
-      return {
-        'width': buffer.width,
-        'height': buffer.height,
-        'pixels': TransferableTypedData.fromList([buffer.pixels]),
-      };
-
-    case 'overlayRgba':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final overlayBytes =
-          (message[4] as TransferableTypedData).materialize().asUint8List();
-      final x = message[5] as int;
-      final y = message[6] as int;
-      final blend = BlendMode.values[message[7] as int];
-      final overlayWidth = message[8] as int;
-      final overlayHeight = message[9] as int;
-      final previewMaxEdge = message[10] as int;
-      final previewQuality = message[11] as int;
-      final encodePreviewJpeg = message[12] as bool;
-
-      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      buffer = RustImageEditor.overlayRgba(
-        buffer,
-        overlayBytes,
-        x: x,
-        y: y,
-        blendMode: blend,
-        overlayWidth: overlayWidth,
-        overlayHeight: overlayHeight,
-      );
-      TransferableTypedData? previewTd;
-      if (encodePreviewJpeg) {
-        final preview = _encodePreviewBuffer(buffer, previewMaxEdge, previewQuality);
-        previewTd = TransferableTypedData.fromList([preview]);
-      }
-      return {
-        'width': buffer.width,
-        'height': buffer.height,
-        'pixels': TransferableTypedData.fromList([buffer.pixels]),
-        if (previewTd != null) 'preview': previewTd,
-      };
-
-    case 'decodeRgba':
-      final bytes = (message[1] as TransferableTypedData).materialize().asUint8List();
-      final decoded = RustImageEditor.decodeToRgba(bytes, fixExif: true);
-      return {
-        'width': decoded.width,
-        'height': decoded.height,
-        'pixels': TransferableTypedData.fromList([decoded.pixels]),
-      };
-
-    case 'drawLine':
-      return _drawOp(
-        message,
-        (buffer, line) => RustImageEditor.drawLineRgba(buffer, line: line),
-        DrawLine(
-          x0: message[4] as int,
-          y0: message[5] as int,
-          x1: message[6] as int,
-          y1: message[7] as int,
-          colorR: message[8] as int,
-          colorG: message[9] as int,
-          colorB: message[10] as int,
-          colorA: message[11] as int,
-        ),
-        message[12] as int,
-        message[13] as int,
-        message[14] as bool,
-      );
-
-    case 'drawCircle':
-      return _drawOp(
-        message,
-        (buffer, circle) => RustImageEditor.drawCircleRgba(buffer, circle: circle),
-        DrawCircle(
-          centerX: message[4] as int,
-          centerY: message[5] as int,
-          radius: message[6] as int,
-          colorR: message[7] as int,
-          colorG: message[8] as int,
-          colorB: message[9] as int,
-          colorA: message[10] as int,
-        ),
-        message[11] as int,
-        message[12] as int,
-        message[13] as bool,
-      );
-
-    case 'drawText':
-      return _drawOp(
-        message,
-        (buffer, overlay) => RustImageEditor.drawTextRgba(buffer, overlay: overlay),
-        TextOverlay(
-          text: message[4] as String,
-          x: message[5] as int,
-          y: message[6] as int,
-          fontSize: message[7] as double,
-          colorR: message[8] as int,
-          colorG: message[9] as int,
-          colorB: message[10] as int,
-          colorA: message[11] as int,
-        ),
-        message[12] as int,
-        message[13] as int,
-        message[14] as bool,
-      );
-
-    case 'encodePreview':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final previewMaxEdge = message[4] as int;
-      final quality = message[5] as int;
-      final buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      return _encodePreviewBuffer(buffer, previewMaxEdge, quality);
-
-    case 'encodeFullRgba':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final format = OutputFormat.values[message[4] as int];
-      final quality = message[5] as int;
-      final buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      return RustImageEditor.encodeRgba(
-        buffer,
-        format: format,
-        quality: quality,
-      );
-
-    case 'applySkinSmooth':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final maskW = message[4] as int;
-      final maskH = message[5] as int;
-      final maskPixels =
-          (message[6] as TransferableTypedData).materialize().asUint8List();
-      final strength = (message[7] as num).toDouble();
-      final buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      final mask = SegmentationMask(
-        width: maskW,
-        height: maskH,
-        pixels: maskPixels,
-      );
-      final out = applySkinSmoothCpu(
-        buffer: buffer,
-        mask: mask,
-        strength: strength,
-      );
-      return {
-        'width': out.width,
-        'height': out.height,
-        'pixels': TransferableTypedData.fromList([out.pixels]),
-      };
-
-    case 'applyBeauty':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final landmarks = (message[4] as List).cast<Landmark2D>();
-      final faceContourCount = message[5] as int;
-      final regionCounts = (message[6] as List).cast<int>();
-      final maskW = message[7] as int;
-      final maskH = message[8] as int;
-      final maskPixels =
-          (message[9] as TransferableTypedData).materialize().asUint8List();
-      final params = BeautyParams(
-        skinSmooth: (message[10] as num).toDouble(),
-        eyeBrighten: (message[11] as num).toDouble(),
-        lipTint: LipTintPreset.values[(message[12] as num).toInt()],
-        lipTintStrength: (message[13] as num).toDouble(),
-        lipPlump: (message[14] as num).toDouble(),
-        blush: (message[15] as num).toDouble(),
-        underEye: (message[16] as num).toDouble(),
-        teethWhiten: (message[17] as num).toDouble(),
-      );
-      final exW = message[18] as int;
-      final exH = message[19] as int;
-      final exRaw = message[20];
-      SegmentationMask? excludeMask;
-      if (exRaw != null && exW > 0 && exH > 0) {
-        final exPixels =
-            (exRaw as TransferableTypedData).materialize().asUint8List();
-        excludeMask = SegmentationMask(
-          width: exW,
-          height: exH,
-          pixels: exPixels,
-        );
-      }
-      final buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      final skinMask = SegmentationMask(
-        width: maskW,
-        height: maskH,
-        pixels: maskPixels,
-      );
-      final out = applyBeautyCpu(
-        buffer: buffer,
-        landmarks: landmarks,
-        faceContourCount: faceContourCount,
-        regionCounts: regionCounts,
-        skinMask: skinMask,
-        params: params,
-        excludeMask: excludeMask,
-      );
-      return {
-        'width': out.width,
-        'height': out.height,
-        'pixels': TransferableTypedData.fromList([out.pixels]),
-      };
-
-    case 'buildSkinMask':
-      final landmarks = (message[1] as List).cast<Landmark2D>();
-      final faceContourCount = message[2] as int;
-      final regionCounts = (message[3] as List).cast<int>();
-      final segW = message[4] as int;
-      final segH = message[5] as int;
-      final segRaw = message[6];
-      final width = message[7] as int;
-      final height = message[8] as int;
-      SegmentationMask? segmentation;
-      if (segRaw != null && segW > 0 && segH > 0) {
-        final segPixels =
-            (segRaw as TransferableTypedData).materialize().asUint8List();
-        segmentation = SegmentationMask(
-          width: segW,
-          height: segH,
-          pixels: segPixels,
-        );
-      }
-      final mask = buildSkinMaskFromLandmarks(
-        landmarks: landmarks,
-        faceContourCount: faceContourCount,
-        regionCounts: regionCounts,
-        segmentation: segmentation,
-        width: width,
-        height: height,
-      );
-      return {
-        'width': mask.width,
-        'height': mask.height,
-        'pixels': TransferableTypedData.fromList([mask.pixels]),
-      };
-
-    case 'bytesTransform':
-      final transformOp = message[1] as String;
-      final bytes = (message[2] as TransferableTypedData).materialize().asUint8List();
-      final params = Map<String, Object?>.from(message[3] as Map);
-      return _bytesTransform(bytes, transformOp, params);
-
-    case 'blurHashEncode':
-      final bytes = (message[1] as TransferableTypedData).materialize().asUint8List();
-      return RustImageEditor.blurHashEncode(bytes);
-
-    case 'decodeProgressive':
-      final bytes = (message[1] as TransferableTypedData).materialize().asUint8List();
-      final previewMaxEdge = message[2] as int;
-      final prog = RustImageEditor.decodeProgressive(
-        bytes,
-        previewMaxEdge: previewMaxEdge,
-        fixExif: true,
-      );
-      return {
-        'width': prog.buffer.width,
-        'height': prog.buffer.height,
-        'pixels': TransferableTypedData.fromList([prog.buffer.pixels]),
-        'preview_rgba': TransferableTypedData.fromList([prog.previewRgba.pixels]),
-        'preview_width': prog.previewRgba.width,
-        'preview_height': prog.previewRgba.height,
-        'info_width': prog.info.width,
-        'info_height': prog.info.height,
-        'info_format': prog.info.format,
-      };
-
-    case 'batchResizeDemo':
-      final bytes = (message[1] as TransferableTypedData).materialize().asUint8List();
-      final backend = ProcessingBackend.values[message[2] as int];
-      final out = RustImageEditor.batchResize(
-        items: [
-          BatchResizeItem(bytes: bytes, width: 256, height: 256),
-          BatchResizeItem(bytes: bytes, width: 512, height: 512),
-        ],
-        backend: backend,
-      );
-      return out.last;
-
-    case 'applyCropRgba':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final straighten = message[4] as double;
-      final cropX = message[5] as int;
-      final cropY = message[6] as int;
-      final cropW = message[7] as int;
-      final cropH = message[8] as int;
-      final liveEditMaxEdge = message[9] as int;
-      final previewMaxEdge = message[10] as int;
-      final previewQuality = message[11] as int;
-      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      if (straighten.abs() >= 0.05) {
-        buffer = rotateRgbaArbitrary(buffer: buffer, degrees: straighten);
-      }
-      buffer = RustImageEditor.cropRgba(
-        buffer,
-        x: cropX,
-        y: cropY,
-        width: cropW,
-        height: cropH,
-      );
-      final base = buffer;
-      final edit = RustImageEditor.fitMaxEdgeRgba(
-        buffer,
-        maxEdge: liveEditMaxEdge,
-        previewQuality: PreviewQuality.fast,
-      );
-      final preview = _encodePreviewBuffer(edit, previewMaxEdge, previewQuality);
-      return {
-        'base_width': base.width,
-        'base_height': base.height,
-        'base_pixels': TransferableTypedData.fromList([base.pixels]),
-        'edit_width': edit.width,
-        'edit_height': edit.height,
-        'edit_pixels': TransferableTypedData.fromList([edit.pixels]),
-        'preview': TransferableTypedData.fromList([preview]),
-      };
-
-    case 'resizeRgba':
-      final width = message[1] as int;
-      final height = message[2] as int;
-      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-      final targetW = message[4] as int;
-      final targetH = message[5] as int;
-      final algorithm = ResizeAlgorithm.values[message[6] as int];
-      final backend = ProcessingBackend.values[message[7] as int];
-      final previewMaxEdge = message[8] as int;
-      final previewQuality = message[9] as int;
-      var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-      buffer = RustImageEditor.resizeRgba(
-        buffer,
-        width: targetW,
-        height: targetH,
-        algorithm: algorithm,
-        backend: backend,
-      );
-      final preview = _encodePreviewBuffer(buffer, previewMaxEdge, previewQuality);
-      return {
-        'width': buffer.width,
-        'height': buffer.height,
-        'pixels': TransferableTypedData.fromList([buffer.pixels]),
-        'preview': TransferableTypedData.fromList([preview]),
-      };
-
-    default:
-      throw UnsupportedError('Unknown op: $op');
-  }
-}
-
-Map<String, Object> _drawOp<T>(
-  List<Object?> message,
-  RgbaImageBuffer Function(RgbaImageBuffer buffer, T param) draw,
-  T param,
-  int previewMaxEdge,
-  int previewQuality,
-  bool encodePreviewJpeg,
-) {
-  final width = message[1] as int;
-  final height = message[2] as int;
-  final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
-  var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
-  buffer = draw(buffer, param);
-  TransferableTypedData? previewTd;
-  if (encodePreviewJpeg) {
-    final preview = RustImageEditor.encodeRgbaPreview(
-      buffer,
-      maxEdge: previewMaxEdge,
-      quality: previewQuality,
-    );
-    previewTd = TransferableTypedData.fromList([preview]);
-  }
-  return {
-    'width': buffer.width,
-    'height': buffer.height,
-    'pixels': TransferableTypedData.fromList([buffer.pixels]),
-    if (previewTd != null) 'preview': previewTd,
-  };
-}
-
-Uint8List _bytesTransform(
-  Uint8List bytes,
-  String op,
-  Map<String, Object?> params,
-) {
-  switch (op) {
-    case 'compress':
-      return RustImageEditor.compress(
-        bytes: bytes,
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-      );
-    case 'resize':
-      return RustImageEditor.resize(
-        bytes: bytes,
-        width: params['width']! as int,
-        height: params['height']! as int,
-        algorithm: ResizeAlgorithm.values[params['algorithm']! as int],
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-        backend: ProcessingBackend.values[params['backend']! as int],
-      );
-    case 'thumbnail':
-      return RustImageEditor.thumbnail(
-        bytes: bytes,
-        maxEdge: params['maxEdge']! as int,
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-        backend: ProcessingBackend.values[params['backend']! as int],
-      );
-    case 'crop':
-      return RustImageEditor.crop(
-        bytes: bytes,
-        x: params['x']! as int,
-        y: params['y']! as int,
-        width: params['width']! as int,
-        height: params['height']! as int,
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-      );
-    case 'rotate':
-      return RustImageEditor.rotate(
-        bytes: bytes,
-        rotation: Rotation.values[params['rotation']! as int],
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-      );
-    case 'fixExif':
-      return RustImageEditor.fixExif(
-        bytes: bytes,
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-      );
-    case 'blurHashDecode':
-      return RustImageEditor.blurHashDecode(
-        hash: params['hash']! as String,
-        width: params['width']! as int,
-        height: params['height']! as int,
-        format: OutputFormat.values[params['format']! as int],
-        quality: params['quality']! as int,
-      );
-    default:
-      throw UnsupportedError('bytesTransform: $op');
-  }
-}
-
-Uint8List _encodePreviewBuffer(RgbaImageBuffer buffer, int previewMaxEdge, int quality) {
-  var b = buffer;
-  final maxDim = b.width > b.height ? b.width : b.height;
-  if (maxDim > previewMaxEdge) {
-    final scale = previewMaxEdge / maxDim;
-    final w = (b.width * scale).round().clamp(1, b.width);
-    final h = (b.height * scale).round().clamp(1, b.height);
-    b = RustImageEditor.resizeRgba(
-      b,
-      width: w,
-      height: h,
-      algorithm: ResizeAlgorithm.box,
-      backend: ProcessingBackend.cpu,
-    );
-  }
-  return RustImageEditor.encodeRgbaPreview(
-    b,
-    maxEdge: previewMaxEdge,
-    quality: quality,
-  );
 }
