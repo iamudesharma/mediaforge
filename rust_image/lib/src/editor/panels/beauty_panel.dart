@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:rust_image/src/rust/api/face.dart';
 
+import '../crop_controller.dart';
 import '../editor_session.dart';
 import '../models/beauty_params.dart';
 import '../services/beauty_exclude_mask.dart';
@@ -50,6 +51,22 @@ class _BeautyPanelState extends State<BeautyPanel> {
 
   String get _statusLabel {
     if (s.faceAnalyzing) return 'Analyzing face…';
+    if (s.liveCameraActive) {
+      final look = s.previewBeautyLook ?? s.committedBeautyLook;
+      final params = s.liveActiveBeautyParams;
+      if (params != null && params.hasEffect) {
+        if (s.liveBeautyPending) {
+          final name = look != null ? beautyLookLabel(look) : 'Beauty';
+          return '$name · detecting face…';
+        }
+        if (look != null) return 'Live · ${beautyLookLabel(look)} active';
+        return 'Live · beauty active';
+      }
+      if (!FaceAnalysisService.isAnalysisValid(s.faceAnalysis)) {
+        return 'Live · point camera at your face';
+      }
+      return 'Live · pick a look below';
+    }
     final analysis = s.faceAnalysis;
     if (analysis == null) return 'Tap Re-analyze after import';
     if (!FaceAnalysisService.isAnalysisValid(analysis)) {
@@ -59,10 +76,11 @@ class _BeautyPanelState extends State<BeautyPanel> {
     return '$n landmarks · mask ready';
   }
 
-  bool get _canAdjust =>
-      s.hasImage &&
-      !s.busy &&
-      !s.faceAnalyzing &&
+  bool get _canPickLook =>
+      (s.hasImage || s.liveCameraActive) && !s.busy && !s.faceAnalyzing;
+
+  bool get _canFineTune =>
+      _canPickLook &&
       s.skinMask != null &&
       FaceAnalysisService.isAnalysisValid(s.faceAnalysis);
 
@@ -180,6 +198,27 @@ class _BeautyPanelState extends State<BeautyPanel> {
                 : null,
           ),
           const SizedBox(height: LuminaTokens.padSm),
+          if (s.liveCameraActive) ...[
+            Text(
+              'Preview frame',
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+            const SizedBox(height: LuminaTokens.padXs),
+            ActionChipRow<CropAspect>(
+              horizontal: true,
+              items: const [
+                CropAspect.original,
+                CropAspect.square1x1,
+                CropAspect.portrait4x5,
+                CropAspect.story9x16,
+                CropAspect.landscape16x9,
+              ],
+              label: (a) => a == CropAspect.original ? 'Full' : a.label,
+              selected: s.livePreviewAspect,
+              onSelected: s.busy ? (_) {} : s.setLivePreviewAspect,
+            ),
+            const SizedBox(height: LuminaTokens.padSm),
+          ],
         ],
         OutlinedButton.icon(
           onPressed: s.busy ||
@@ -199,7 +238,7 @@ class _BeautyPanelState extends State<BeautyPanel> {
         const SizedBox(height: LuminaTokens.padXs),
         _LooksStrip(
           selected: _selectedLook,
-          enabled: _canAdjust,
+          enabled: _canPickLook,
           onSelected: (look) {
             if (look == null) {
               unawaited(_clearLook());
@@ -210,7 +249,7 @@ class _BeautyPanelState extends State<BeautyPanel> {
         ),
         const SizedBox(height: LuminaTokens.padSm),
         _EraserSection(
-          enabled: _canAdjust,
+          enabled: _canFineTune,
           eraserOn: s.beautyEraserMode,
           brushSize: s.beautyEraserRadius,
           hasStrokes: BeautyExcludeMask.hasEffect(s.beautyExcludeMask),
@@ -261,7 +300,7 @@ class _BeautyPanelState extends State<BeautyPanel> {
           const SizedBox(height: LuminaTokens.padXs),
           _LipSwatches(
             selected: _params.lipTint,
-            enabled: _canAdjust,
+            enabled: _canFineTune,
             onSelected: (t) {
               final next = _params.copyWith(
                 lipTint: t,
@@ -316,8 +355,8 @@ class _BeautyPanelState extends State<BeautyPanel> {
       max: 100,
       divisions: 20,
       display: '${value.round()}%',
-      onChanged: _canAdjust ? onChanged : null,
-      onChangeEnd: _canAdjust ? (_) => _commit() : null,
+      onChanged: _canFineTune ? onChanged : null,
+      onChangeEnd: _canFineTune ? (_) => _commit() : null,
     );
   }
 }

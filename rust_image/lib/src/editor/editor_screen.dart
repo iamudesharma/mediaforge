@@ -17,6 +17,7 @@ import 'panels/text_layer_edit_sheet.dart';
 import 'panels/tool_panels.dart';
 import 'rust_image_editor_config.dart';
 import 'models/beauty_params.dart';
+import 'services/beauty_look_names.dart';
 import 'theme/editor_motion.dart';
 import 'theme/lumina_tokens.dart';
 import 'widgets/compare_hold_button.dart';
@@ -179,6 +180,15 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   }
 
   bool _useMobileChrome(BuildContext context) => !_useWideLayout(context);
+
+  String? _liveBeautyChipLabel(EditorSession session) {
+    if (!session.liveCameraActive) return null;
+    final params = session.liveActiveBeautyParams;
+    if (params == null || !params.hasEffect) return null;
+    final look = session.previewBeautyLook ?? session.committedBeautyLook;
+    if (look != null) return beautyLookLabel(look);
+    return 'Beauty';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -467,7 +477,10 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       liveCameraController: _session.liveCameraActive
           ? LiveCameraService.controller
           : null,
-      liveShowBeautyPreview: _session.liveShowBeautyPreview,
+      liveShowBeautyPreview: _session.liveBeautyRgbaActive,
+      livePreviewAspect: _session.livePreviewAspect,
+      liveBeautyPending: _session.liveBeautyPending,
+      liveBeautyLabel: _liveBeautyChipLabel(_session),
       emptyHint: _session.liveCameraTransitioning
           ? 'Starting camera…'
           : _session.liveCameraActive
