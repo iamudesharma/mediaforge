@@ -4,12 +4,13 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'face.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'image.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `apply_single_op_cpu`, `encode_after_edit_rgba`, `encode_after_edit`, `is_gpu_capable`, `process`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `hash`
 
 Uint8List resizeImage({
   required List<int> bytes,
@@ -471,6 +472,24 @@ sealed class ImageFilter with _$ImageFilter {
   /// Local clarity / micro-contrast (−100 … +100).
   const factory ImageFilter.structure({required double amount}) =
       ImageFilter_Structure;
+
+  /// Swipe mood filter (Instagram-style global grade).
+  const factory ImageFilter.mood({
+    required MoodFilterPreset preset,
+
+    /// 0.0 = identity, 1.0 = full mood grade.
+    required double strength,
+  }) = ImageFilter_Mood;
+
+  /// Regional skin smooth (mask applied separately in session / GPU pass).
+  const factory ImageFilter.skinSmooth({
+    /// 0.0 = none, 1.0 = full smooth.
+    required double strength,
+  }) = ImageFilter_SkinSmooth;
+
+  /// Regional beauty (skin, eyes, lips, blush) — mask + landmarks in session.
+  const factory ImageFilter.beauty({required BeautyParams params}) =
+      ImageFilter_Beauty;
 }
 
 class ImageInfo {
@@ -502,6 +521,26 @@ class ImageInfo {
           height == other.height &&
           format == other.format &&
           exifOrientation == other.exifOrientation;
+}
+
+/// Instagram-style mood filters (swipe on preview — not Filters-tab presets).
+enum MoodFilterPreset {
+  rose,
+  clarendon,
+  juno,
+  valencia,
+  lark,
+  reyes,
+  gingham,
+  loFi,
+  moon,
+  aden,
+  perpetua,
+  mayfair,
+  hudson,
+  sierra,
+  willow,
+  inkwell,
 }
 
 enum OutputFormat { jpeg, png, webP, avif }

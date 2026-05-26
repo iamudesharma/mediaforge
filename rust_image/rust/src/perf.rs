@@ -10,6 +10,8 @@ pub fn resolve_rgba_filter_path(filter: &ImageFilter, requested: ProcessingBacke
         return match filter {
             ImageFilter::Blur { .. } => "gpu_blur",
             ImageFilter::Sharpen => "gpu_sharpen",
+            ImageFilter::Vignette { .. } => "gpu_vignette",
+            ImageFilter::Mood { .. } => "gpu_mood",
             ImageFilter::Brightness { .. }
             | ImageFilter::Contrast { .. }
             | ImageFilter::Saturation { .. }
@@ -58,6 +60,8 @@ fn uses_gpu_filter(filter: &ImageFilter, requested: ProcessingBackend) -> bool {
                 | ImageFilter::HueRotate { .. }
                 | ImageFilter::Blur { .. }
                 | ImageFilter::Sharpen
+                | ImageFilter::Vignette { .. }
+                | ImageFilter::Mood { .. }
         )
     }
     #[cfg(not(feature = "gpu"))]
@@ -148,6 +152,30 @@ mod tests {
         assert_eq!(
             resolve_rgba_filter_path(&ImageFilter::HueRotate { degrees: 15.0 }, ProcessingBackend::Gpu),
             "gpu_adjust"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "gpu")]
+    fn gpu_mood_uses_gpu_mood() {
+        assert_eq!(
+            resolve_rgba_filter_path(
+                &ImageFilter::Mood {
+                    preset: crate::api::image::MoodFilterPreset::Rose,
+                    strength: 1.0,
+                },
+                ProcessingBackend::Gpu,
+            ),
+            "gpu_mood"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "gpu")]
+    fn gpu_vignette_uses_gpu_vignette() {
+        assert_eq!(
+            resolve_rgba_filter_path(&ImageFilter::Vignette { amount: 0.5 }, ProcessingBackend::Gpu),
+            "gpu_vignette"
         );
     }
 }

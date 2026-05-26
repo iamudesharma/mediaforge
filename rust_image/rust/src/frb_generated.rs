@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1228250518;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1582348600;
 
 // Section: executor
 
@@ -83,6 +83,51 @@ fn wire__crate__api__image__add_watermark_impl(
                     api_format,
                     api_quality,
                 )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__apply_beauty_cpu_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "apply_beauty_cpu",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_buffer = <crate::api::image::RgbaImageBuffer>::sse_decode(&mut deserializer);
+            let api_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(&mut deserializer);
+            let api_face_contour_count = <u32>::sse_decode(&mut deserializer);
+            let api_region_counts = <Vec<u32>>::sse_decode(&mut deserializer);
+            let api_skin_mask = <crate::api::face::SegmentationMask>::sse_decode(&mut deserializer);
+            let api_params = <crate::api::face::BeautyParams>::sse_decode(&mut deserializer);
+            let api_exclude_mask =
+                <Option<crate::api::face::SegmentationMask>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::face::apply_beauty_cpu(
+                    api_buffer,
+                    api_landmarks,
+                    api_face_contour_count,
+                    api_region_counts,
+                    api_skin_mask,
+                    api_params,
+                    api_exclude_mask,
+                ))?;
                 Ok(output_ok)
             })())
         },
@@ -156,6 +201,150 @@ fn wire__crate__api__image__apply_filter_impl(
                     api_quality,
                     api_fix_exif,
                 )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__apply_gpu_beauty_pass_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "apply_gpu_beauty_pass",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            let api_mask = <crate::api::face::SegmentationMask>::sse_decode(&mut deserializer);
+            let api_strength = <f32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::api::texture::apply_gpu_beauty_pass(api_id, api_mask, api_strength)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__apply_gpu_beauty_pipeline_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "apply_gpu_beauty_pipeline",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            let api_analysis =
+                <crate::api::face::FaceAnalysisResult>::sse_decode(&mut deserializer);
+            let api_skin_mask = <crate::api::face::SegmentationMask>::sse_decode(&mut deserializer);
+            let api_params = <crate::api::face::BeautyParams>::sse_decode(&mut deserializer);
+            let api_exclude_mask =
+                <Option<crate::api::face::SegmentationMask>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::texture::apply_gpu_beauty_pipeline(
+                    api_id,
+                    api_analysis,
+                    api_skin_mask,
+                    api_params,
+                    api_exclude_mask,
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__apply_gpu_preview_ops_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "apply_gpu_preview_ops",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            let api_ops = <Vec<crate::api::image::EditOp>>::sse_decode(&mut deserializer);
+            let api_backend = <crate::api::image::ProcessingBackend>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::api::texture::apply_gpu_preview_ops(api_id, api_ops, api_backend)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__apply_skin_smooth_cpu_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "apply_skin_smooth_cpu",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_buffer = <crate::api::image::RgbaImageBuffer>::sse_decode(&mut deserializer);
+            let api_mask = <crate::api::face::SegmentationMask>::sse_decode(&mut deserializer);
+            let api_strength = <f32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::face::apply_skin_smooth_cpu(
+                    api_buffer,
+                    api_mask,
+                    api_strength,
+                ))?;
                 Ok(output_ok)
             })())
         },
@@ -237,6 +426,134 @@ fn wire__crate__api__image__batch_resize_images_impl(
                 )?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__face__beauty_look_display_name_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "beauty_look_display_name",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_preset = <crate::api::face::BeautyLookPreset>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::beauty_look_display_name(api_preset))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__beauty_params_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "beauty_params_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::face::BeautyParams::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__face__beauty_params_for_look_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "beauty_params_for_look",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_preset = <crate::api::face::BeautyLookPreset>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::beauty_params_for_look(api_preset))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__beauty_params_is_active_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "beauty_params_is_active",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <crate::api::face::BeautyParams>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::face::BeautyParams::is_active(&api_that))?;
+                    Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -333,6 +650,252 @@ fn wire__crate__api__advanced__buffer_pool_stats_impl(
         },
     )
 }
+fn wire__crate__api__face__build_blush_mask_from_landmarks_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_blush_mask_from_landmarks",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(&mut deserializer);
+            let api_face_contour_count = <u32>::sse_decode(&mut deserializer);
+            let api_region_counts = <Vec<u32>>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::build_blush_mask_from_landmarks(
+                        api_landmarks,
+                        api_face_contour_count,
+                        api_region_counts,
+                        api_width,
+                        api_height,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__build_eye_mask_from_landmarks_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_eye_mask_from_landmarks",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(&mut deserializer);
+            let api_face_contour_count = <u32>::sse_decode(&mut deserializer);
+            let api_region_counts = <Vec<u32>>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::build_eye_mask_from_landmarks(
+                        api_landmarks,
+                        api_face_contour_count,
+                        api_region_counts,
+                        api_width,
+                        api_height,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__build_lip_mask_from_landmarks_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_lip_mask_from_landmarks",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(&mut deserializer);
+            let api_face_contour_count = <u32>::sse_decode(&mut deserializer);
+            let api_region_counts = <Vec<u32>>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::build_lip_mask_from_landmarks(
+                        api_landmarks,
+                        api_face_contour_count,
+                        api_region_counts,
+                        api_width,
+                        api_height,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__build_skin_mask_from_analysis_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_skin_mask_from_analysis",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_analysis =
+                <crate::api::face::FaceAnalysisResult>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::build_skin_mask_from_analysis(
+                        api_analysis,
+                        api_width,
+                        api_height,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__build_skin_mask_from_landmarks_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_skin_mask_from_landmarks",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(&mut deserializer);
+            let api_face_contour_count = <u32>::sse_decode(&mut deserializer);
+            let api_region_counts = <Vec<u32>>::sse_decode(&mut deserializer);
+            let api_segmentation =
+                <Option<crate::api::face::SegmentationMask>>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::build_skin_mask_from_landmarks(
+                        api_landmarks,
+                        api_face_contour_count,
+                        api_region_counts,
+                        api_segmentation,
+                        api_width,
+                        api_height,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__build_under_eye_mask_from_landmarks_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "build_under_eye_mask_from_landmarks",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(&mut deserializer);
+            let api_face_contour_count = <u32>::sse_decode(&mut deserializer);
+            let api_region_counts = <Vec<u32>>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::build_under_eye_mask_from_landmarks(
+                        api_landmarks,
+                        api_face_contour_count,
+                        api_region_counts,
+                        api_width,
+                        api_height,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__image__compress_image_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -361,6 +924,38 @@ fn wire__crate__api__image__compress_image_impl(
             transform_result_sse::<_, String>((move || {
                 let output_ok =
                     crate::api::image::compress_image(api_bytes, api_format, api_quality)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__create_gpu_preview_surface_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "create_gpu_preview_surface",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::api::texture::create_gpu_preview_surface(api_width, api_height)?;
                 Ok(output_ok)
             })())
         },
@@ -599,6 +1194,38 @@ fn wire__crate__api__advanced__decode_to_rgba_buffer_impl(
                     api_fix_exif,
                     api_max_edge,
                 )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__destroy_gpu_preview_surface_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "destroy_gpu_preview_surface",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::texture::destroy_gpu_preview_surface(api_id);
+                })?;
                 Ok(output_ok)
             })())
         },
@@ -927,6 +1554,71 @@ fn wire__crate__api__advanced__encode_rgba_preview_buffer_impl(
         },
     )
 }
+fn wire__crate__api__face__face_analysis_is_valid_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "face_analysis_is_valid",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_analysis =
+                <crate::api::face::FaceAnalysisResult>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::face::face_analysis_is_valid(api_analysis))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__face_analysis_result_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "face_analysis_result_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::face::FaceAnalysisResult::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__advanced__filter_execution_path_name_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1156,6 +1848,101 @@ fn wire__crate__api__advanced__is_gpu_compute_available_impl(
         },
     )
 }
+fn wire__crate__api__texture__is_gpu_texture_preview_available_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "is_gpu_texture_preview_available",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::texture::is_gpu_texture_preview_available())?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__landmark_2_d_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "landmark_2_d_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(crate::api::face::Landmark2D::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__face__lip_tint_preset_default_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "lip_tint_preset_default",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::api::face::LipTintPreset::default())?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__image__overlay_image_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1226,6 +2013,8 @@ fn wire__crate__api__advanced__overlay_on_rgba_buffer_impl(
             let api_x = <i32>::sse_decode(&mut deserializer);
             let api_y = <i32>::sse_decode(&mut deserializer);
             let api_blend_mode = <crate::api::image::BlendMode>::sse_decode(&mut deserializer);
+            let api_overlay_width = <u32>::sse_decode(&mut deserializer);
+            let api_overlay_height = <u32>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, String>((move || {
                 let output_ok = crate::api::advanced::overlay_on_rgba_buffer(
@@ -1234,6 +2023,8 @@ fn wire__crate__api__advanced__overlay_on_rgba_buffer_impl(
                     api_x,
                     api_y,
                     api_blend_mode,
+                    api_overlay_width,
+                    api_overlay_height,
                 )?;
                 Ok(output_ok)
             })())
@@ -1328,6 +2119,36 @@ fn wire__crate__api__image__read_exif_orientation_impl(
             transform_result_sse::<_, ()>((move || {
                 let output_ok =
                     Result::<_, ()>::Ok(crate::api::image::read_exif_orientation(api_bytes))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__readback_gpu_preview_surface_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "readback_gpu_preview_surface",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok = crate::api::texture::readback_gpu_preview_surface(api_id)?;
                 Ok(output_ok)
             })())
         },
@@ -1491,6 +2312,195 @@ fn wire__crate__api__advanced__rotate_rgba_arbitrary_impl(
         },
     )
 }
+fn wire__crate__api__temporal__temporal_smoother_create_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "temporal_smoother_create",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_alpha = <f32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::api::temporal::temporal_smoother_create(api_alpha))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__temporal__temporal_smoother_destroy_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "temporal_smoother_destroy",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::temporal::temporal_smoother_destroy(api_id);
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__temporal__temporal_smoother_reset_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "temporal_smoother_reset",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok({
+                    crate::api::temporal::temporal_smoother_reset(api_id);
+                })?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__temporal__temporal_smoother_smooth_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "temporal_smoother_smooth",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            let api_raw = <crate::api::face::FaceAnalysisResult>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(
+                    crate::api::temporal::temporal_smoother_smooth(api_id, api_raw),
+                )?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__texture__upload_gpu_preview_surface_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "upload_gpu_preview_surface",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_id = <i64>::sse_decode(&mut deserializer);
+            let api_buffer = <crate::api::image::RgbaImageBuffer>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, String>((move || {
+                let output_ok =
+                    crate::api::texture::upload_gpu_preview_surface(api_id, api_buffer)?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
+fn wire__crate__api__face__vision_min_landmark_count_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "vision_min_landmark_count",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Result::<_, ()>::Ok(crate::api::face::vision_min_landmark_count())?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -1512,6 +2522,45 @@ impl SseDecode for crate::api::image::BatchResizeItem {
             bytes: var_bytes,
             width: var_width,
             height: var_height,
+        };
+    }
+}
+
+impl SseDecode for crate::api::face::BeautyLookPreset {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::face::BeautyLookPreset::Natural,
+            1 => crate::api::face::BeautyLookPreset::Soft,
+            2 => crate::api::face::BeautyLookPreset::Glow,
+            3 => crate::api::face::BeautyLookPreset::Glam,
+            4 => crate::api::face::BeautyLookPreset::Clear,
+            5 => crate::api::face::BeautyLookPreset::Peach,
+            6 => crate::api::face::BeautyLookPreset::Bold,
+            _ => unreachable!("Invalid variant for BeautyLookPreset: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::face::BeautyParams {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_skinSmooth = <f32>::sse_decode(deserializer);
+        let mut var_eyeBrighten = <f32>::sse_decode(deserializer);
+        let mut var_lipTint = <crate::api::face::LipTintPreset>::sse_decode(deserializer);
+        let mut var_lipTintStrength = <f32>::sse_decode(deserializer);
+        let mut var_lipPlump = <f32>::sse_decode(deserializer);
+        let mut var_blush = <f32>::sse_decode(deserializer);
+        let mut var_underEye = <f32>::sse_decode(deserializer);
+        return crate::api::face::BeautyParams {
+            skin_smooth: var_skinSmooth,
+            eye_brighten: var_eyeBrighten,
+            lip_tint: var_lipTint,
+            lip_tint_strength: var_lipTintStrength,
+            lip_plump: var_lipPlump,
+            blush: var_blush,
+            under_eye: var_underEye,
         };
     }
 }
@@ -1643,6 +2692,25 @@ impl SseDecode for f64 {
     }
 }
 
+impl SseDecode for crate::api::face::FaceAnalysisResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_landmarks = <Vec<crate::api::face::Landmark2D>>::sse_decode(deserializer);
+        let mut var_confidence = <f32>::sse_decode(deserializer);
+        let mut var_segmentation =
+            <Option<crate::api::face::SegmentationMask>>::sse_decode(deserializer);
+        let mut var_faceContourCount = <u32>::sse_decode(deserializer);
+        let mut var_regionCounts = <Vec<u32>>::sse_decode(deserializer);
+        return crate::api::face::FaceAnalysisResult {
+            landmarks: var_landmarks,
+            confidence: var_confidence,
+            segmentation: var_segmentation,
+            face_contour_count: var_faceContourCount,
+            region_counts: var_regionCounts,
+        };
+    }
+}
+
 impl SseDecode for crate::api::image::FilterPreset {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1692,6 +2760,13 @@ impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap()
     }
 }
 
@@ -1775,6 +2850,25 @@ impl SseDecode for crate::api::image::ImageFilter {
                 let mut var_amount = <f32>::sse_decode(deserializer);
                 return crate::api::image::ImageFilter::Structure { amount: var_amount };
             }
+            17 => {
+                let mut var_preset =
+                    <crate::api::image::MoodFilterPreset>::sse_decode(deserializer);
+                let mut var_strength = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Mood {
+                    preset: var_preset,
+                    strength: var_strength,
+                };
+            }
+            18 => {
+                let mut var_strength = <f32>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::SkinSmooth {
+                    strength: var_strength,
+                };
+            }
+            19 => {
+                let mut var_params = <crate::api::face::BeautyParams>::sse_decode(deserializer);
+                return crate::api::image::ImageFilter::Beauty { params: var_params };
+            }
             _ => {
                 unimplemented!("");
             }
@@ -1794,6 +2888,36 @@ impl SseDecode for crate::api::image::ImageInfo {
             height: var_height,
             format: var_format,
             exif_orientation: var_exifOrientation,
+        };
+    }
+}
+
+impl SseDecode for crate::api::face::Landmark2D {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_x = <f32>::sse_decode(deserializer);
+        let mut var_y = <f32>::sse_decode(deserializer);
+        let mut var_z = <f32>::sse_decode(deserializer);
+        return crate::api::face::Landmark2D {
+            x: var_x,
+            y: var_y,
+            z: var_z,
+        };
+    }
+}
+
+impl SseDecode for crate::api::face::LipTintPreset {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::face::LipTintPreset::None,
+            1 => crate::api::face::LipTintPreset::Nude,
+            2 => crate::api::face::LipTintPreset::Rose,
+            3 => crate::api::face::LipTintPreset::Berry,
+            4 => crate::api::face::LipTintPreset::Coral,
+            5 => crate::api::face::LipTintPreset::Red,
+            _ => unreachable!("Invalid variant for LipTintPreset: {}", inner),
         };
     }
 }
@@ -1824,6 +2948,18 @@ impl SseDecode for Vec<crate::api::image::EditOp> {
     }
 }
 
+impl SseDecode for Vec<crate::api::face::Landmark2D> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::face::Landmark2D>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<Vec<u8>> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1845,6 +2981,18 @@ impl SseDecode for Vec<crate::api::layers::PaintStrokeInput> {
             ans_.push(<crate::api::layers::PaintStrokeInput>::sse_decode(
                 deserializer,
             ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<u32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<u32>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -1888,11 +3036,50 @@ impl SseDecode for Vec<(f32, f32)> {
     }
 }
 
+impl SseDecode for crate::api::image::MoodFilterPreset {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::image::MoodFilterPreset::Rose,
+            1 => crate::api::image::MoodFilterPreset::Clarendon,
+            2 => crate::api::image::MoodFilterPreset::Juno,
+            3 => crate::api::image::MoodFilterPreset::Valencia,
+            4 => crate::api::image::MoodFilterPreset::Lark,
+            5 => crate::api::image::MoodFilterPreset::Reyes,
+            6 => crate::api::image::MoodFilterPreset::Gingham,
+            7 => crate::api::image::MoodFilterPreset::LoFi,
+            8 => crate::api::image::MoodFilterPreset::Moon,
+            9 => crate::api::image::MoodFilterPreset::Aden,
+            10 => crate::api::image::MoodFilterPreset::Perpetua,
+            11 => crate::api::image::MoodFilterPreset::Mayfair,
+            12 => crate::api::image::MoodFilterPreset::Hudson,
+            13 => crate::api::image::MoodFilterPreset::Sierra,
+            14 => crate::api::image::MoodFilterPreset::Willow,
+            15 => crate::api::image::MoodFilterPreset::Inkwell,
+            _ => unreachable!("Invalid variant for MoodFilterPreset: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::face::SegmentationMask> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::face::SegmentationMask>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -2087,6 +3274,20 @@ impl SseDecode for crate::api::image::Rotation {
     }
 }
 
+impl SseDecode for crate::api::face::SegmentationMask {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_width = <u32>::sse_decode(deserializer);
+        let mut var_height = <u32>::sse_decode(deserializer);
+        let mut var_pixels = <Vec<u8>>::sse_decode(deserializer);
+        return crate::api::face::SegmentationMask {
+            width: var_width,
+            height: var_height,
+            pixels: var_pixels,
+        };
+    }
+}
+
 impl SseDecode for crate::api::image::TextOverlay {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2153,7 +3354,21 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        30 => wire__crate__api__image__init_app_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__face__beauty_params_default_impl(port, ptr, rust_vec_len, data_len),
+        14 => {
+            wire__crate__api__face__beauty_params_is_active_impl(port, ptr, rust_vec_len, data_len)
+        }
+        43 => wire__crate__api__face__face_analysis_result_default_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        49 => wire__crate__api__image__init_app_impl(port, ptr, rust_vec_len, data_len),
+        52 => wire__crate__api__face__landmark_2_d_default_impl(port, ptr, rust_vec_len, data_len),
+        53 => {
+            wire__crate__api__face__lip_tint_preset_default_impl(port, ptr, rust_vec_len, data_len)
+        }
         _ => unreachable!(),
     }
 }
@@ -2167,54 +3382,114 @@ fn pde_ffi_dispatcher_sync_impl(
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
         1 => wire__crate__api__image__add_watermark_impl(ptr, rust_vec_len, data_len),
-        2 => wire__crate__api__image__apply_edit_pipeline_impl(ptr, rust_vec_len, data_len),
-        3 => wire__crate__api__image__apply_filter_impl(ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__layers__bake_layers_on_rgba_impl(ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__image__batch_resize_images_impl(ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__advanced__buffer_pool_acquire_impl(ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__advanced__buffer_pool_release_impl(ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__advanced__buffer_pool_stats_impl(ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__image__compress_image_impl(ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__image__create_thumbnail_impl(ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__image__crop_image_impl(ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__advanced__crop_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__image__decode_blurhash_impl(ptr, rust_vec_len, data_len),
-        14 => {
+        2 => wire__crate__api__face__apply_beauty_cpu_impl(ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__image__apply_edit_pipeline_impl(ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__image__apply_filter_impl(ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__texture__apply_gpu_beauty_pass_impl(ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__texture__apply_gpu_beauty_pipeline_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__texture__apply_gpu_preview_ops_impl(ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__face__apply_skin_smooth_cpu_impl(ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__layers__bake_layers_on_rgba_impl(ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__image__batch_resize_images_impl(ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__face__beauty_look_display_name_impl(ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__face__beauty_params_for_look_impl(ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__advanced__buffer_pool_acquire_impl(ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__advanced__buffer_pool_release_impl(ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__advanced__buffer_pool_stats_impl(ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__face__build_blush_mask_from_landmarks_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        19 => {
+            wire__crate__api__face__build_eye_mask_from_landmarks_impl(ptr, rust_vec_len, data_len)
+        }
+        20 => {
+            wire__crate__api__face__build_lip_mask_from_landmarks_impl(ptr, rust_vec_len, data_len)
+        }
+        21 => {
+            wire__crate__api__face__build_skin_mask_from_analysis_impl(ptr, rust_vec_len, data_len)
+        }
+        22 => {
+            wire__crate__api__face__build_skin_mask_from_landmarks_impl(ptr, rust_vec_len, data_len)
+        }
+        23 => wire__crate__api__face__build_under_eye_mask_from_landmarks_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        24 => wire__crate__api__image__compress_image_impl(ptr, rust_vec_len, data_len),
+        25 => {
+            wire__crate__api__texture__create_gpu_preview_surface_impl(ptr, rust_vec_len, data_len)
+        }
+        26 => wire__crate__api__image__create_thumbnail_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__image__crop_image_impl(ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__advanced__crop_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__image__decode_blurhash_impl(ptr, rust_vec_len, data_len),
+        30 => {
             wire__crate__api__advanced__decode_progressive_image_impl(ptr, rust_vec_len, data_len)
         }
-        15 => wire__crate__api__advanced__decode_to_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__image__draw_circle_on_image_impl(ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__advanced__draw_circle_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__image__draw_line_on_image_impl(ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__advanced__draw_line_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__image__draw_text_on_image_impl(ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__advanced__draw_text_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__image__encode_blurhash_impl(ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__advanced__encode_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        24 => {
+        31 => wire__crate__api__advanced__decode_to_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        32 => {
+            wire__crate__api__texture__destroy_gpu_preview_surface_impl(ptr, rust_vec_len, data_len)
+        }
+        33 => wire__crate__api__image__draw_circle_on_image_impl(ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__advanced__draw_circle_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__image__draw_line_on_image_impl(ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__advanced__draw_line_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__image__draw_text_on_image_impl(ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__advanced__draw_text_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__image__encode_blurhash_impl(ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__advanced__encode_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        41 => {
             wire__crate__api__advanced__encode_rgba_preview_buffer_impl(ptr, rust_vec_len, data_len)
         }
-        25 => {
+        42 => wire__crate__api__face__face_analysis_is_valid_impl(ptr, rust_vec_len, data_len),
+        44 => {
             wire__crate__api__advanced__filter_execution_path_name_impl(ptr, rust_vec_len, data_len)
         }
-        26 => wire__crate__api__advanced__filter_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        27 => {
+        45 => wire__crate__api__advanced__filter_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        46 => {
             wire__crate__api__advanced__fit_max_edge_rgba_buffer_impl(ptr, rust_vec_len, data_len)
         }
-        28 => wire__crate__api__image__fix_exif_orientation_impl(ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__advanced__gpu_compute_info_impl(ptr, rust_vec_len, data_len),
-        31 => {
+        47 => wire__crate__api__image__fix_exif_orientation_impl(ptr, rust_vec_len, data_len),
+        48 => wire__crate__api__advanced__gpu_compute_info_impl(ptr, rust_vec_len, data_len),
+        50 => {
             wire__crate__api__advanced__is_gpu_compute_available_impl(ptr, rust_vec_len, data_len)
         }
-        32 => wire__crate__api__image__overlay_image_impl(ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__advanced__overlay_on_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__advanced__probe_image_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__advanced__processing_backend_name_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__image__read_exif_orientation_impl(ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__image__resize_image_impl(ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__advanced__resize_rgba_buffer_impl(ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__image__rotate_image_impl(ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__advanced__rotate_rgba_arbitrary_impl(ptr, rust_vec_len, data_len),
+        51 => wire__crate__api__texture__is_gpu_texture_preview_available_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        54 => wire__crate__api__image__overlay_image_impl(ptr, rust_vec_len, data_len),
+        55 => wire__crate__api__advanced__overlay_on_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        56 => wire__crate__api__advanced__probe_image_impl(ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__advanced__processing_backend_name_impl(ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__image__read_exif_orientation_impl(ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__texture__readback_gpu_preview_surface_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        60 => wire__crate__api__image__resize_image_impl(ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__advanced__resize_rgba_buffer_impl(ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__image__rotate_image_impl(ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__advanced__rotate_rgba_arbitrary_impl(ptr, rust_vec_len, data_len),
+        64 => {
+            wire__crate__api__temporal__temporal_smoother_create_impl(ptr, rust_vec_len, data_len)
+        }
+        65 => {
+            wire__crate__api__temporal__temporal_smoother_destroy_impl(ptr, rust_vec_len, data_len)
+        }
+        66 => wire__crate__api__temporal__temporal_smoother_reset_impl(ptr, rust_vec_len, data_len),
+        67 => {
+            wire__crate__api__temporal__temporal_smoother_smooth_impl(ptr, rust_vec_len, data_len)
+        }
+        68 => {
+            wire__crate__api__texture__upload_gpu_preview_surface_impl(ptr, rust_vec_len, data_len)
+        }
+        69 => wire__crate__api__face__vision_min_landmark_count_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2240,6 +3515,58 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image::BatchResizeItem>
     for crate::api::image::BatchResizeItem
 {
     fn into_into_dart(self) -> crate::api::image::BatchResizeItem {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::face::BeautyLookPreset {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Natural => 0.into_dart(),
+            Self::Soft => 1.into_dart(),
+            Self::Glow => 2.into_dart(),
+            Self::Glam => 3.into_dart(),
+            Self::Clear => 4.into_dart(),
+            Self::Peach => 5.into_dart(),
+            Self::Bold => 6.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::face::BeautyLookPreset
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::face::BeautyLookPreset>
+    for crate::api::face::BeautyLookPreset
+{
+    fn into_into_dart(self) -> crate::api::face::BeautyLookPreset {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::face::BeautyParams {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.skin_smooth.into_into_dart().into_dart(),
+            self.eye_brighten.into_into_dart().into_dart(),
+            self.lip_tint.into_into_dart().into_dart(),
+            self.lip_tint_strength.into_into_dart().into_dart(),
+            self.lip_plump.into_into_dart().into_dart(),
+            self.blush.into_into_dart().into_dart(),
+            self.under_eye.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::face::BeautyParams
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::face::BeautyParams>
+    for crate::api::face::BeautyParams
+{
+    fn into_into_dart(self) -> crate::api::face::BeautyParams {
         self
     }
 }
@@ -2358,6 +3685,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image::EditOp> for crate::api
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::face::FaceAnalysisResult {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.landmarks.into_into_dart().into_dart(),
+            self.confidence.into_into_dart().into_dart(),
+            self.segmentation.into_into_dart().into_dart(),
+            self.face_contour_count.into_into_dart().into_dart(),
+            self.region_counts.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::face::FaceAnalysisResult
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::face::FaceAnalysisResult>
+    for crate::api::face::FaceAnalysisResult
+{
+    fn into_into_dart(self) -> crate::api::face::FaceAnalysisResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::image::FilterPreset {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -2467,6 +3818,18 @@ impl flutter_rust_bridge::IntoDart for crate::api::image::ImageFilter {
             crate::api::image::ImageFilter::Structure { amount } => {
                 [16.into_dart(), amount.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::image::ImageFilter::Mood { preset, strength } => [
+                17.into_dart(),
+                preset.into_into_dart().into_dart(),
+                strength.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::image::ImageFilter::SkinSmooth { strength } => {
+                [18.into_dart(), strength.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::image::ImageFilter::Beauty { params } => {
+                [19.into_dart(), params.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -2501,6 +3864,85 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image::ImageInfo>
     for crate::api::image::ImageInfo
 {
     fn into_into_dart(self) -> crate::api::image::ImageInfo {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::face::Landmark2D {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.x.into_into_dart().into_dart(),
+            self.y.into_into_dart().into_dart(),
+            self.z.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::api::face::Landmark2D {}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::face::Landmark2D>
+    for crate::api::face::Landmark2D
+{
+    fn into_into_dart(self) -> crate::api::face::Landmark2D {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::face::LipTintPreset {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::None => 0.into_dart(),
+            Self::Nude => 1.into_dart(),
+            Self::Rose => 2.into_dart(),
+            Self::Berry => 3.into_dart(),
+            Self::Coral => 4.into_dart(),
+            Self::Red => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::face::LipTintPreset
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::face::LipTintPreset>
+    for crate::api::face::LipTintPreset
+{
+    fn into_into_dart(self) -> crate::api::face::LipTintPreset {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::image::MoodFilterPreset {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Rose => 0.into_dart(),
+            Self::Clarendon => 1.into_dart(),
+            Self::Juno => 2.into_dart(),
+            Self::Valencia => 3.into_dart(),
+            Self::Lark => 4.into_dart(),
+            Self::Reyes => 5.into_dart(),
+            Self::Gingham => 6.into_dart(),
+            Self::LoFi => 7.into_dart(),
+            Self::Moon => 8.into_dart(),
+            Self::Aden => 9.into_dart(),
+            Self::Perpetua => 10.into_dart(),
+            Self::Mayfair => 11.into_dart(),
+            Self::Hudson => 12.into_dart(),
+            Self::Sierra => 13.into_dart(),
+            Self::Willow => 14.into_dart(),
+            Self::Inkwell => 15.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::image::MoodFilterPreset
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::image::MoodFilterPreset>
+    for crate::api::image::MoodFilterPreset
+{
+    fn into_into_dart(self) -> crate::api::image::MoodFilterPreset {
         self
     }
 }
@@ -2716,6 +4158,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::image::Rotation>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::face::SegmentationMask {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.width.into_into_dart().into_dart(),
+            self.height.into_into_dart().into_dart(),
+            self.pixels.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::face::SegmentationMask
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::face::SegmentationMask>
+    for crate::api::face::SegmentationMask
+{
+    fn into_into_dart(self) -> crate::api::face::SegmentationMask {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::image::TextOverlay {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2756,6 +4220,40 @@ impl SseEncode for crate::api::image::BatchResizeItem {
         <Vec<u8>>::sse_encode(self.bytes, serializer);
         <u32>::sse_encode(self.width, serializer);
         <u32>::sse_encode(self.height, serializer);
+    }
+}
+
+impl SseEncode for crate::api::face::BeautyLookPreset {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::face::BeautyLookPreset::Natural => 0,
+                crate::api::face::BeautyLookPreset::Soft => 1,
+                crate::api::face::BeautyLookPreset::Glow => 2,
+                crate::api::face::BeautyLookPreset::Glam => 3,
+                crate::api::face::BeautyLookPreset::Clear => 4,
+                crate::api::face::BeautyLookPreset::Peach => 5,
+                crate::api::face::BeautyLookPreset::Bold => 6,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::face::BeautyParams {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f32>::sse_encode(self.skin_smooth, serializer);
+        <f32>::sse_encode(self.eye_brighten, serializer);
+        <crate::api::face::LipTintPreset>::sse_encode(self.lip_tint, serializer);
+        <f32>::sse_encode(self.lip_tint_strength, serializer);
+        <f32>::sse_encode(self.lip_plump, serializer);
+        <f32>::sse_encode(self.blush, serializer);
+        <f32>::sse_encode(self.under_eye, serializer);
     }
 }
 
@@ -2867,6 +4365,17 @@ impl SseEncode for f64 {
     }
 }
 
+impl SseEncode for crate::api::face::FaceAnalysisResult {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::api::face::Landmark2D>>::sse_encode(self.landmarks, serializer);
+        <f32>::sse_encode(self.confidence, serializer);
+        <Option<crate::api::face::SegmentationMask>>::sse_encode(self.segmentation, serializer);
+        <u32>::sse_encode(self.face_contour_count, serializer);
+        <Vec<u32>>::sse_encode(self.region_counts, serializer);
+    }
+}
+
 impl SseEncode for crate::api::image::FilterPreset {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2915,6 +4424,13 @@ impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -2989,6 +4505,19 @@ impl SseEncode for crate::api::image::ImageFilter {
                 <i32>::sse_encode(16, serializer);
                 <f32>::sse_encode(amount, serializer);
             }
+            crate::api::image::ImageFilter::Mood { preset, strength } => {
+                <i32>::sse_encode(17, serializer);
+                <crate::api::image::MoodFilterPreset>::sse_encode(preset, serializer);
+                <f32>::sse_encode(strength, serializer);
+            }
+            crate::api::image::ImageFilter::SkinSmooth { strength } => {
+                <i32>::sse_encode(18, serializer);
+                <f32>::sse_encode(strength, serializer);
+            }
+            crate::api::image::ImageFilter::Beauty { params } => {
+                <i32>::sse_encode(19, serializer);
+                <crate::api::face::BeautyParams>::sse_encode(params, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -3003,6 +4532,35 @@ impl SseEncode for crate::api::image::ImageInfo {
         <u32>::sse_encode(self.height, serializer);
         <Option<String>>::sse_encode(self.format, serializer);
         <Option<u16>>::sse_encode(self.exif_orientation, serializer);
+    }
+}
+
+impl SseEncode for crate::api::face::Landmark2D {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f32>::sse_encode(self.x, serializer);
+        <f32>::sse_encode(self.y, serializer);
+        <f32>::sse_encode(self.z, serializer);
+    }
+}
+
+impl SseEncode for crate::api::face::LipTintPreset {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::face::LipTintPreset::None => 0,
+                crate::api::face::LipTintPreset::Nude => 1,
+                crate::api::face::LipTintPreset::Rose => 2,
+                crate::api::face::LipTintPreset::Berry => 3,
+                crate::api::face::LipTintPreset::Coral => 4,
+                crate::api::face::LipTintPreset::Red => 5,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 
@@ -3026,6 +4584,16 @@ impl SseEncode for Vec<crate::api::image::EditOp> {
     }
 }
 
+impl SseEncode for Vec<crate::api::face::Landmark2D> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::face::Landmark2D>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<Vec<u8>> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3042,6 +4610,16 @@ impl SseEncode for Vec<crate::api::layers::PaintStrokeInput> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::layers::PaintStrokeInput>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<u32> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <u32>::sse_encode(item, serializer);
         }
     }
 }
@@ -3076,12 +4654,52 @@ impl SseEncode for Vec<(f32, f32)> {
     }
 }
 
+impl SseEncode for crate::api::image::MoodFilterPreset {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::image::MoodFilterPreset::Rose => 0,
+                crate::api::image::MoodFilterPreset::Clarendon => 1,
+                crate::api::image::MoodFilterPreset::Juno => 2,
+                crate::api::image::MoodFilterPreset::Valencia => 3,
+                crate::api::image::MoodFilterPreset::Lark => 4,
+                crate::api::image::MoodFilterPreset::Reyes => 5,
+                crate::api::image::MoodFilterPreset::Gingham => 6,
+                crate::api::image::MoodFilterPreset::LoFi => 7,
+                crate::api::image::MoodFilterPreset::Moon => 8,
+                crate::api::image::MoodFilterPreset::Aden => 9,
+                crate::api::image::MoodFilterPreset::Perpetua => 10,
+                crate::api::image::MoodFilterPreset::Mayfair => 11,
+                crate::api::image::MoodFilterPreset::Hudson => 12,
+                crate::api::image::MoodFilterPreset::Sierra => 13,
+                crate::api::image::MoodFilterPreset::Willow => 14,
+                crate::api::image::MoodFilterPreset::Inkwell => 15,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::face::SegmentationMask> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::face::SegmentationMask>::sse_encode(value, serializer);
         }
     }
 }
@@ -3256,6 +4874,15 @@ impl SseEncode for crate::api::image::Rotation {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::face::SegmentationMask {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.width, serializer);
+        <u32>::sse_encode(self.height, serializer);
+        <Vec<u8>>::sse_encode(self.pixels, serializer);
     }
 }
 

@@ -43,6 +43,14 @@ See the [root README](../README.md) for macOS sandbox entitlements (file picker)
 
 **HEIC / HEIF:** iPhone and macOS photos are converted to PNG via the platform image codec before Rust decode. If import still fails, export as JPEG from Photos and try again.
 
+**Swipe mood filters:** Swipe left/right on the preview for Instagram-style grades (Rose, Clarendon, …). Filters-tab presets (Neue, Dramatic, …) are unchanged. Set `enableSwipeMoodFilters: false` to disable.
+
+**GPU mood (11b.1):** Mood + vignette run on wgpu when backend is auto/Gpu; status line shows `gpu_mood` / `gpu_vignette`.
+
+**GPU texture preview (11b.2):** Set `useGpuTexturePreview: true` on macOS for Flutter `Texture` display (skips Dart `ui.Image` decode). Falls back to `RgbaPreviewImage` when unavailable.
+
+**Beauty (Sprint 12 + Nexus B–E):** Beauty tab → looks, regional sliders, eraser, **under-eye** softening. **Live camera** (mobile): Beauty → Live camera → temporal face smooth + live beauty. Hold **Compare** on Beauty tool to peek pre-beauty. Toggle **Debug landmarks** in Beauty panel. macOS/iOS: Vision; Android: ML Kit.
+
 ## Benchmarks
 
 [`benchmark/`](benchmark/README.md) — cold API runs (10× default, CPU vs GPU). Rust: `cd rust && cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic`. Dart/FRB: `cd benchmark && ./run_dart_benchmark.sh`.

@@ -157,8 +157,18 @@ pub fn overlay_on_rgba_buffer(
     x: i32,
     y: i32,
     blend_mode: BlendMode,
+    overlay_width: u32,
+    overlay_height: u32,
 ) -> Result<RgbaImageBuffer, String> {
-    overlay::composite(base, &overlay_bytes, x, y, blend_mode)
+    overlay::composite(
+        base,
+        &overlay_bytes,
+        x,
+        y,
+        blend_mode,
+        overlay_width,
+        overlay_height,
+    )
 }
 
 #[flutter_rust_bridge::frb(sync)]

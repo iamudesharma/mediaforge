@@ -16,9 +16,12 @@ import 'overlay_placement.dart';
 import 'panels/text_layer_edit_sheet.dart';
 import 'panels/tool_panels.dart';
 import 'rust_image_editor_config.dart';
+import 'models/beauty_params.dart';
 import 'theme/editor_motion.dart';
 import 'theme/lumina_tokens.dart';
 import 'widgets/compare_hold_button.dart';
+import 'services/face_analysis_service.dart';
+import 'services/live_camera_service.dart';
 import 'services/sticker_image_import.dart';
 import 'widgets/editor_tool_rail.dart';
 import 'widgets/live_preview.dart';
@@ -118,13 +121,12 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _drawPlacement.syncImageSize(info.width, info.height);
-        _overlayPlacement.syncImageSize(info.width, info.height);
-        // Crop overlay maps to preview pixels (may be ≤ full image when RGBA pipeline).
+        // Overlay/crop map to preview pixels (edit-scale when RGBA pipeline is active).
         final preview = _session.previewRgba;
-        _cropController.syncImageSize(
-          preview?.width ?? info.width,
-          preview?.height ?? info.height,
-        );
+        final pw = preview?.width ?? info.width;
+        final ph = preview?.height ?? info.height;
+        _overlayPlacement.syncImageSize(pw, ph);
+        _cropController.syncImageSize(pw, ph);
       });
     }
     final bytes = _session.displayBytes;
@@ -322,16 +324,46 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     required bool immersive,
     required double overlayBottomInset,
   }) {
-    final hasUserImageStickers = _session.layerStack.layers.any(
-      (l) => l is StickerLayer && l.userBytes != null && l.userBytes!.isNotEmpty,
-    );
-    final layerTool = _tool == EditorTool.stickers ||
-        _tool == EditorTool.paint ||
-        _tool == EditorTool.layers ||
-        hasUserImageStickers;
+    final hasLayers = _session.layerStack.layers.isNotEmpty;
+    final onPaintTool = _tool == EditorTool.paint;
     final info = _session.imageInfo;
-    final iw = info?.width ?? _session.previewRgba?.width ?? 0;
-    final ih = info?.height ?? _session.previewRgba?.height ?? 0;
+    final iw = info?.width ??
+        _session.previewRgba?.width ??
+        _session.rgbaBuffer?.width ??
+        0;
+    final ih = info?.height ??
+        _session.previewRgba?.height ??
+        _session.rgbaBuffer?.height ??
+        0;
+    final onBeautyTool = _tool == EditorTool.beauty;
+    final beautyEraser = onBeautyTool && _session.beautyEraserMode;
+    final layerInteraction = _session.hasImage &&
+        iw > 0 &&
+        !beautyEraser &&
+        (onPaintTool ||
+            (hasLayers &&
+                (_tool == EditorTool.stickers || _tool == EditorTool.layers)));
+    final swipeMoodEnabled = widget.config.enableSwipeMoodFilters &&
+        !_compareHeld &&
+        _tool != EditorTool.transform &&
+        !onBeautyTool &&
+        _tool != EditorTool.draw &&
+        _tool != EditorTool.overlay &&
+        !onPaintTool &&
+        !layerInteraction;
+
+    final swipeBeautyEnabled = widget.config.enableSwipeBeautyLooks &&
+        !_compareHeld &&
+        onBeautyTool &&
+        !beautyEraser &&
+        (_session.hasImage || _session.liveCameraActive) &&
+        _session.skinMask != null &&
+        FaceAnalysisService.isAnalysisValid(_session.faceAnalysis);
+
+    final beautyCompareActive = onBeautyTool &&
+        !beautyEraser &&
+        _session.beautyCompareRgba != null &&
+        (_session.committedBeautyParams?.hasEffect ?? false);
 
     return LivePreview(
       immersive: immersive,
@@ -339,7 +371,10 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       bytes: _session.displayBytes,
       previewRgba: _session.previewRgba,
       useRgbaPreview: _session.useRgbaPreview,
-      compareBytes: _session.sourceBytes,
+      useGpuTexturePreview: _session.useGpuTexturePreview,
+      gpuTextureId: _session.gpuTextureId,
+      compareBytes: beautyCompareActive ? null : _session.sourceBytes,
+      compareRgba: beautyCompareActive ? _session.beautyCompareRgba : null,
       showCompare: _compareHeld && widget.config.showCompare,
       processing: _session.processing,
       blocking: _session.blocking,
@@ -348,14 +383,13 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       overlayPlacement:
           _tool == EditorTool.overlay ? _overlayPlacement : null,
       onOverlayPositionChanged: _tool == EditorTool.overlay
-          ? () => _session.scheduleOverlayLivePreview(
-                x: _overlayPlacement.x,
-                y: _overlayPlacement.y,
-              )
+          ? () => _session.scheduleOverlayLivePreview(_overlayPlacement)
           : null,
       layerStack: _session.layerStack,
-      layerEditorActive: layerTool && _session.hasImage && iw > 0,
-      paintMode: _tool == EditorTool.paint,
+      showLayerOverlay:
+          (hasLayers || onPaintTool || beautyEraser) && _session.hasImage && iw > 0,
+      layerInteractionEnabled: layerInteraction,
+      paintMode: onPaintTool || beautyEraser,
       imageWidth: iw,
       imageHeight: ih,
       onLayerStackChanged: _session.notifyLayerChanged,
@@ -394,19 +428,53 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
           );
         }
       },
-      onPaintStroke: (pts, {required Size childSize}) => _session.addPaintStroke(
-            pts,
-            imageWidth: iw,
-            imageHeight: ih,
-            childSize: childSize,
-          ),
-      onActiveStrokeUpdate: _session.setActivePaintStroke,
-      activePaintStrokeListenable: _session.activePaintStrokeListenable,
-      activePaintColor: _session.paintColor,
-      activePaintWidth: _session.paintStrokeWidth,
-      activePaintOpacity: _session.paintStrokeOpacity,
-      activePaintBrush: _session.paintBrush,
-      emptyHint: immersive ? 'Tap Import to open a photo' : 'No image selected',
+      onPaintStroke: beautyEraser
+          ? (pts, {required Size childSize}) => _session.addBeautyEraserStroke(
+                pts,
+                imageWidth: iw,
+                imageHeight: ih,
+              )
+          : onPaintTool
+              ? (pts, {required Size childSize}) => _session.addPaintStroke(
+                    pts,
+                    imageWidth: iw,
+                    imageHeight: ih,
+                    childSize: childSize,
+                  )
+              : null,
+      onActiveStrokeUpdate: beautyEraser || onPaintTool
+          ? _session.setActivePaintStroke
+          : null,
+      activePaintStrokeListenable: beautyEraser || onPaintTool
+          ? _session.activePaintStrokeListenable
+          : null,
+      activePaintColor: beautyEraser ? Colors.redAccent : _session.paintColor,
+      activePaintWidth: beautyEraser
+          ? _session.beautyEraserRadius
+          : _session.paintStrokeWidth,
+      activePaintOpacity: beautyEraser ? 0.45 : _session.paintStrokeOpacity,
+      activePaintBrush: beautyEraser ? PaintBrushKind.eraser : _session.paintBrush,
+      enableSwipeMoodFilters: widget.config.enableSwipeMoodFilters,
+      swipeMoodFiltersEnabled: swipeMoodEnabled,
+      moodFilterStrength: widget.config.swipeMoodFilterStrength,
+      moodSession: _session,
+      enableSwipeBeautyLooks: widget.config.enableSwipeBeautyLooks,
+      swipeBeautyLooksEnabled: swipeBeautyEnabled,
+      beautySession: _session,
+      showFaceLandmarks: _session.showDebugFaceLandmarks &&
+          FaceAnalysisService.isAnalysisValid(_session.faceAnalysis),
+      faceLandmarks: _session.faceAnalysis?.landmarks,
+      liveCameraController: _session.liveCameraActive
+          ? LiveCameraService.controller
+          : null,
+      liveShowBeautyPreview: _session.liveShowBeautyPreview,
+      emptyHint: _session.liveCameraTransitioning
+          ? 'Starting camera…'
+          : _session.liveCameraActive
+              ? 'Waiting for camera…'
+              : immersive
+                  ? 'Tap Import to open a photo'
+                  : 'No image selected',
     );
   }
 
@@ -448,12 +516,16 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
             ),
           IconButton(
             tooltip: 'Undo',
-            onPressed: _session.canUndo && !_session.busy ? _session.undo : null,
+            onPressed: _session.canUndo && !_session.busy
+                ? () => unawaited(_session.undo())
+                : null,
             icon: const Icon(Icons.undo),
           ),
           IconButton(
             tooltip: 'Redo',
-            onPressed: _session.canRedo && !_session.busy ? _session.redo : null,
+            onPressed: _session.canRedo && !_session.busy
+                ? () => unawaited(_session.redo())
+                : null,
             icon: const Icon(Icons.redo),
           ),
           if (widget.config.showCompare)
@@ -476,7 +548,7 @@ class _MetaChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!session.hasImage) {
+    if (!session.hasImage && !session.liveCameraActive) {
       return const SizedBox.shrink();
     }
 

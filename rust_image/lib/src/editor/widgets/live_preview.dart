@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:rust_image/src/rust/api/face.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
 import '../crop_controller.dart';
@@ -15,9 +17,14 @@ import 'editor_animations.dart';
 import 'cached_preview_image.dart';
 import 'layer_editor_overlay.dart';
 import 'overlay_placement_layer.dart';
+import 'gpu_texture_preview.dart';
 import 'rgba_preview_image.dart';
 import 'crop_overlay.dart';
 import 'placement_overlay.dart';
+import 'swipe_mood_filter.dart';
+import 'swipe_beauty_look.dart';
+import '../editor_session.dart';
+import 'face_landmark_overlay.dart';
 
 class LivePreview extends StatefulWidget {
   /// For widget tests (mobile chrome / sheet insets).
@@ -27,6 +34,7 @@ class LivePreview extends StatefulWidget {
     super.key = widgetKey,
     required this.bytes,
     required this.compareBytes,
+    this.compareRgba,
     required this.showCompare,
     required this.processing,
     this.blocking = false,
@@ -40,7 +48,8 @@ class LivePreview extends StatefulWidget {
     this.immersive = false,
     this.overlayBottomInset = 0,
     this.layerStack,
-    this.layerEditorActive = false,
+    this.showLayerOverlay = false,
+    this.layerInteractionEnabled = false,
     this.paintMode = false,
     this.imageWidth = 0,
     this.imageHeight = 0,
@@ -56,10 +65,24 @@ class LivePreview extends StatefulWidget {
     this.activePaintOpacity,
     this.activePaintBrush,
     this.hiddenTextLayerId,
+    this.enableSwipeMoodFilters = false,
+    this.swipeMoodFiltersEnabled = false,
+    this.moodFilterStrength = 1.0,
+    this.moodSession,
+    this.enableSwipeBeautyLooks = false,
+    this.swipeBeautyLooksEnabled = false,
+    this.beautySession,
+    this.useGpuTexturePreview = false,
+    this.gpuTextureId,
+    this.showFaceLandmarks = false,
+    this.faceLandmarks,
+    this.liveCameraController,
+    this.liveShowBeautyPreview = false,
   });
 
   final Uint8List? bytes;
   final Uint8List? compareBytes;
+  final RgbaImageBuffer? compareRgba;
   final RgbaImageBuffer? previewRgba;
   final bool useRgbaPreview;
   final bool showCompare;
@@ -78,7 +101,12 @@ class LivePreview extends StatefulWidget {
   final double overlayBottomInset;
 
   final LayerStack? layerStack;
-  final bool layerEditorActive;
+
+  /// Draw stickers, text, emoji, and paint strokes on the canvas (all tools).
+  final bool showLayerOverlay;
+
+  /// Drag, pinch, and layer gestures (Stickers / Paint / Layers only).
+  final bool layerInteractionEnabled;
   final bool paintMode;
   final int imageWidth;
   final int imageHeight;
@@ -95,6 +123,19 @@ class LivePreview extends StatefulWidget {
   final double? activePaintOpacity;
   final PaintBrushKind? activePaintBrush;
   final String? hiddenTextLayerId;
+  final bool enableSwipeMoodFilters;
+  final bool swipeMoodFiltersEnabled;
+  final double moodFilterStrength;
+  final EditorSession? moodSession;
+  final bool enableSwipeBeautyLooks;
+  final bool swipeBeautyLooksEnabled;
+  final EditorSession? beautySession;
+  final bool useGpuTexturePreview;
+  final int? gpuTextureId;
+  final bool showFaceLandmarks;
+  final List<Landmark2D>? faceLandmarks;
+  final CameraController? liveCameraController;
+  final bool liveShowBeautyPreview;
 
   @override
   State<LivePreview> createState() => _LivePreviewState();
@@ -135,12 +176,19 @@ class _LivePreviewState extends State<LivePreview> {
   Object? get _imageKey {
     final b = widget.bytes;
     if (b != null) return Object.hash('b', _bytesFingerprint(b));
+    final cam = widget.liveCameraController;
+    if (cam != null && cam.value.isInitialized) {
+      return Object.hash('cam', cam.description.name);
+    }
     final r = widget.previewRgba;
     if (r != null) {
       return Object.hash('r', r.width, r.height, identityHashCode(r.pixels));
     }
     return null;
   }
+
+  bool get _liveCameraReady =>
+      widget.liveCameraController?.value.isInitialized ?? false;
 
   @override
   Widget build(BuildContext context) {
@@ -170,25 +218,37 @@ class _LivePreviewState extends State<LivePreview> {
             duration: EditorMotion.medium,
             switchInCurve: EditorMotion.enter,
             switchOutCurve: EditorMotion.exit,
-            child: widget.bytes == null && widget.previewRgba == null
+            child: widget.bytes == null &&
+                    widget.previewRgba == null &&
+                    !_liveCameraReady &&
+                    (widget.gpuTextureId == null || widget.gpuTextureId! <= 0)
                 ? _EmptyPreview(
                     key: const ValueKey('empty'),
                     hint: widget.emptyHint,
                   )
-                : _PreviewContent(
-                    key: ValueKey(_imageKey ?? widget.previewRgba),
-                    bytes: widget.bytes,
-                    previewRgba: widget.previewRgba,
-                    useRgbaPreview: widget.useRgbaPreview,
-                    compareBytes: widget.compareBytes,
-                    showCompare: widget.showCompare,
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _PreviewContent(
+                        key: ValueKey(_imageKey ?? widget.previewRgba),
+                        bytes: widget.bytes,
+                        previewRgba: widget.previewRgba,
+                        useRgbaPreview: widget.useRgbaPreview,
+                        useGpuTexturePreview: widget.useGpuTexturePreview,
+                        gpuTextureId: widget.gpuTextureId,
+                        liveCameraController: widget.liveCameraController,
+                        liveShowBeautyPreview: widget.liveShowBeautyPreview,
+                        compareBytes: widget.compareBytes,
+                        compareRgba: widget.compareRgba,
+                        showCompare: widget.showCompare,
                     placement: widget.placement,
                     cropController: widget.cropController,
                     overlayPlacement: widget.overlayPlacement,
                     onOverlayPositionChanged: widget.onOverlayPositionChanged,
                     controller: _controller,
                     layerStack: widget.layerStack,
-                    layerEditorActive: widget.layerEditorActive,
+                    showLayerOverlay: widget.showLayerOverlay,
+                    layerInteractionEnabled: widget.layerInteractionEnabled,
                     paintMode: widget.paintMode,
                     imageWidth: widget.imageWidth,
                     imageHeight: widget.imageHeight,
@@ -205,6 +265,19 @@ class _LivePreviewState extends State<LivePreview> {
                     activePaintOpacity: widget.activePaintOpacity,
                     activePaintBrush: widget.activePaintBrush,
                     hiddenTextLayerId: widget.hiddenTextLayerId,
+                      ),
+                      if (widget.showFaceLandmarks &&
+                          widget.faceLandmarks != null &&
+                          widget.imageWidth > 0 &&
+                          widget.imageHeight > 0)
+                        IgnorePointer(
+                          child: FaceLandmarkOverlay(
+                            landmarks: widget.faceLandmarks!,
+                            imageWidth: widget.imageWidth,
+                            imageHeight: widget.imageHeight,
+                          ),
+                        ),
+                    ],
                   ),
           ),
           AnimatedSwitcher(
@@ -234,12 +307,51 @@ class _LivePreviewState extends State<LivePreview> {
     );
 
     if (widget.immersive) {
-      return canvas;
+      return _wrapSwipeBeauty(_wrapSwipeMood(canvas));
     }
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: canvas,
+      child: _wrapSwipeBeauty(_wrapSwipeMood(canvas)),
+    );
+  }
+
+  Widget _wrapSwipeBeauty(Widget canvas) {
+    if (!widget.enableSwipeBeautyLooks ||
+        widget.beautySession == null ||
+        !widget.swipeBeautyLooksEnabled) {
+      return canvas;
+    }
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        return SwipeBeautyLookLayer(
+          session: widget.beautySession!,
+          enabled: widget.swipeBeautyLooksEnabled,
+          viewerScale: _controller.value.getMaxScaleOnAxis(),
+          child: canvas,
+        );
+      },
+    );
+  }
+
+  Widget _wrapSwipeMood(Widget canvas) {
+    if (!widget.enableSwipeMoodFilters ||
+        widget.moodSession == null ||
+        !widget.swipeMoodFiltersEnabled) {
+      return canvas;
+    }
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        return SwipeMoodFilterLayer(
+          session: widget.moodSession!,
+          enabled: widget.swipeMoodFiltersEnabled,
+          viewerScale: _controller.value.getMaxScaleOnAxis(),
+          strength: widget.moodFilterStrength,
+          child: canvas,
+        );
+      },
     );
   }
 }
@@ -289,7 +401,12 @@ class _PreviewContent extends StatelessWidget {
     required this.bytes,
     required this.previewRgba,
     required this.useRgbaPreview,
+    required this.useGpuTexturePreview,
+    required this.gpuTextureId,
+    this.liveCameraController,
+    this.liveShowBeautyPreview = false,
     required this.compareBytes,
+    this.compareRgba,
     required this.showCompare,
     required this.placement,
     required this.cropController,
@@ -297,7 +414,8 @@ class _PreviewContent extends StatelessWidget {
     required this.onOverlayPositionChanged,
     required this.controller,
     this.layerStack,
-    this.layerEditorActive = false,
+    this.showLayerOverlay = false,
+    this.layerInteractionEnabled = false,
     this.paintMode = false,
     this.imageWidth = 0,
     this.imageHeight = 0,
@@ -318,7 +436,12 @@ class _PreviewContent extends StatelessWidget {
   final Uint8List? bytes;
   final RgbaImageBuffer? previewRgba;
   final bool useRgbaPreview;
+  final bool useGpuTexturePreview;
+  final int? gpuTextureId;
+  final CameraController? liveCameraController;
+  final bool liveShowBeautyPreview;
   final Uint8List? compareBytes;
+  final RgbaImageBuffer? compareRgba;
   final bool showCompare;
   final DrawPlacementController? placement;
   final CropController? cropController;
@@ -326,7 +449,8 @@ class _PreviewContent extends StatelessWidget {
   final VoidCallback? onOverlayPositionChanged;
   final TransformationController controller;
   final LayerStack? layerStack;
-  final bool layerEditorActive;
+  final bool showLayerOverlay;
+  final bool layerInteractionEnabled;
   final bool paintMode;
   final int imageWidth;
   final int imageHeight;
@@ -345,6 +469,49 @@ class _PreviewContent extends StatelessWidget {
   final String? hiddenTextLayerId;
 
   Widget _buildPreviewImage() {
+    if (liveShowBeautyPreview && useRgbaPreview && previewRgba != null) {
+      return RgbaPreviewImage(
+        key: ValueKey(identityHashCode(previewRgba!.pixels)),
+        buffer: previewRgba!,
+        fit: BoxFit.contain,
+      );
+    }
+
+    final cam = liveCameraController;
+    if (cam != null) {
+      return ListenableBuilder(
+        listenable: cam,
+        builder: (context, _) {
+          if (!cam.value.isInitialized) {
+            return const Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            );
+          }
+          return Center(
+            child: AspectRatio(
+              aspectRatio: cam.value.aspectRatio,
+              child: CameraPreview(cam),
+            ),
+          );
+        },
+      );
+    }
+
+    if (useGpuTexturePreview &&
+        gpuTextureId != null &&
+        gpuTextureId! > 0) {
+      final w = previewRgba?.width ?? imageWidth;
+      final h = previewRgba?.height ?? imageHeight;
+      return GpuTexturePreview(
+        textureId: gpuTextureId!,
+        width: w,
+        height: h,
+      );
+    }
     if (useRgbaPreview && previewRgba != null) {
       return RgbaPreviewImage(
         key: ValueKey(identityHashCode(previewRgba!.pixels)),
@@ -369,7 +536,8 @@ class _PreviewContent extends StatelessWidget {
       builder: (context, constraints) {
         final childSize = constraints.biggest;
         final hasCompare =
-            compareBytes != null && compareBytes!.isNotEmpty;
+            (compareBytes != null && compareBytes!.isNotEmpty) ||
+            compareRgba != null;
         final image = RepaintBoundary(
           child: Stack(
             fit: StackFit.expand,
@@ -389,11 +557,17 @@ class _PreviewContent extends StatelessWidget {
                     opacity: showCompare ? 1 : 0,
                     child: IgnorePointer(
                       ignoring: !showCompare,
-                      child: CachedPreviewImage(
-                        key: const ValueKey('compare_original'),
-                        bytes: compareBytes!,
-                        fit: BoxFit.contain,
-                      ),
+                      child: compareRgba != null
+                          ? RgbaPreviewImage(
+                              key: const ValueKey('compare_beauty_rgba'),
+                              buffer: compareRgba!,
+                              fit: BoxFit.contain,
+                            )
+                          : CachedPreviewImage(
+                              key: const ValueKey('compare_original'),
+                              bytes: compareBytes!,
+                              fit: BoxFit.contain,
+                            ),
                     ),
                   ),
                 ),
@@ -408,7 +582,7 @@ class _PreviewContent extends StatelessWidget {
         final needsViewerTransform = placement != null ||
             cropController != null ||
             overlayPlacement != null ||
-            layerEditorActive;
+            showLayerOverlay;
 
         if (placement != null || cropController != null || overlayPlacement != null) {
           content = ListenableBuilder(
@@ -433,7 +607,6 @@ class _PreviewContent extends StatelessWidget {
                 child = OverlayPlacementLayer(
                   placement: overlayPlacement!,
                   childSize: childSize,
-                  viewerTransform: controller.value,
                   onPositionChanged: onOverlayPositionChanged,
                   child: child,
                 );
@@ -443,11 +616,11 @@ class _PreviewContent extends StatelessWidget {
           );
         }
 
-        if (layerEditorActive &&
+        if (showLayerOverlay &&
             layerStack != null &&
             imageWidth > 0 &&
             imageHeight > 0) {
-          final overlayChild = needsViewerTransform
+          Widget overlayChild = needsViewerTransform
               ? ListenableBuilder(
                   listenable: controller,
                   builder: (context, _) {
@@ -493,6 +666,10 @@ class _PreviewContent extends StatelessWidget {
                   activePaintBrush: activePaintBrush,
                   hiddenTextLayerId: hiddenTextLayerId,
                 );
+          // Read-only layer preview on crop/filter/etc.; paint must keep receiving pointers.
+          if (!layerInteractionEnabled && !paintMode) {
+            overlayChild = IgnorePointer(child: overlayChild);
+          }
           content = Stack(
             fit: StackFit.expand,
             children: [
@@ -502,14 +679,12 @@ class _PreviewContent extends StatelessWidget {
           );
         }
 
-        // Disable InteractiveViewer pan/scale when the layer editor is active
-        // so emoji/sticker/text gestures (drag, pinch, rotate) aren't stolen by
-        // the viewer. Pan/zoom on paint and drawing tools is already disabled.
+        // Disable InteractiveViewer pan/scale when layer gestures or paint are active.
+        // Overlay uses targeted hit targets so pinch/pan on the canvas still zooms.
         final viewerInteractive = placement == null &&
             cropController == null &&
-            overlayPlacement == null &&
             !paintMode &&
-            !layerEditorActive;
+            !layerInteractionEnabled;
 
         return InteractiveViewer(
           transformationController: controller,

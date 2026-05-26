@@ -21,6 +21,7 @@ class TransformableLayer extends StatefulWidget {
     required this.onDoubleTap,
     required this.onLongPress,
     this.onTransformBegin,
+    this.ignorePointer = false,
   });
 
   final OverlayLayer layer;
@@ -34,6 +35,9 @@ class TransformableLayer extends StatefulWidget {
   final VoidCallback onDoubleTap;
   final VoidCallback onLongPress;
   final VoidCallback? onTransformBegin;
+
+  /// When true, layer stays visible but does not receive pointer events (e.g. paint mode).
+  final bool ignorePointer;
 
   @override
   State<TransformableLayer> createState() => _TransformableLayerState();
@@ -137,15 +141,17 @@ class _TransformableLayerState extends State<TransformableLayer> {
       top: centerStack.dy - hit.height / 2,
       width: hit.width,
       height: hit.height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: widget.onTap,
-        onDoubleTap: widget.onDoubleTap,
-        onLongPress: widget.onLongPress,
-        onScaleStart: _onScaleStart,
-        onScaleUpdate: _onScaleUpdate,
-        onScaleEnd: _onScaleEnd,
-        child: Center(
+      child: IgnorePointer(
+        ignoring: widget.ignorePointer,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: widget.onTap,
+          onDoubleTap: widget.onDoubleTap,
+          onLongPress: widget.onLongPress,
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: _onScaleUpdate,
+          onScaleEnd: _onScaleEnd,
+          child: Center(
           child: SizedBox(
             width: visual.width,
             height: visual.height,
@@ -160,6 +166,7 @@ class _TransformableLayerState extends State<TransformableLayer> {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

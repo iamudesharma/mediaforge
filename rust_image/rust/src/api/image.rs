@@ -80,6 +80,21 @@ pub enum ImageFilter {
     Shadows { amount: f32 },
     /// Local clarity / micro-contrast (−100 … +100).
     Structure { amount: f32 },
+    /// Swipe mood filter (Instagram-style global grade).
+    Mood {
+        preset: MoodFilterPreset,
+        /// 0.0 = identity, 1.0 = full mood grade.
+        strength: f32,
+    },
+    /// Regional skin smooth (mask applied separately in session / GPU pass).
+    SkinSmooth {
+        /// 0.0 = none, 1.0 = full smooth.
+        strength: f32,
+    },
+    /// Regional beauty (skin, eyes, lips, blush) — mask + landmarks in session.
+    Beauty {
+        params: crate::api::face::BeautyParams,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,6 +113,27 @@ pub enum FilterPreset {
     DuotoneHorizon,
     DuotoneLilac,
     DuotoneOchre,
+}
+
+/// Instagram-style mood filters (swipe on preview — not Filters-tab presets).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MoodFilterPreset {
+    Rose,
+    Clarendon,
+    Juno,
+    Valencia,
+    Lark,
+    Reyes,
+    Gingham,
+    LoFi,
+    Moon,
+    Aden,
+    Perpetua,
+    Mayfair,
+    Hudson,
+    Sierra,
+    Willow,
+    Inkwell,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -399,7 +435,7 @@ pub fn overlay_image(
     quality: u8,
 ) -> Result<Vec<u8>, String> {
     let base = buffer::decode_to_rgba(&base_bytes, false, None)?;
-    let composed = overlay::composite(base, &overlay_bytes, x, y, blend_mode)?;
+    let composed = overlay::composite(base, &overlay_bytes, x, y, blend_mode, 0, 0)?;
     encode_after_edit_rgba(composed, format, quality)
 }
 
@@ -523,8 +559,10 @@ fn is_gpu_capable(op: &EditOp) -> bool {
                     | ImageFilter::Contrast { .. }
                     | ImageFilter::Saturation { .. }
                     | ImageFilter::HueRotate { .. }
-                    | ImageFilter::Blur { .. }
+                    |                 ImageFilter::Blur { .. }
                     | ImageFilter::Sharpen
+                    | ImageFilter::Vignette { .. }
+                    | ImageFilter::Mood { .. }
             )
         }
         EditOp::Resize { .. } => true,

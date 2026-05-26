@@ -15,6 +15,11 @@ void main() {
       _expectRoundTrip(FilterDescriptor.preset(FilterPreset.cali, strength: 0.75));
     });
 
+    test('mood', () {
+      _expectRoundTrip(FilterDescriptor.mood(MoodFilterPreset.rose, strength: 1.0));
+      _expectRoundTrip(FilterDescriptor.mood(MoodFilterPreset.clarendon, strength: 0.5));
+    });
+
     test('warmth fade vignette', () {
       _expectRoundTrip(FilterDescriptor.warmth(amount: 25));
       _expectRoundTrip(FilterDescriptor.fade(amount: 0.4));

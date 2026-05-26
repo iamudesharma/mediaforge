@@ -4,6 +4,7 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'face.dart';
 import 'image.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
@@ -143,12 +144,16 @@ RgbaImageBuffer overlayOnRgbaBuffer({
   required int x,
   required int y,
   required BlendMode blendMode,
+  required int overlayWidth,
+  required int overlayHeight,
 }) => RustLib.instance.api.crateApiAdvancedOverlayOnRgbaBuffer(
   base: base,
   overlayBytes: overlayBytes,
   x: x,
   y: y,
   blendMode: blendMode,
+  overlayWidth: overlayWidth,
+  overlayHeight: overlayHeight,
 );
 
 ProgressiveDecodeResult decodeProgressiveImage({

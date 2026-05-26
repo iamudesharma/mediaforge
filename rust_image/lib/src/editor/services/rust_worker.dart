@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
+import 'package:rust_image/src/rust/api/face.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
+import '../models/beauty_params.dart';
 import '../models/operation_profile.dart';
 import 'filter_descriptor.dart';
 
@@ -195,6 +197,85 @@ abstract final class RustWorker {
       format.index,
       quality,
     ]);
+  }
+
+  /// Regional skin smooth (Sprint 12) — runs in worker isolate.
+  static Future<RgbaImageBuffer> applySkinSmooth({
+    required RgbaImageBuffer buffer,
+    required SegmentationMask mask,
+    required double strength,
+  }) async {
+    final raw = await _request<Map<String, Object>>([
+      'applySkinSmooth',
+      buffer.width,
+      buffer.height,
+      TransferableTypedData.fromList([buffer.pixels]),
+      mask.width,
+      mask.height,
+      TransferableTypedData.fromList([mask.pixels]),
+      strength,
+    ]);
+    return _bufferFromPayload(raw);
+  }
+
+  /// Full regional beauty (Nexus B) — runs in worker isolate.
+  static Future<RgbaImageBuffer> applyBeauty({
+    required RgbaImageBuffer buffer,
+    required FaceAnalysisResult analysis,
+    required SegmentationMask skinMask,
+    required BeautyParams params,
+    SegmentationMask? excludeMask,
+  }) async {
+    final raw = await _request<Map<String, Object>>([
+      'applyBeauty',
+      buffer.width,
+      buffer.height,
+      TransferableTypedData.fromList([buffer.pixels]),
+      analysis.landmarks,
+      analysis.faceContourCount,
+      regionCountsForAnalysis(analysis),
+      skinMask.width,
+      skinMask.height,
+      TransferableTypedData.fromList([skinMask.pixels]),
+      params.skinSmooth,
+      params.eyeBrighten,
+      params.lipTint.index,
+      params.lipTintStrength,
+      params.lipPlump,
+      params.blush,
+      params.underEye,
+      excludeMask?.width ?? 0,
+      excludeMask?.height ?? 0,
+      excludeMask != null
+          ? TransferableTypedData.fromList([excludeMask.pixels])
+          : null,
+    ]);
+    return _bufferFromPayload(raw);
+  }
+
+  /// Feathered skin mask from native face analysis (off UI thread).
+  static Future<SegmentationMask> buildSkinMaskFromAnalysis({
+    required FaceAnalysisResult analysis,
+    required int width,
+    required int height,
+  }) async {
+    final seg = analysis.segmentation;
+    final raw = await _request<Map<String, Object>>([
+      'buildSkinMask',
+      analysis.landmarks,
+      analysis.faceContourCount,
+      regionCountsForAnalysis(analysis),
+      seg?.width ?? 0,
+      seg?.height ?? 0,
+      seg != null ? TransferableTypedData.fromList([seg.pixels]) : null,
+      width,
+      height,
+    ]);
+    return SegmentationMask(
+      width: raw['width']! as int,
+      height: raw['height']! as int,
+      pixels: _bytesFromPayload(raw['pixels']!),
+    );
   }
 
   static Future<String> blurHashEncode(Uint8List bytes) {
@@ -436,6 +517,8 @@ abstract final class RustWorker {
     required int x,
     required int y,
     required BlendMode blendMode,
+    required int overlayWidth,
+    required int overlayHeight,
     required int previewMaxEdge,
     required int previewQuality,
     bool encodePreviewJpeg = true,
@@ -449,6 +532,8 @@ abstract final class RustWorker {
       x,
       y,
       blendMode.index,
+      overlayWidth,
+      overlayHeight,
       previewMaxEdge,
       previewQuality,
       encodePreviewJpeg,
@@ -495,11 +580,17 @@ abstract final class RustWorker {
   }
 }
 
-const _coalesceOps = {'replayEditPipeline', 'filterRgba', 'overlayRgba'};
+const _coalesceOps = {
+  'replayEditPipeline',
+  'filterRgba',
+  'overlayRgba',
+  'applySkinSmooth',
+  'applyBeauty',
+};
 
 @pragma('vm:entry-point')
 Future<void> _isolateMain(SendPort mainSendPort) async {
-  await RustLib.init();
+  await RustImageEditor.ensureInitialized();
 
   final commands = ReceivePort();
   mainSendPort.send(commands.sendPort);
@@ -689,9 +780,11 @@ Future<Object?> _handleMessage(Object message) async {
       final x = message[5] as int;
       final y = message[6] as int;
       final blend = BlendMode.values[message[7] as int];
-      final previewMaxEdge = message[8] as int;
-      final previewQuality = message[9] as int;
-      final encodePreviewJpeg = message[10] as bool;
+      final overlayWidth = message[8] as int;
+      final overlayHeight = message[9] as int;
+      final previewMaxEdge = message[10] as int;
+      final previewQuality = message[11] as int;
+      final encodePreviewJpeg = message[12] as bool;
 
       var buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
       buffer = RustImageEditor.overlayRgba(
@@ -700,6 +793,8 @@ Future<Object?> _handleMessage(Object message) async {
         x: x,
         y: y,
         blendMode: blend,
+        overlayWidth: overlayWidth,
+        overlayHeight: overlayHeight,
       );
       TransferableTypedData? previewTd;
       if (encodePreviewJpeg) {
@@ -799,6 +894,119 @@ Future<Object?> _handleMessage(Object message) async {
         format: format,
         quality: quality,
       );
+
+    case 'applySkinSmooth':
+      final width = message[1] as int;
+      final height = message[2] as int;
+      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
+      final maskW = message[4] as int;
+      final maskH = message[5] as int;
+      final maskPixels =
+          (message[6] as TransferableTypedData).materialize().asUint8List();
+      final strength = (message[7] as num).toDouble();
+      final buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
+      final mask = SegmentationMask(
+        width: maskW,
+        height: maskH,
+        pixels: maskPixels,
+      );
+      final out = applySkinSmoothCpu(
+        buffer: buffer,
+        mask: mask,
+        strength: strength,
+      );
+      return {
+        'width': out.width,
+        'height': out.height,
+        'pixels': TransferableTypedData.fromList([out.pixels]),
+      };
+
+    case 'applyBeauty':
+      final width = message[1] as int;
+      final height = message[2] as int;
+      final pixels = (message[3] as TransferableTypedData).materialize().asUint8List();
+      final landmarks = (message[4] as List).cast<Landmark2D>();
+      final faceContourCount = message[5] as int;
+      final regionCounts = (message[6] as List).cast<int>();
+      final maskW = message[7] as int;
+      final maskH = message[8] as int;
+      final maskPixels =
+          (message[9] as TransferableTypedData).materialize().asUint8List();
+      final params = BeautyParams(
+        skinSmooth: (message[10] as num).toDouble(),
+        eyeBrighten: (message[11] as num).toDouble(),
+        lipTint: LipTintPreset.values[(message[12] as num).toInt()],
+        lipTintStrength: (message[13] as num).toDouble(),
+        lipPlump: (message[14] as num).toDouble(),
+        blush: (message[15] as num).toDouble(),
+        underEye: (message[16] as num).toDouble(),
+      );
+      final exW = message[17] as int;
+      final exH = message[18] as int;
+      final exRaw = message[19];
+      SegmentationMask? excludeMask;
+      if (exRaw != null && exW > 0 && exH > 0) {
+        final exPixels =
+            (exRaw as TransferableTypedData).materialize().asUint8List();
+        excludeMask = SegmentationMask(
+          width: exW,
+          height: exH,
+          pixels: exPixels,
+        );
+      }
+      final buffer = RgbaImageBuffer(width: width, height: height, pixels: pixels);
+      final skinMask = SegmentationMask(
+        width: maskW,
+        height: maskH,
+        pixels: maskPixels,
+      );
+      final out = applyBeautyCpu(
+        buffer: buffer,
+        landmarks: landmarks,
+        faceContourCount: faceContourCount,
+        regionCounts: regionCounts,
+        skinMask: skinMask,
+        params: params,
+        excludeMask: excludeMask,
+      );
+      return {
+        'width': out.width,
+        'height': out.height,
+        'pixels': TransferableTypedData.fromList([out.pixels]),
+      };
+
+    case 'buildSkinMask':
+      final landmarks = (message[1] as List).cast<Landmark2D>();
+      final faceContourCount = message[2] as int;
+      final regionCounts = (message[3] as List).cast<int>();
+      final segW = message[4] as int;
+      final segH = message[5] as int;
+      final segRaw = message[6];
+      final width = message[7] as int;
+      final height = message[8] as int;
+      SegmentationMask? segmentation;
+      if (segRaw != null && segW > 0 && segH > 0) {
+        final segPixels =
+            (segRaw as TransferableTypedData).materialize().asUint8List();
+        segmentation = SegmentationMask(
+          width: segW,
+          height: segH,
+          pixels: segPixels,
+        );
+      }
+      final mask = buildSkinMaskFromLandmarks(
+        landmarks: landmarks,
+        faceContourCount: faceContourCount,
+        regionCounts: regionCounts,
+        segmentation: segmentation,
+        width: width,
+        height: height,
+      );
+      return {
+        'width': mask.width,
+        'height': mask.height,
+        'pixels': TransferableTypedData.fromList([mask.pixels]),
+      };
 
     case 'bytesTransform':
       final transformOp = message[1] as String;

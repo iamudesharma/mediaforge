@@ -40,14 +40,33 @@ abstract final class ImageExportSaver {
     final dir = await _desktopSaveDirectory();
     final file = File('${dir.path}/$name');
     await file.writeAsBytes(bytes, flush: true);
+    if (Platform.isMacOS) {
+      return 'Saved to Exports (${file.uri.pathSegments.last})';
+    }
     return 'Saved to ${file.path}';
   }
 
   static Future<Directory> _desktopSaveDirectory() async {
-    if (Platform.isMacOS || Platform.isLinux || Platform.isWindows) {
+    // Sandboxed macOS apps cannot write to ~/Downloads without the downloads
+    // entitlement; container "Downloads" from path_provider often fails too.
+    if (Platform.isMacOS) {
+      return _ensureSubdir(
+        await getApplicationDocumentsDirectory(),
+        'rust_image_exports',
+      );
+    }
+    if (Platform.isLinux || Platform.isWindows) {
       final downloads = await getDownloadsDirectory();
       if (downloads != null) return downloads;
     }
     return await getApplicationDocumentsDirectory();
+  }
+
+  static Future<Directory> _ensureSubdir(Directory parent, String name) async {
+    final dir = Directory('${parent.path}/$name');
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    return dir;
   }
 }

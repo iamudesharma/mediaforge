@@ -8,8 +8,8 @@ use rust_image_core::api::image::{
     add_watermark, apply_filter, batch_resize_images, compress_image, create_thumbnail, crop_image,
     draw_circle_on_image, draw_line_on_image, draw_text_on_image, fix_exif_orientation,
     init_app, overlay_image, read_exif_orientation, resize_image, rotate_image, BatchResizeItem,
-    BlendMode, DrawCircle, DrawLine, FilterPreset, ImageFilter, OutputFormat, ProcessingBackend,
-    ResizeAlgorithm, Rotation, TextOverlay,
+    BlendMode, DrawCircle, DrawLine, FilterPreset, ImageFilter, MoodFilterPreset, OutputFormat,
+    ProcessingBackend, RgbaImageBuffer, ResizeAlgorithm, Rotation, TextOverlay,
 };
 
 #[cfg(feature = "blurhash")]
@@ -302,6 +302,160 @@ fn rotate_rgba_arbitrary_changes_dimensions() {
     let buf = decode_to_rgba_buffer(synthetic_png(40, 30), false, None).expect("decode");
     let out = rotate_rgba_arbitrary(buf, 5.0).expect("rotate");
     assert!(out.width >= 40 && out.height >= 30);
+}
+
+#[test]
+fn apply_filter_all_mood_presets() {
+    init_app();
+    let buf = decode_to_rgba_buffer(synthetic_png(48, 48), false, None).expect("decode");
+    let moods = [
+        MoodFilterPreset::Rose,
+        MoodFilterPreset::Clarendon,
+        MoodFilterPreset::Juno,
+        MoodFilterPreset::Valencia,
+        MoodFilterPreset::Lark,
+        MoodFilterPreset::Reyes,
+        MoodFilterPreset::Gingham,
+        MoodFilterPreset::LoFi,
+        MoodFilterPreset::Moon,
+        MoodFilterPreset::Aden,
+        MoodFilterPreset::Perpetua,
+        MoodFilterPreset::Mayfair,
+        MoodFilterPreset::Hudson,
+        MoodFilterPreset::Sierra,
+        MoodFilterPreset::Willow,
+        MoodFilterPreset::Inkwell,
+    ];
+    let mean_before = mean_r_channel(&buf);
+    for p in moods {
+        let out = filter_rgba_buffer(
+            buf.clone(),
+            ImageFilter::Mood {
+                preset: p,
+                strength: 1.0,
+            },
+            ProcessingBackend::Cpu,
+        )
+        .expect("mood");
+        let mean_after = mean_r_channel(&out);
+        assert!(
+            (mean_before - mean_after).abs() > 0.5,
+            "mood preset {:?} should change pixels",
+            p
+        );
+    }
+}
+
+#[test]
+fn mood_strength_zero_is_near_identity() {
+    init_app();
+    let buf = decode_to_rgba_buffer(synthetic_png(32, 32), false, None).expect("decode");
+    let mean_before = mean_r_channel(&buf);
+    let out = filter_rgba_buffer(
+        buf,
+        ImageFilter::Mood {
+            preset: MoodFilterPreset::Clarendon,
+            strength: 0.0,
+        },
+        ProcessingBackend::Cpu,
+    )
+    .expect("mood");
+    let mean_after = mean_r_channel(&out);
+    assert!(
+        (mean_before - mean_after).abs() < 2.0,
+        "mood strength 0 should be near identity: {mean_before} vs {mean_after}"
+    );
+}
+
+#[test]
+#[cfg(feature = "gpu")]
+fn gpu_mood_matches_cpu_within_tolerance() {
+    init_app();
+    let buf = decode_to_rgba_buffer(synthetic_png(128, 128), false, None).expect("decode");
+    let presets = [
+        MoodFilterPreset::Rose,
+        MoodFilterPreset::Clarendon,
+        MoodFilterPreset::Valencia,
+        MoodFilterPreset::Inkwell,
+    ];
+    for preset in presets {
+        let cpu = filter_rgba_buffer(
+            RgbaImageBuffer {
+                width: buf.width,
+                height: buf.height,
+                pixels: buf.pixels.clone(),
+            },
+            ImageFilter::Mood {
+                preset,
+                strength: 1.0,
+            },
+            ProcessingBackend::Cpu,
+        )
+        .expect("cpu mood");
+        let gpu = filter_rgba_buffer(
+            RgbaImageBuffer {
+                width: buf.width,
+                height: buf.height,
+                pixels: buf.pixels.clone(),
+            },
+            ImageFilter::Mood {
+                preset,
+                strength: 1.0,
+            },
+            ProcessingBackend::Gpu,
+        )
+        .expect("gpu mood");
+        let psnr = psnr_rgba(&cpu.pixels, &gpu.pixels);
+        assert!(
+            psnr > 22.0,
+            "GPU mood {:?} PSNR {:.1} dB vs CPU (target > 22)",
+            preset,
+            psnr
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "gpu")]
+fn gpu_vignette_matches_cpu_within_tolerance() {
+    init_app();
+    let buf = decode_to_rgba_buffer(synthetic_png(128, 128), false, None).expect("decode");
+    let cpu = filter_rgba_buffer(
+        RgbaImageBuffer {
+            width: buf.width,
+            height: buf.height,
+            pixels: buf.pixels.clone(),
+        },
+        ImageFilter::Vignette { amount: 0.5 },
+        ProcessingBackend::Cpu,
+    )
+    .expect("cpu vignette");
+    let gpu = filter_rgba_buffer(
+        RgbaImageBuffer {
+            width: buf.width,
+            height: buf.height,
+            pixels: buf.pixels.clone(),
+        },
+        ImageFilter::Vignette { amount: 0.5 },
+        ProcessingBackend::Gpu,
+    )
+    .expect("gpu vignette");
+    let psnr = psnr_rgba(&cpu.pixels, &gpu.pixels);
+    assert!(psnr > 35.0, "GPU vignette PSNR {psnr:.1} dB vs CPU");
+}
+
+fn psnr_rgba(a: &[u8], b: &[u8]) -> f64 {
+    assert_eq!(a.len(), b.len());
+    let mut mse = 0.0f64;
+    for (x, y) in a.iter().zip(b.iter()) {
+        let d = *x as f64 - *y as f64;
+        mse += d * d;
+    }
+    mse /= a.len() as f64;
+    if mse < 1e-10 {
+        return 100.0;
+    }
+    10.0 * (255.0f64 * 255.0 / mse).log10()
 }
 
 #[test]

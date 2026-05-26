@@ -37,7 +37,7 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
-class LabeledSlider extends StatelessWidget {
+class LabeledSlider extends StatefulWidget {
   const LabeledSlider({
     super.key,
     required this.label,
@@ -60,6 +60,22 @@ class LabeledSlider extends StatelessWidget {
   final ValueChanged<double>? onChangeEnd;
 
   @override
+  State<LabeledSlider> createState() => _LabeledSliderState();
+}
+
+class _LabeledSliderState extends State<LabeledSlider> {
+  int _displayRevision = 0;
+
+  @override
+  void didUpdateWidget(LabeledSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.display != widget.display ||
+        oldWidget.value != widget.value) {
+      _displayRevision++;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: LuminaTokens.gutterTool),
@@ -70,30 +86,38 @@ class LabeledSlider extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  label,
+                  widget.label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: LuminaTokens.onSurface,
                       ),
                 ),
               ),
-              AnimatedSwitcher(
-                duration: EditorMotion.fast,
-                child: Text(
-                  display,
-                  key: ValueKey(display),
-                  style: AppTypography.numericValue(context),
+              SizedBox(
+                width: 72,
+                child: AnimatedSwitcher(
+                  duration: EditorMotion.fast,
+                  child: Text(
+                    widget.display,
+                    key: ValueKey(
+                      '${widget.label}|${widget.display}|$_displayRevision',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: AppTypography.numericValue(context),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: LuminaTokens.padSm),
           Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-            onChangeEnd: onChangeEnd,
+            value: widget.value.clamp(widget.min, widget.max),
+            min: widget.min,
+            max: widget.max,
+            divisions: widget.divisions,
+            onChanged: widget.onChanged,
+            onChangeEnd: widget.onChangeEnd,
           ),
         ],
       ),

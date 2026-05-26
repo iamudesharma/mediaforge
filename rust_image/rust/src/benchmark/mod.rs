@@ -410,6 +410,63 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
                 Ok(())
             },
         )?;
+
+        push_rgba(
+            &mut rows,
+            config,
+            only,
+            "filter_rgba_vignette",
+            backend,
+            image_bytes,
+            |buf| {
+                let _ = buffer::filter_rgba_with_backend(
+                    buf,
+                    ImageFilter::Vignette { amount: 0.45 },
+                    pb,
+                )?;
+                Ok(())
+            },
+        )?;
+
+        push_rgba(
+            &mut rows,
+            config,
+            only,
+            "filter_rgba_mood_clarendon",
+            backend,
+            image_bytes,
+            |buf| {
+                let _ = buffer::filter_rgba_with_backend(
+                    buf,
+                    ImageFilter::Mood {
+                        preset: crate::api::image::MoodFilterPreset::Clarendon,
+                        strength: 1.0,
+                    },
+                    pb,
+                )?;
+                Ok(())
+            },
+        )?;
+
+        push_rgba(
+            &mut rows,
+            config,
+            only,
+            "filter_rgba_mood_rose",
+            backend,
+            image_bytes,
+            |buf| {
+                let _ = buffer::filter_rgba_with_backend(
+                    buf,
+                    ImageFilter::Mood {
+                        preset: crate::api::image::MoodFilterPreset::Rose,
+                        strength: 1.0,
+                    },
+                    pb,
+                )?;
+                Ok(())
+            },
+        )?;
     }
 
     // --- RGBA preview encode (Fast = app default, Quality = stress) ---
@@ -499,6 +556,88 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
         image_bytes,
         |buf| {
             let _ = buffer::encode_from_rgba(buf.clone(), OutputFormat::Jpeg, config.jpeg_quality)?;
+            Ok(())
+        },
+    )?;
+
+    push_rgba(
+        &mut rows,
+        config,
+        only,
+        "beauty_skin_smooth_cpu",
+        BenchBackend::Na,
+        image_bytes,
+        |buf| {
+            use crate::api::face::{FaceAnalysisResult, Landmark2D, SegmentationMask};
+            use crate::face::{apply_skin_smooth_rgba, build_skin_mask};
+
+            let analysis = FaceAnalysisResult {
+                landmarks: vec![
+                    Landmark2D { x: 0.25, y: 0.25, z: 0.0 },
+                    Landmark2D { x: 0.75, y: 0.25, z: 0.0 },
+                    Landmark2D { x: 0.5, y: 0.75, z: 0.0 },
+                ],
+                confidence: 1.0,
+                segmentation: Some(SegmentationMask {
+                    width: buf.width,
+                    height: buf.height,
+                    pixels: vec![200; (buf.width * buf.height) as usize],
+                }),
+                face_contour_count: 3,
+                region_counts: vec![],
+            };
+            let mask = build_skin_mask(&analysis, buf.width, buf.height);
+            let _ = apply_skin_smooth_rgba(&buf, &mask, 0.6);
+            Ok(())
+        },
+    )?;
+
+    #[cfg(feature = "gpu")]
+    push_rgba(
+        &mut rows,
+        config,
+        only,
+        "beauty_skin_smooth_gpu",
+        BenchBackend::Gpu,
+        image_bytes,
+        |buf| {
+            use crate::api::face::{BeautyParams, FaceAnalysisResult, Landmark2D, SegmentationMask};
+            use crate::face::build_skin_mask;
+            use crate::gpu::{create_surface, engine, readback_surface, upload_surface};
+
+            let analysis = FaceAnalysisResult {
+                landmarks: vec![
+                    Landmark2D { x: 0.25, y: 0.25, z: 0.0 },
+                    Landmark2D { x: 0.75, y: 0.25, z: 0.0 },
+                    Landmark2D { x: 0.5, y: 0.75, z: 0.0 },
+                ],
+                confidence: 1.0,
+                segmentation: Some(SegmentationMask {
+                    width: buf.width,
+                    height: buf.height,
+                    pixels: vec![200; (buf.width * buf.height) as usize],
+                }),
+                face_contour_count: 3,
+                region_counts: vec![],
+            };
+            let mask = build_skin_mask(&analysis, buf.width, buf.height);
+            let gpu = engine()?;
+            let id = create_surface(buf.width, buf.height)?;
+            upload_surface(id, buf.clone())?;
+            let params = BeautyParams {
+                skin_smooth: 0.6,
+                ..Default::default()
+            };
+            gpu.apply_beauty_on_cache(
+                gpu.beauty_pipelines(),
+                &params,
+                &mask,
+                None,
+                None,
+                None,
+                None,
+            )?;
+            let _ = readback_surface(id)?;
             Ok(())
         },
     )?;

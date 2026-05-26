@@ -73,6 +73,7 @@ abstract final class ImageSourcePicker {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       imageQuality: 100,
+      
     );
     if (picked == null) return null;
     return picked.readAsBytes();
