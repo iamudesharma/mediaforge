@@ -52,6 +52,7 @@ class RustImageEditorConfig {
     this.showDebugFaceLandmarks = false,
     this.liveCameraMaxEdge = 720,
     this.liveCameraAnalyzeEveryNFrames = 3,
+    this.enableMediaPipeDownloadPrompt = true,
     this.session,
   });
 
@@ -141,6 +142,9 @@ class RustImageEditorConfig {
 
   /// Run native face analysis every N camera frames (temporal smooth between).
   final int liveCameraAnalyzeEveryNFrames;
+
+  /// Nexus D — offer optional MediaPipe model download in Beauty panel.
+  final bool enableMediaPipeDownloadPrompt;
 
   /// Optional external session (you manage [EditorSession.dispose]).
   final EditorSession? session;

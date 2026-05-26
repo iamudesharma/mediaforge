@@ -9,7 +9,7 @@ abstract final class GpuTextureRegistry {
   static const _channel = MethodChannel('rust_image/texture');
 
   static bool get isSupported =>
-      !kIsWeb && Platform.isMacOS;
+      !kIsWeb && (Platform.isMacOS || Platform.isIOS);
 
   static Future<int?> createTexture({
     required int handle,

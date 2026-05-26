@@ -47,9 +47,25 @@ See the [root README](../README.md) for macOS sandbox entitlements (file picker)
 
 **GPU mood (11b.1):** Mood + vignette run on wgpu when backend is auto/Gpu; status line shows `gpu_mood` / `gpu_vignette`.
 
-**GPU texture preview (11b.2):** Set `useGpuTexturePreview: true` on macOS for Flutter `Texture` display (skips Dart `ui.Image` decode). Falls back to `RgbaPreviewImage` when unavailable.
+**GPU texture preview (11b.2):** Set `useGpuTexturePreview: true` on macOS **or iOS** for Flutter `Texture` display (skips Dart `ui.Image` decode). Falls back to `RgbaPreviewImage` when unavailable.
 
-**Beauty (Sprint 12 + Nexus B–E):** Beauty tab → looks, regional sliders, eraser, **under-eye** softening. **Live camera** (mobile): Beauty → Live camera → temporal face smooth + live beauty. Hold **Compare** on Beauty tool to peek pre-beauty. Toggle **Debug landmarks** in Beauty panel. macOS/iOS: Vision; Android: ML Kit.
+**Beauty (Nexus complete):** Beauty tab → looks, regional sliders, eraser, under-eye, **teeth whiten**. **Live camera:** temporal face smooth + GPU texture preview on Apple when `useGpuTexturePreview: true`. Optional **MediaPipe 468** download in Beauty panel (`enableMediaPipeDownloadPrompt`). Vision / ML Kit fallback without download.
+
+**GPU overlay (Sprint 2 P2):** `apply_gpu_overlay_blend` composites one RGBA layer on the GPU preview cache (normal / multiply / screen).
+
+### GPU coverage (preview vs export)
+
+| Tool | Preview | Export |
+|------|---------|--------|
+| Adjust (brightness, contrast, …) | GPU when `ProcessingBackend.auto/gpu` | Full-res CPU/GPU replay |
+| Filters tab presets | GPU mood-capable ops; photon fallback | Full-res replay |
+| Mood swipe | `gpu_mood` + `gpu_vignette` | Committed in edit graph |
+| Beauty (still) | GPU WGSL chain + CPU plump/under-eye | Full-res `apply_beauty_rgba` |
+| Live camera | GPU texture + beauty WGSL (Apple); CPU Android | N/A (capture not export) |
+| Layers (stickers/text/paint) | Flutter overlay; optional GPU overlay blend | CPU bake via `LayerBake` |
+| Crop / straighten | Flutter overlay; two-finger straighten gesture | Pixel bake on commit |
+
+Status line (`showPerformanceInStatus: true`): filter path, stage ms, `gpu_*` / `cpu_*` beauty hints, live fps.
 
 ## Benchmarks
 

@@ -78,6 +78,7 @@ class FilterDescriptor {
         'lipPlump': params.lipPlump,
         'blush': params.blush,
         'underEye': params.underEye,
+        'teethWhiten': params.teethWhiten,
       });
 
   factory FilterDescriptor.oil({required int radius, required double intensity}) =>
@@ -194,6 +195,7 @@ class FilterDescriptor {
             lipPlump: (params['lipPlump'] ?? 0).toDouble(),
             blush: (params['blush'] ?? 0).toDouble(),
             underEye: (params['underEye'] ?? 0).toDouble(),
+            teethWhiten: (params['teethWhiten'] ?? 0).toDouble(),
           ),
         );
       default:

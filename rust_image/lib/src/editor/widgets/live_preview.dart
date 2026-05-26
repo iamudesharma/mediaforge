@@ -523,6 +523,19 @@ class _PreviewContent extends StatelessWidget {
   }
 
   Widget _buildPreviewImage() {
+    if (liveShowBeautyPreview &&
+        useGpuTexturePreview &&
+        gpuTextureId != null &&
+        gpuTextureId! > 0) {
+      return _frameLiveChild(
+        GpuTexturePreview(
+          textureId: gpuTextureId!,
+          width: imageWidth,
+          height: imageHeight,
+        ),
+        sourceSize: Size(imageWidth.toDouble(), imageHeight.toDouble()),
+      );
+    }
     if (liveShowBeautyPreview && useRgbaPreview && previewRgba != null) {
       final buf = previewRgba!;
       return _frameLiveChild(

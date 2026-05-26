@@ -636,6 +636,7 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
                 None,
                 None,
                 None,
+                None,
             )?;
             let _ = readback_surface(id)?;
             Ok(())

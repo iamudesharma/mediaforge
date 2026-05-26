@@ -2782,8 +2782,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BeautyParams dco_decode_beauty_params(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return BeautyParams(
       skinSmooth: dco_decode_f_32(arr[0]),
       eyeBrighten: dco_decode_f_32(arr[1]),
@@ -2792,6 +2792,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       lipPlump: dco_decode_f_32(arr[4]),
       blush: dco_decode_f_32(arr[5]),
       underEye: dco_decode_f_32(arr[6]),
+      teethWhiten: dco_decode_f_32(arr[7]),
     );
   }
 
@@ -3394,6 +3395,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_lipPlump = sse_decode_f_32(deserializer);
     var var_blush = sse_decode_f_32(deserializer);
     var var_underEye = sse_decode_f_32(deserializer);
+    var var_teethWhiten = sse_decode_f_32(deserializer);
     return BeautyParams(
       skinSmooth: var_skinSmooth,
       eyeBrighten: var_eyeBrighten,
@@ -3402,6 +3404,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       lipPlump: var_lipPlump,
       blush: var_blush,
       underEye: var_underEye,
+      teethWhiten: var_teethWhiten,
     );
   }
 
@@ -4149,6 +4152,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_f_32(self.lipPlump, serializer);
     sse_encode_f_32(self.blush, serializer);
     sse_encode_f_32(self.underEye, serializer);
+    sse_encode_f_32(self.teethWhiten, serializer);
   }
 
   @protected

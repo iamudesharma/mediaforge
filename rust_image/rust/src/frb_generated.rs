@@ -2553,6 +2553,7 @@ impl SseDecode for crate::api::face::BeautyParams {
         let mut var_lipPlump = <f32>::sse_decode(deserializer);
         let mut var_blush = <f32>::sse_decode(deserializer);
         let mut var_underEye = <f32>::sse_decode(deserializer);
+        let mut var_teethWhiten = <f32>::sse_decode(deserializer);
         return crate::api::face::BeautyParams {
             skin_smooth: var_skinSmooth,
             eye_brighten: var_eyeBrighten,
@@ -2561,6 +2562,7 @@ impl SseDecode for crate::api::face::BeautyParams {
             lip_plump: var_lipPlump,
             blush: var_blush,
             under_eye: var_underEye,
+            teeth_whiten: var_teethWhiten,
         };
     }
 }
@@ -3555,6 +3557,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::face::BeautyParams {
             self.lip_plump.into_into_dart().into_dart(),
             self.blush.into_into_dart().into_dart(),
             self.under_eye.into_into_dart().into_dart(),
+            self.teeth_whiten.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -4254,6 +4257,7 @@ impl SseEncode for crate::api::face::BeautyParams {
         <f32>::sse_encode(self.lip_plump, serializer);
         <f32>::sse_encode(self.blush, serializer);
         <f32>::sse_encode(self.under_eye, serializer);
+        <f32>::sse_encode(self.teeth_whiten, serializer);
     }
 }
 

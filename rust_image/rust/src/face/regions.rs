@@ -1,4 +1,7 @@
-use super::landmark::LandmarkRegions;
+use super::landmark::{
+    LandmarkRegions, FACE_OVAL_INDICES, MP_INNER_LIP_INDICES, MP_LEFT_EYE_INDICES,
+    MP_OUTER_LIP_INDICES, MP_RIGHT_EYE_INDICES, MP_TEETH_INDICES,
+};
 use super::{FaceAnalysisResult, Landmark2D, SegmentationMask};
 
 const FEATHER_PX: i32 = 6;
@@ -44,18 +47,25 @@ pub fn build_skin_mask(
     let mut skin = vec![0u8; w * h];
 
     if !analysis.landmarks.is_empty() {
-        let contour_n = if analysis.face_contour_count > 0 {
-            analysis.face_contour_count as usize
+        if LandmarkRegions::is_mediapipe_mesh(analysis) {
+            let oval: Vec<Landmark2D> =
+                LandmarkRegions::gather_mp_indices(&analysis.landmarks, FACE_OVAL_INDICES);
+            if oval.len() >= 3 {
+                fill_landmark_polygon_slice(&oval, width, height, &mut skin);
+            }
         } else {
-            // Legacy: estimate Vision face contour (~first 17–22 of ~87).
-            analysis.landmarks.len().min(22)
-        };
-        fill_skin_oval(
-            &analysis.landmarks[..contour_n.min(analysis.landmarks.len())],
-            width,
-            height,
-            &mut skin,
-        );
+            let contour_n = if analysis.face_contour_count > 0 {
+                analysis.face_contour_count as usize
+            } else {
+                analysis.landmarks.len().min(22)
+            };
+            fill_skin_oval(
+                &analysis.landmarks[..contour_n.min(analysis.landmarks.len())],
+                width,
+                height,
+                &mut skin,
+            );
+        }
     }
 
     if let Some(seg) = &analysis.segmentation {
@@ -91,7 +101,17 @@ pub fn build_eye_mask(
     let w = width as usize;
     let h = height as usize;
     let mut pixels = vec![0u8; w * h];
-    if let Some(regions) = LandmarkRegions::from_analysis(analysis) {
+    if LandmarkRegions::is_mediapipe_mesh(analysis) {
+        let lm = &analysis.landmarks;
+        let left = LandmarkRegions::gather_mp_indices(lm, MP_LEFT_EYE_INDICES);
+        let right = LandmarkRegions::gather_mp_indices(lm, MP_RIGHT_EYE_INDICES);
+        if left.len() >= 3 {
+            fill_landmark_polygon_slice(&left, width, height, &mut pixels);
+        }
+        if right.len() >= 3 {
+            fill_landmark_polygon_slice(&right, width, height, &mut pixels);
+        }
+    } else if let Some(regions) = LandmarkRegions::from_analysis(analysis) {
         fill_landmark_ellipse(
             &analysis.landmarks,
             regions.left_eye,
@@ -242,7 +262,30 @@ pub fn build_lip_mask(
     let w = width as usize;
     let h = height as usize;
     let mut pixels = vec![0u8; w * h];
-    if let Some(regions) = LandmarkRegions::from_analysis(analysis) {
+    if LandmarkRegions::is_mediapipe_mesh(analysis) {
+        let lm = &analysis.landmarks;
+        let inner = LandmarkRegions::gather_mp_indices(lm, MP_INNER_LIP_INDICES);
+        let outer = LandmarkRegions::gather_mp_indices(lm, MP_OUTER_LIP_INDICES);
+        if inner.len() >= 3 {
+            fill_landmark_polygon_slice(&inner, width, height, &mut pixels);
+            let (_, _, inner_min_y, inner_max_y) = landmark_bounds(&inner);
+            let lip_span = (inner_max_y - inner_min_y).max(0.008);
+            let cupid_y = inner_min_y + lip_span * 0.28;
+            if outer.len() >= 3 {
+                let trimmed: Vec<Landmark2D> = outer
+                    .iter()
+                    .filter(|p| p.y >= cupid_y - lip_span * 0.08)
+                    .copied()
+                    .collect();
+                if trimmed.len() >= 3 {
+                    fill_landmark_polygon_slice(&trimmed, width, height, &mut pixels);
+                }
+            }
+            clear_above_normalized_y(&mut pixels, width, height, cupid_y - lip_span * 0.05);
+        } else if outer.len() >= 3 {
+            fill_landmark_polygon_slice(&outer, width, height, &mut pixels);
+        }
+    } else if let Some(regions) = LandmarkRegions::from_analysis(analysis) {
         let lm = &analysis.landmarks;
         let (is, ic) = regions.inner_lips;
         let (os, oc) = regions.outer_lips;
@@ -290,6 +333,42 @@ pub fn build_lip_mask(
     }
     if LIP_ERODE_PX > 0 && w >= 16 && h >= 16 {
         erode_mask(&mut pixels, w, h, LIP_ERODE_PX);
+    }
+    feather_mask(&mut pixels, w, h, 2);
+    SegmentationMask {
+        width,
+        height,
+        pixels,
+    }
+}
+
+/// Teeth whiten mask — lower mouth interior (Nexus E).
+pub fn build_teeth_mask(
+    analysis: &FaceAnalysisResult,
+    width: u32,
+    height: u32,
+) -> SegmentationMask {
+    let w = width as usize;
+    let h = height as usize;
+    let mut pixels = vec![0u8; w * h];
+    if LandmarkRegions::is_mediapipe_mesh(analysis) {
+        let teeth = LandmarkRegions::gather_mp_indices(&analysis.landmarks, MP_TEETH_INDICES);
+        if teeth.len() >= 3 {
+            fill_landmark_polygon_slice(&teeth, width, height, &mut pixels);
+            let (_, _, min_y, max_y) = landmark_bounds(&teeth);
+            let mid_y = (min_y + max_y) * 0.5;
+            clear_above_normalized_y(&mut pixels, width, height, mid_y);
+        }
+    } else if let Some(regions) = LandmarkRegions::from_analysis(analysis) {
+        let lm = &analysis.landmarks;
+        let (is, ic) = regions.inner_lips;
+        if ic >= 3 && is + ic <= lm.len() {
+            let inner = &lm[is..is + ic];
+            let (_, _, min_y, max_y) = landmark_bounds(inner);
+            let mid_y = (min_y + max_y) * 0.5;
+            fill_landmark_polygon(lm, regions.inner_lips, width, height, &mut pixels);
+            clear_above_normalized_y(&mut pixels, width, height, mid_y);
+        }
     }
     feather_mask(&mut pixels, w, h, 2);
     SegmentationMask {

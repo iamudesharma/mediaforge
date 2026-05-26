@@ -77,6 +77,7 @@ class EditGraph {
             lipPlump: 0,
             blush: 0,
             underEye: 0,
+            teethWhiten: 0,
           );
         }
       }

@@ -5,8 +5,8 @@ use crate::api::image::{EditOp, ProcessingBackend, RgbaImageBuffer};
 use crate::api::face::FaceAnalysisResult;
 #[cfg(feature = "gpu")]
 use crate::gpu::{
-    apply_surface_beauty, apply_surface_beauty_pipeline, apply_surface_ops, create_surface,
-    destroy_surface, readback_surface, upload_surface,
+    apply_surface_beauty, apply_surface_beauty_pipeline, apply_surface_ops, apply_surface_overlay,
+    create_surface, destroy_surface, readback_surface, upload_surface,
 };
 
 /// Create a GPU-resident preview surface handle (Sprint 11b.2).
@@ -114,6 +114,25 @@ pub fn apply_gpu_beauty_pipeline(
     #[cfg(not(feature = "gpu"))]
     {
         let _ = (id, analysis, skin_mask, params, exclude_mask);
+        Err("GPU feature disabled".into())
+    }
+}
+
+/// GPU overlay composite on preview cache (Sprint 2 P2 — normal/multiply/screen).
+#[flutter_rust_bridge::frb(sync)]
+pub fn apply_gpu_overlay_blend(
+    id: i64,
+    overlay: RgbaImageBuffer,
+    opacity: f32,
+    blend_mode: u32,
+) -> Result<(), String> {
+    #[cfg(feature = "gpu")]
+    {
+        return apply_surface_overlay(id, overlay, opacity, blend_mode);
+    }
+    #[cfg(not(feature = "gpu"))]
+    {
+        let _ = (id, overlay, opacity, blend_mode);
         Err("GPU feature disabled".into())
     }
 }

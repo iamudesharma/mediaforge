@@ -29,6 +29,7 @@ A new Flutter FFI plugin project.
   s.resource_bundles = { 'rust_image_mediapipe' => ['../darwin/Resources/mediapipe/**'] }
   s.dependency 'Flutter'
   s.platform = :ios, '15.0'
+  s.dependency 'MediaPipeTasksVision', '0.10.14'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

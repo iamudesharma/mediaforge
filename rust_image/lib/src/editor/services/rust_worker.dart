@@ -244,6 +244,7 @@ abstract final class RustWorker {
       params.lipPlump,
       params.blush,
       params.underEye,
+      params.teethWhiten,
       excludeMask?.width ?? 0,
       excludeMask?.height ?? 0,
       excludeMask != null
@@ -940,10 +941,11 @@ Future<Object?> _handleMessage(Object message) async {
         lipPlump: (message[14] as num).toDouble(),
         blush: (message[15] as num).toDouble(),
         underEye: (message[16] as num).toDouble(),
+        teethWhiten: (message[17] as num).toDouble(),
       );
-      final exW = message[17] as int;
-      final exH = message[18] as int;
-      final exRaw = message[19];
+      final exW = message[18] as int;
+      final exH = message[19] as int;
+      final exRaw = message[20];
       SegmentationMask? excludeMask;
       if (exRaw != null && exW > 0 && exH > 0) {
         final exPixels =

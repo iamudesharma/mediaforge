@@ -10,6 +10,7 @@ import '../services/beauty_exclude_mask.dart';
 import '../services/beauty_look_names.dart';
 import '../services/face_analysis_service.dart';
 import '../services/live_camera_service.dart';
+import '../services/mediapipe_model_service.dart';
 import '../theme/lumina_tokens.dart';
 import '../widgets/control_widgets.dart';
 
@@ -161,6 +162,8 @@ class _BeautyPanelState extends State<BeautyPanel> {
           ],
         ),
         const SizedBox(height: LuminaTokens.padSm),
+        if (s.enableMediaPipeDownloadPrompt)
+          _MediaPipeDownloadBanner(session: s),
         if (s.enableLiveCameraBeauty && LiveCameraService.isSupported) ...[
           Row(
             children: [
@@ -337,6 +340,11 @@ class _BeautyPanelState extends State<BeautyPanel> {
             label: 'Under-eye',
             value: _params.underEye * 100,
             onChanged: (v) => _live(_params.copyWith(underEye: v / 100)),
+          ),
+          _slider(
+            label: 'Teeth whiten',
+            value: _params.teethWhiten * 100,
+            onChanged: (v) => _live(_params.copyWith(teethWhiten: v / 100)),
           ),
         ],
       ],
@@ -612,6 +620,120 @@ class _LipSwatches extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _MediaPipeDownloadBanner extends StatefulWidget {
+  const _MediaPipeDownloadBanner({required this.session});
+
+  final EditorSession session;
+
+  @override
+  State<_MediaPipeDownloadBanner> createState() =>
+      _MediaPipeDownloadBannerState();
+}
+
+class _MediaPipeDownloadBannerState extends State<_MediaPipeDownloadBanner> {
+  bool _ready = false;
+  bool _dismissed = false;
+  bool _downloading = false;
+  double _progress = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_refresh());
+  }
+
+  Future<void> _refresh() async {
+    if (!MediaPipeModelService.isPlatformSupported) return;
+    final ready = await MediaPipeModelService.isMediaPipeReady();
+    final dismissed = await MediaPipeModelService.isPromptDismissed();
+    if (!mounted) return;
+    setState(() {
+      _ready = ready;
+      _dismissed = dismissed;
+    });
+  }
+
+  Future<void> _download() async {
+    setState(() {
+      _downloading = true;
+      _progress = 0;
+    });
+    try {
+      await MediaPipeModelService.downloadModels(
+        onProgress: (p) {
+          if (mounted) setState(() => _progress = p);
+        },
+      );
+      if (mounted) {
+        setState(() => _ready = true);
+        unawaited(widget.session.analyzeFaceForBeauty(force: true));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Download failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!MediaPipeModelService.isPlatformSupported ||
+        _ready ||
+        _dismissed) {
+      return const SizedBox.shrink();
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: LuminaTokens.padSm),
+      child: Padding(
+        padding: const EdgeInsets.all(LuminaTokens.padSm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Better lip & eye masks (~${MediaPipeModelService.estimatedSizeMb} MB)',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Download MediaPipe 468-point mesh (optional). Vision / ML Kit fallback stays available.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LuminaTokens.onSurfaceVariant,
+                  ),
+            ),
+            if (_downloading) ...[
+              const SizedBox(height: LuminaTokens.padSm),
+              LinearProgressIndicator(value: _progress),
+            ],
+            const SizedBox(height: LuminaTokens.padSm),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: _downloading
+                      ? null
+                      : () async {
+                          await MediaPipeModelService.dismissPrompt();
+                          if (mounted) setState(() => _dismissed = true);
+                        },
+                  child: const Text('Not now'),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: _downloading ? null : _download,
+                  child: Text(_downloading ? 'Downloading…' : 'Download'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,9 +1,13 @@
 use crate::api::face::BeautyParams;
 use crate::api::image::RgbaImageBuffer;
 
-use super::makeup::{apply_blush_rgba, apply_eye_brighten_rgba, apply_lip_tint_rgba, apply_under_eye_soften_rgba};
+use super::makeup::{
+    apply_blush_rgba, apply_eye_brighten_rgba, apply_lip_tint_rgba, apply_teeth_whiten_rgba,
+    apply_under_eye_soften_rgba,
+};
 use super::regions::{
-    apply_exclude_mask, build_blush_mask, build_eye_mask, build_lip_mask, build_under_eye_mask,
+    apply_exclude_mask, build_blush_mask, build_eye_mask, build_lip_mask, build_teeth_mask,
+    build_under_eye_mask,
 };
 use super::warp::{apply_lip_plump_rgba, lip_center_from_landmarks};
 use super::{FaceAnalysisResult, Landmark2D, LandmarkRegions, SegmentationMask};
@@ -158,6 +162,11 @@ pub fn apply_beauty_rgba(
         let ue_mask =
             apply_exclude_mask(&build_under_eye_mask(analysis, w, h), exclude_mask);
         out = apply_under_eye_soften_rgba(&out, &ue_mask, params.under_eye);
+    }
+
+    if params.teeth_whiten > 0.001 {
+        let teeth_mask = apply_exclude_mask(&build_teeth_mask(analysis, w, h), exclude_mask);
+        out = apply_teeth_whiten_rgba(&out, &teeth_mask, params.teeth_whiten);
     }
 
     out

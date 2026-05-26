@@ -51,7 +51,9 @@ class _RustImageEditorWidgetState extends State<RustImageEditorWidget> {
       ..enableLiveCameraBeauty = widget.config.enableLiveCameraBeauty
       ..liveCameraMaxEdge = widget.config.liveCameraMaxEdge
       ..liveCameraAnalyzeEveryNFrames =
-          widget.config.liveCameraAnalyzeEveryNFrames;
+          widget.config.liveCameraAnalyzeEveryNFrames
+      ..enableMediaPipeDownloadPrompt =
+          widget.config.enableMediaPipeDownloadPrompt;
 
     ImageSourcePicker.configure(
       pickImage: widget.config.pickImage,
