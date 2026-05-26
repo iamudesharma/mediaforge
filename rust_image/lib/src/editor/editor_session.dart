@@ -103,6 +103,8 @@ class EditorSession extends ChangeNotifier {
   bool showDebugFaceLandmarks = false;
   int liveCameraMaxEdge = 720;
   int liveCameraAnalyzeEveryNFrames = 3;
+  /// Live camera viewport framing (Full = native sensor aspect).
+  CropAspect livePreviewAspect = CropAspect.original;
   TemporalFaceSmoother? _temporalSmoother;
   int _liveFrameCount = 0;
   bool _liveFrameBusy = false;
@@ -200,13 +202,28 @@ class EditorSession extends ChangeNotifier {
   bool get hasWorkingImage =>
       rgbaBase != null || displayBytes != null || liveCameraActive;
 
-  /// Live beauty overlay replaces native [CameraPreview] when masks are ready.
-  bool get liveShowBeautyPreview {
+  /// Processed RGBA replaces [CameraPreview] once beauty has been applied.
+  bool get liveBeautyRgbaActive =>
+      liveCameraActive && previewRgba != null;
+
+  /// Active beauty params during live (preview or committed).
+  BeautyParams? get liveActiveBeautyParams =>
+      liveCameraActive
+          ? (_previewBeautyParams ?? committedBeautyParams)
+          : null;
+
+  bool get liveBeautyPending {
     if (!liveCameraActive) return false;
-    final params = _previewBeautyParams ?? committedBeautyParams;
-    if (params == null || !params.hasEffect) return false;
-    return skinMask != null &&
-        FaceAnalysisService.isAnalysisValid(faceAnalysis);
+    final p = liveActiveBeautyParams;
+    if (p == null || !p.hasEffect) return false;
+    return skinMask == null ||
+        !FaceAnalysisService.isAnalysisValid(faceAnalysis);
+  }
+
+  void setLivePreviewAspect(CropAspect aspect) {
+    if (livePreviewAspect == aspect) return;
+    livePreviewAspect = aspect;
+    notifyListeners();
   }
 
   bool get canUndo =>
@@ -892,15 +909,6 @@ class EditorSession extends ChangeNotifier {
         format: null,
       );
 
-      final showBeauty = liveShowBeautyPreview;
-      if (!showBeauty) {
-        previewRgba = null;
-        rgbaBuffer = null;
-        _beautyPipelineBase = null;
-        _bumpPreviewOnly();
-        return;
-      }
-
       var display = base;
       final params = _activeBeautyParams() ?? committedBeautyParams;
       final analysis = faceAnalysis;
@@ -917,11 +925,24 @@ class EditorSession extends ChangeNotifier {
           params: params,
           excludeMask: _beautyExcludeForBuffer(base),
         );
+        rgbaBuffer = display;
+        previewRgba = display;
+        _beautyPipelineBase = base;
+        final look = previewBeautyLook ?? committedBeautyLook;
+        status = look != null
+            ? 'Live · ${beautyLookLabel(look)}'
+            : 'Live · beauty';
+        _bumpStatus();
+      } else {
+        previewRgba = null;
+        rgbaBuffer = null;
+        _beautyPipelineBase = null;
+        final pending = params?.hasEffect ?? false;
+        if (pending) {
+          status = 'Live · detecting face…';
+          _bumpStatus();
+        }
       }
-
-      rgbaBuffer = display;
-      previewRgba = display;
-      _beautyPipelineBase = base;
       displayBytes = null;
       _bumpPreviewOnly();
     } catch (_) {
@@ -997,8 +1018,33 @@ class EditorSession extends ChangeNotifier {
     bool livePreview = false,
     bool commit = false,
   }) async {
-    if (!hasWorkingImage || skinMask == null) return;
+    if (!hasWorkingImage) return;
     final p = params.clamped();
+
+    if (liveCameraActive) {
+      if (livePreview && !commit) {
+        _previewBeautyParams = p;
+        previewBeautyLook = beautyLookMatching(p);
+        _beautyDebounceTimer?.cancel();
+        notifyListeners();
+        return;
+      }
+      if (commit) {
+        _beautyDebounceTimer?.cancel();
+        _previewBeautyParams = null;
+        previewBeautyLook = beautyLookMatching(p);
+        editGraph = editGraph.replaceBeautyParams(p.hasEffect ? p : null);
+        final look = previewBeautyLook;
+        status = p.hasEffect
+            ? 'Live · ${look != null ? beautyLookLabel(look) : 'beauty on'}'
+            : 'Live camera · front';
+        _bumpStatus();
+        notifyListeners();
+      }
+      return;
+    }
+
+    if (skinMask == null) return;
 
     if (livePreview && !commit) {
       _previewBeautyParams = p;

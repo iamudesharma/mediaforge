@@ -78,6 +78,9 @@ class LivePreview extends StatefulWidget {
     this.faceLandmarks,
     this.liveCameraController,
     this.liveShowBeautyPreview = false,
+    this.livePreviewAspect = CropAspect.original,
+    this.liveBeautyPending = false,
+    this.liveBeautyLabel,
   });
 
   final Uint8List? bytes;
@@ -136,6 +139,9 @@ class LivePreview extends StatefulWidget {
   final List<Landmark2D>? faceLandmarks;
   final CameraController? liveCameraController;
   final bool liveShowBeautyPreview;
+  final CropAspect livePreviewAspect;
+  final bool liveBeautyPending;
+  final String? liveBeautyLabel;
 
   @override
   State<LivePreview> createState() => _LivePreviewState();
@@ -238,6 +244,9 @@ class _LivePreviewState extends State<LivePreview> {
                         gpuTextureId: widget.gpuTextureId,
                         liveCameraController: widget.liveCameraController,
                         liveShowBeautyPreview: widget.liveShowBeautyPreview,
+                        livePreviewAspect: widget.livePreviewAspect,
+                        liveBeautyPending: widget.liveBeautyPending,
+                        liveBeautyLabel: widget.liveBeautyLabel,
                         compareBytes: widget.compareBytes,
                         compareRgba: widget.compareRgba,
                         showCompare: widget.showCompare,
@@ -275,6 +284,20 @@ class _LivePreviewState extends State<LivePreview> {
                             landmarks: widget.faceLandmarks!,
                             imageWidth: widget.imageWidth,
                             imageHeight: widget.imageHeight,
+                          ),
+                        ),
+                      if (widget.liveBeautyLabel != null)
+                        Positioned(
+                          top: 12,
+                          left: 0,
+                          right: 0,
+                          child: IgnorePointer(
+                            child: Center(
+                              child: _LiveBeautyChip(
+                                label: widget.liveBeautyLabel!,
+                                pending: widget.liveBeautyPending,
+                              ),
+                            ),
                           ),
                         ),
                     ],
@@ -405,6 +428,9 @@ class _PreviewContent extends StatelessWidget {
     required this.gpuTextureId,
     this.liveCameraController,
     this.liveShowBeautyPreview = false,
+    this.livePreviewAspect = CropAspect.original,
+    this.liveBeautyPending = false,
+    this.liveBeautyLabel,
     required this.compareBytes,
     this.compareRgba,
     required this.showCompare,
@@ -440,6 +466,9 @@ class _PreviewContent extends StatelessWidget {
   final int? gpuTextureId;
   final CameraController? liveCameraController;
   final bool liveShowBeautyPreview;
+  final CropAspect livePreviewAspect;
+  final bool liveBeautyPending;
+  final String? liveBeautyLabel;
   final Uint8List? compareBytes;
   final RgbaImageBuffer? compareRgba;
   final bool showCompare;
@@ -468,12 +497,41 @@ class _PreviewContent extends StatelessWidget {
   final PaintBrushKind? activePaintBrush;
   final String? hiddenTextLayerId;
 
+  Widget _frameLiveChild(Widget child, {Size? sourceSize}) {
+    final ratio = livePreviewAspect.targetRatio;
+    if (ratio == null) {
+      return Center(child: child);
+    }
+    Widget inner = child;
+    if (sourceSize != null && sourceSize.width > 0 && sourceSize.height > 0) {
+      inner = FittedBox(
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: sourceSize.width,
+          height: sourceSize.height,
+          child: child,
+        ),
+      );
+    }
+    return Center(
+      child: AspectRatio(
+        aspectRatio: ratio,
+        child: ClipRect(child: inner),
+      ),
+    );
+  }
+
   Widget _buildPreviewImage() {
     if (liveShowBeautyPreview && useRgbaPreview && previewRgba != null) {
-      return RgbaPreviewImage(
-        key: ValueKey(identityHashCode(previewRgba!.pixels)),
-        buffer: previewRgba!,
-        fit: BoxFit.contain,
+      final buf = previewRgba!;
+      return _frameLiveChild(
+        RgbaPreviewImage(
+          key: ValueKey(identityHashCode(buf.pixels)),
+          buffer: buf,
+          fit: BoxFit.cover,
+        ),
+        sourceSize: Size(buf.width.toDouble(), buf.height.toDouble()),
       );
     }
 
@@ -491,11 +549,19 @@ class _PreviewContent extends StatelessWidget {
               ),
             );
           }
-          return Center(
-            child: AspectRatio(
-              aspectRatio: cam.value.aspectRatio,
-              child: CameraPreview(cam),
-            ),
+          final size = cam.value.previewSize;
+          final preview = size == null
+              ? CameraPreview(cam)
+              : SizedBox(
+                  width: size.width,
+                  height: size.height,
+                  child: CameraPreview(cam),
+                );
+          return _frameLiveChild(
+            preview,
+            sourceSize: size == null
+                ? null
+                : Size(size.width.toDouble(), size.height.toDouble()),
           );
         },
       );
@@ -736,6 +802,51 @@ class _BlockingOverlay extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveBeautyChip extends StatelessWidget {
+  const _LiveBeautyChip({
+    required this.label,
+    required this.pending,
+  });
+
+  final String label;
+  final bool pending;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: Colors.black.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (pending)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+            Text(
+              pending ? '$label · detecting…' : label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.white,
+                  ),
+            ),
+          ],
         ),
       ),
     );
