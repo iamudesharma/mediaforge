@@ -5,7 +5,11 @@ use photon_rs::{
     native::open_image_from_bytes,
 };
 
-use crate::api::image::{FilterPreset, ImageFilter, RgbaImageBuffer};
+mod mood_presets;
+
+use crate::api::image::{FilterPreset, ImageFilter, MoodFilterPreset, RgbaImageBuffer};
+
+pub use mood_presets::{apply_mood_filter_rgba, apply_mood_color_rgba, recipe_for};
 
 pub fn apply(bytes: &[u8], filter: ImageFilter) -> Result<DynamicImage, String> {
     let mut photon = open_image_from_bytes(bytes).map_err(|e| e.to_string())?;
@@ -56,6 +60,11 @@ pub fn apply_rgba(mut buffer: RgbaImageBuffer, filter: ImageFilter) -> Result<Rg
             apply_structure_rgba(&mut buffer, amount);
             Ok(buffer)
         }
+        ImageFilter::Mood { preset, strength } => Ok(mood_presets::apply_mood_filter_rgba(
+            buffer, preset, strength,
+        )),
+        ImageFilter::SkinSmooth { strength: _ } => Ok(buffer),
+        ImageFilter::Beauty { .. } => Ok(buffer),
         other_filter => {
             let RgbaImageBuffer {
                 width,
@@ -95,6 +104,17 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
         ImageFilter::Solarize => effects::solarize(photon),
         ImageFilter::Preset { preset, strength } => {
             apply_preset_with_strength(photon, preset, strength);
+        }
+        ImageFilter::Mood { preset, strength } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut buf = RgbaImageBuffer {
+                width: w,
+                height: h,
+                pixels: photon.get_raw_pixels().to_vec(),
+            };
+            buf = mood_presets::apply_mood_filter_rgba(buf, preset, strength);
+            *photon = PhotonImage::new(buf.pixels, w, h);
         }
         ImageFilter::Warmth { amount } => {
             let w = photon.get_width();
@@ -148,6 +168,8 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
             apply_structure_rgba(&mut buf, amount);
             *photon = PhotonImage::new(buf.pixels, w, h);
         }
+        ImageFilter::SkinSmooth { .. } => {}
+        ImageFilter::Beauty { .. } => {}
     }
 }
 
@@ -162,7 +184,7 @@ fn scale_rgb(chunk: &mut [u8], factor: f32) {
     }
 }
 
-fn apply_highlights_rgba(pixels: &mut [u8], amount: f32) {
+pub(crate) fn apply_highlights_rgba(pixels: &mut [u8], amount: f32) {
     let t = (amount / 100.0).clamp(-1.0, 1.0);
     if t.abs() < 0.001 {
         return;
@@ -177,7 +199,7 @@ fn apply_highlights_rgba(pixels: &mut [u8], amount: f32) {
     }
 }
 
-fn apply_shadows_rgba(pixels: &mut [u8], amount: f32) {
+pub(crate) fn apply_shadows_rgba(pixels: &mut [u8], amount: f32) {
     let t = (amount / 100.0).clamp(-1.0, 1.0);
     if t.abs() < 0.001 {
         return;
@@ -200,7 +222,7 @@ fn apply_shadows_rgba(pixels: &mut [u8], amount: f32) {
     }
 }
 
-fn apply_structure_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
+pub(crate) fn apply_structure_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
     let t = (amount / 100.0).clamp(-1.0, 1.0);
     if t.abs() < 0.001 || buffer.width < 3 || buffer.height < 3 {
         return;
@@ -232,7 +254,7 @@ fn apply_structure_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
     }
 }
 
-fn apply_warmth_rgba(pixels: &mut [u8], amount: f32) {
+pub(crate) fn apply_warmth_rgba(pixels: &mut [u8], amount: f32) {
     let t = (amount / 100.0).clamp(-1.0, 1.0);
     if t.abs() < 0.001 {
         return;
@@ -245,7 +267,7 @@ fn apply_warmth_rgba(pixels: &mut [u8], amount: f32) {
     }
 }
 
-fn apply_fade_rgba(pixels: &mut [u8], amount: f32) {
+pub(crate) fn apply_fade_rgba(pixels: &mut [u8], amount: f32) {
     let a = amount.clamp(0.0, 1.0);
     if a < 0.001 {
         return;
@@ -258,7 +280,7 @@ fn apply_fade_rgba(pixels: &mut [u8], amount: f32) {
     }
 }
 
-fn apply_vignette_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
+pub(crate) fn apply_vignette_rgba(buffer: &mut RgbaImageBuffer, amount: f32) {
     let a = amount.clamp(0.0, 1.0);
     if a < 0.001 || buffer.width == 0 || buffer.height == 0 {
         return;

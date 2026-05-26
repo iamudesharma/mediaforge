@@ -8,6 +8,7 @@ mod compress;
 mod crop;
 mod decode;
 mod draw;
+mod face;
 mod layers;
 mod exif;
 mod filters;

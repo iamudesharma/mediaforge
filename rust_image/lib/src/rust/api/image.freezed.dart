@@ -510,7 +510,7 @@ extension ImageFilterPatterns on ImageFilter {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ImageFilter_Blur value)?  blur,TResult Function( ImageFilter_Sharpen value)?  sharpen,TResult Function( ImageFilter_Brightness value)?  brightness,TResult Function( ImageFilter_Contrast value)?  contrast,TResult Function( ImageFilter_Saturation value)?  saturation,TResult Function( ImageFilter_HueRotate value)?  hueRotate,TResult Function( ImageFilter_Oil value)?  oil,TResult Function( ImageFilter_FrostedGlass value)?  frostedGlass,TResult Function( ImageFilter_Pixelize value)?  pixelize,TResult Function( ImageFilter_Solarize value)?  solarize,TResult Function( ImageFilter_Preset value)?  preset,TResult Function( ImageFilter_Warmth value)?  warmth,TResult Function( ImageFilter_Fade value)?  fade,TResult Function( ImageFilter_Vignette value)?  vignette,TResult Function( ImageFilter_Highlights value)?  highlights,TResult Function( ImageFilter_Shadows value)?  shadows,TResult Function( ImageFilter_Structure value)?  structure,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( ImageFilter_Blur value)?  blur,TResult Function( ImageFilter_Sharpen value)?  sharpen,TResult Function( ImageFilter_Brightness value)?  brightness,TResult Function( ImageFilter_Contrast value)?  contrast,TResult Function( ImageFilter_Saturation value)?  saturation,TResult Function( ImageFilter_HueRotate value)?  hueRotate,TResult Function( ImageFilter_Oil value)?  oil,TResult Function( ImageFilter_FrostedGlass value)?  frostedGlass,TResult Function( ImageFilter_Pixelize value)?  pixelize,TResult Function( ImageFilter_Solarize value)?  solarize,TResult Function( ImageFilter_Preset value)?  preset,TResult Function( ImageFilter_Warmth value)?  warmth,TResult Function( ImageFilter_Fade value)?  fade,TResult Function( ImageFilter_Vignette value)?  vignette,TResult Function( ImageFilter_Highlights value)?  highlights,TResult Function( ImageFilter_Shadows value)?  shadows,TResult Function( ImageFilter_Structure value)?  structure,TResult Function( ImageFilter_Mood value)?  mood,TResult Function( ImageFilter_SkinSmooth value)?  skinSmooth,TResult Function( ImageFilter_Beauty value)?  beauty,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case ImageFilter_Blur() when blur != null:
@@ -530,7 +530,10 @@ return fade(_that);case ImageFilter_Vignette() when vignette != null:
 return vignette(_that);case ImageFilter_Highlights() when highlights != null:
 return highlights(_that);case ImageFilter_Shadows() when shadows != null:
 return shadows(_that);case ImageFilter_Structure() when structure != null:
-return structure(_that);case _:
+return structure(_that);case ImageFilter_Mood() when mood != null:
+return mood(_that);case ImageFilter_SkinSmooth() when skinSmooth != null:
+return skinSmooth(_that);case ImageFilter_Beauty() when beauty != null:
+return beauty(_that);case _:
   return orElse();
 
 }
@@ -548,7 +551,7 @@ return structure(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ImageFilter_Blur value)  blur,required TResult Function( ImageFilter_Sharpen value)  sharpen,required TResult Function( ImageFilter_Brightness value)  brightness,required TResult Function( ImageFilter_Contrast value)  contrast,required TResult Function( ImageFilter_Saturation value)  saturation,required TResult Function( ImageFilter_HueRotate value)  hueRotate,required TResult Function( ImageFilter_Oil value)  oil,required TResult Function( ImageFilter_FrostedGlass value)  frostedGlass,required TResult Function( ImageFilter_Pixelize value)  pixelize,required TResult Function( ImageFilter_Solarize value)  solarize,required TResult Function( ImageFilter_Preset value)  preset,required TResult Function( ImageFilter_Warmth value)  warmth,required TResult Function( ImageFilter_Fade value)  fade,required TResult Function( ImageFilter_Vignette value)  vignette,required TResult Function( ImageFilter_Highlights value)  highlights,required TResult Function( ImageFilter_Shadows value)  shadows,required TResult Function( ImageFilter_Structure value)  structure,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( ImageFilter_Blur value)  blur,required TResult Function( ImageFilter_Sharpen value)  sharpen,required TResult Function( ImageFilter_Brightness value)  brightness,required TResult Function( ImageFilter_Contrast value)  contrast,required TResult Function( ImageFilter_Saturation value)  saturation,required TResult Function( ImageFilter_HueRotate value)  hueRotate,required TResult Function( ImageFilter_Oil value)  oil,required TResult Function( ImageFilter_FrostedGlass value)  frostedGlass,required TResult Function( ImageFilter_Pixelize value)  pixelize,required TResult Function( ImageFilter_Solarize value)  solarize,required TResult Function( ImageFilter_Preset value)  preset,required TResult Function( ImageFilter_Warmth value)  warmth,required TResult Function( ImageFilter_Fade value)  fade,required TResult Function( ImageFilter_Vignette value)  vignette,required TResult Function( ImageFilter_Highlights value)  highlights,required TResult Function( ImageFilter_Shadows value)  shadows,required TResult Function( ImageFilter_Structure value)  structure,required TResult Function( ImageFilter_Mood value)  mood,required TResult Function( ImageFilter_SkinSmooth value)  skinSmooth,required TResult Function( ImageFilter_Beauty value)  beauty,}){
 final _that = this;
 switch (_that) {
 case ImageFilter_Blur():
@@ -568,7 +571,10 @@ return fade(_that);case ImageFilter_Vignette():
 return vignette(_that);case ImageFilter_Highlights():
 return highlights(_that);case ImageFilter_Shadows():
 return shadows(_that);case ImageFilter_Structure():
-return structure(_that);}
+return structure(_that);case ImageFilter_Mood():
+return mood(_that);case ImageFilter_SkinSmooth():
+return skinSmooth(_that);case ImageFilter_Beauty():
+return beauty(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -582,7 +588,7 @@ return structure(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ImageFilter_Blur value)?  blur,TResult? Function( ImageFilter_Sharpen value)?  sharpen,TResult? Function( ImageFilter_Brightness value)?  brightness,TResult? Function( ImageFilter_Contrast value)?  contrast,TResult? Function( ImageFilter_Saturation value)?  saturation,TResult? Function( ImageFilter_HueRotate value)?  hueRotate,TResult? Function( ImageFilter_Oil value)?  oil,TResult? Function( ImageFilter_FrostedGlass value)?  frostedGlass,TResult? Function( ImageFilter_Pixelize value)?  pixelize,TResult? Function( ImageFilter_Solarize value)?  solarize,TResult? Function( ImageFilter_Preset value)?  preset,TResult? Function( ImageFilter_Warmth value)?  warmth,TResult? Function( ImageFilter_Fade value)?  fade,TResult? Function( ImageFilter_Vignette value)?  vignette,TResult? Function( ImageFilter_Highlights value)?  highlights,TResult? Function( ImageFilter_Shadows value)?  shadows,TResult? Function( ImageFilter_Structure value)?  structure,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( ImageFilter_Blur value)?  blur,TResult? Function( ImageFilter_Sharpen value)?  sharpen,TResult? Function( ImageFilter_Brightness value)?  brightness,TResult? Function( ImageFilter_Contrast value)?  contrast,TResult? Function( ImageFilter_Saturation value)?  saturation,TResult? Function( ImageFilter_HueRotate value)?  hueRotate,TResult? Function( ImageFilter_Oil value)?  oil,TResult? Function( ImageFilter_FrostedGlass value)?  frostedGlass,TResult? Function( ImageFilter_Pixelize value)?  pixelize,TResult? Function( ImageFilter_Solarize value)?  solarize,TResult? Function( ImageFilter_Preset value)?  preset,TResult? Function( ImageFilter_Warmth value)?  warmth,TResult? Function( ImageFilter_Fade value)?  fade,TResult? Function( ImageFilter_Vignette value)?  vignette,TResult? Function( ImageFilter_Highlights value)?  highlights,TResult? Function( ImageFilter_Shadows value)?  shadows,TResult? Function( ImageFilter_Structure value)?  structure,TResult? Function( ImageFilter_Mood value)?  mood,TResult? Function( ImageFilter_SkinSmooth value)?  skinSmooth,TResult? Function( ImageFilter_Beauty value)?  beauty,}){
 final _that = this;
 switch (_that) {
 case ImageFilter_Blur() when blur != null:
@@ -602,7 +608,10 @@ return fade(_that);case ImageFilter_Vignette() when vignette != null:
 return vignette(_that);case ImageFilter_Highlights() when highlights != null:
 return highlights(_that);case ImageFilter_Shadows() when shadows != null:
 return shadows(_that);case ImageFilter_Structure() when structure != null:
-return structure(_that);case _:
+return structure(_that);case ImageFilter_Mood() when mood != null:
+return mood(_that);case ImageFilter_SkinSmooth() when skinSmooth != null:
+return skinSmooth(_that);case ImageFilter_Beauty() when beauty != null:
+return beauty(_that);case _:
   return null;
 
 }
@@ -619,7 +628,7 @@ return structure(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( int radius)?  blur,TResult Function()?  sharpen,TResult Function( int amount)?  brightness,TResult Function( double amount)?  contrast,TResult Function( double amount)?  saturation,TResult Function( double degrees)?  hueRotate,TResult Function( int radius,  double intensity)?  oil,TResult Function()?  frostedGlass,TResult Function( int size)?  pixelize,TResult Function()?  solarize,TResult Function( FilterPreset preset,  double strength)?  preset,TResult Function( double amount)?  warmth,TResult Function( double amount)?  fade,TResult Function( double amount)?  vignette,TResult Function( double amount)?  highlights,TResult Function( double amount)?  shadows,TResult Function( double amount)?  structure,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( int radius)?  blur,TResult Function()?  sharpen,TResult Function( int amount)?  brightness,TResult Function( double amount)?  contrast,TResult Function( double amount)?  saturation,TResult Function( double degrees)?  hueRotate,TResult Function( int radius,  double intensity)?  oil,TResult Function()?  frostedGlass,TResult Function( int size)?  pixelize,TResult Function()?  solarize,TResult Function( FilterPreset preset,  double strength)?  preset,TResult Function( double amount)?  warmth,TResult Function( double amount)?  fade,TResult Function( double amount)?  vignette,TResult Function( double amount)?  highlights,TResult Function( double amount)?  shadows,TResult Function( double amount)?  structure,TResult Function( MoodFilterPreset preset,  double strength)?  mood,TResult Function( double strength)?  skinSmooth,TResult Function( BeautyParams params)?  beauty,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case ImageFilter_Blur() when blur != null:
 return blur(_that.radius);case ImageFilter_Sharpen() when sharpen != null:
@@ -638,7 +647,10 @@ return fade(_that.amount);case ImageFilter_Vignette() when vignette != null:
 return vignette(_that.amount);case ImageFilter_Highlights() when highlights != null:
 return highlights(_that.amount);case ImageFilter_Shadows() when shadows != null:
 return shadows(_that.amount);case ImageFilter_Structure() when structure != null:
-return structure(_that.amount);case _:
+return structure(_that.amount);case ImageFilter_Mood() when mood != null:
+return mood(_that.preset,_that.strength);case ImageFilter_SkinSmooth() when skinSmooth != null:
+return skinSmooth(_that.strength);case ImageFilter_Beauty() when beauty != null:
+return beauty(_that.params);case _:
   return orElse();
 
 }
@@ -656,7 +668,7 @@ return structure(_that.amount);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( int radius)  blur,required TResult Function()  sharpen,required TResult Function( int amount)  brightness,required TResult Function( double amount)  contrast,required TResult Function( double amount)  saturation,required TResult Function( double degrees)  hueRotate,required TResult Function( int radius,  double intensity)  oil,required TResult Function()  frostedGlass,required TResult Function( int size)  pixelize,required TResult Function()  solarize,required TResult Function( FilterPreset preset,  double strength)  preset,required TResult Function( double amount)  warmth,required TResult Function( double amount)  fade,required TResult Function( double amount)  vignette,required TResult Function( double amount)  highlights,required TResult Function( double amount)  shadows,required TResult Function( double amount)  structure,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( int radius)  blur,required TResult Function()  sharpen,required TResult Function( int amount)  brightness,required TResult Function( double amount)  contrast,required TResult Function( double amount)  saturation,required TResult Function( double degrees)  hueRotate,required TResult Function( int radius,  double intensity)  oil,required TResult Function()  frostedGlass,required TResult Function( int size)  pixelize,required TResult Function()  solarize,required TResult Function( FilterPreset preset,  double strength)  preset,required TResult Function( double amount)  warmth,required TResult Function( double amount)  fade,required TResult Function( double amount)  vignette,required TResult Function( double amount)  highlights,required TResult Function( double amount)  shadows,required TResult Function( double amount)  structure,required TResult Function( MoodFilterPreset preset,  double strength)  mood,required TResult Function( double strength)  skinSmooth,required TResult Function( BeautyParams params)  beauty,}) {final _that = this;
 switch (_that) {
 case ImageFilter_Blur():
 return blur(_that.radius);case ImageFilter_Sharpen():
@@ -675,7 +687,10 @@ return fade(_that.amount);case ImageFilter_Vignette():
 return vignette(_that.amount);case ImageFilter_Highlights():
 return highlights(_that.amount);case ImageFilter_Shadows():
 return shadows(_that.amount);case ImageFilter_Structure():
-return structure(_that.amount);}
+return structure(_that.amount);case ImageFilter_Mood():
+return mood(_that.preset,_that.strength);case ImageFilter_SkinSmooth():
+return skinSmooth(_that.strength);case ImageFilter_Beauty():
+return beauty(_that.params);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -689,7 +704,7 @@ return structure(_that.amount);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( int radius)?  blur,TResult? Function()?  sharpen,TResult? Function( int amount)?  brightness,TResult? Function( double amount)?  contrast,TResult? Function( double amount)?  saturation,TResult? Function( double degrees)?  hueRotate,TResult? Function( int radius,  double intensity)?  oil,TResult? Function()?  frostedGlass,TResult? Function( int size)?  pixelize,TResult? Function()?  solarize,TResult? Function( FilterPreset preset,  double strength)?  preset,TResult? Function( double amount)?  warmth,TResult? Function( double amount)?  fade,TResult? Function( double amount)?  vignette,TResult? Function( double amount)?  highlights,TResult? Function( double amount)?  shadows,TResult? Function( double amount)?  structure,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( int radius)?  blur,TResult? Function()?  sharpen,TResult? Function( int amount)?  brightness,TResult? Function( double amount)?  contrast,TResult? Function( double amount)?  saturation,TResult? Function( double degrees)?  hueRotate,TResult? Function( int radius,  double intensity)?  oil,TResult? Function()?  frostedGlass,TResult? Function( int size)?  pixelize,TResult? Function()?  solarize,TResult? Function( FilterPreset preset,  double strength)?  preset,TResult? Function( double amount)?  warmth,TResult? Function( double amount)?  fade,TResult? Function( double amount)?  vignette,TResult? Function( double amount)?  highlights,TResult? Function( double amount)?  shadows,TResult? Function( double amount)?  structure,TResult? Function( MoodFilterPreset preset,  double strength)?  mood,TResult? Function( double strength)?  skinSmooth,TResult? Function( BeautyParams params)?  beauty,}) {final _that = this;
 switch (_that) {
 case ImageFilter_Blur() when blur != null:
 return blur(_that.radius);case ImageFilter_Sharpen() when sharpen != null:
@@ -708,7 +723,10 @@ return fade(_that.amount);case ImageFilter_Vignette() when vignette != null:
 return vignette(_that.amount);case ImageFilter_Highlights() when highlights != null:
 return highlights(_that.amount);case ImageFilter_Shadows() when shadows != null:
 return shadows(_that.amount);case ImageFilter_Structure() when structure != null:
-return structure(_that.amount);case _:
+return structure(_that.amount);case ImageFilter_Mood() when mood != null:
+return mood(_that.preset,_that.strength);case ImageFilter_SkinSmooth() when skinSmooth != null:
+return skinSmooth(_that.strength);case ImageFilter_Beauty() when beauty != null:
+return beauty(_that.params);case _:
   return null;
 
 }
@@ -1735,6 +1753,208 @@ class _$ImageFilter_StructureCopyWithImpl<$Res>
   return _then(ImageFilter_Structure(
 amount: null == amount ? _self.amount : amount // ignore: cast_nullable_to_non_nullable
 as double,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ImageFilter_Mood extends ImageFilter {
+  const ImageFilter_Mood({required this.preset, required this.strength}): super._();
+  
+
+ final  MoodFilterPreset preset;
+/// 0.0 = identity, 1.0 = full mood grade.
+ final  double strength;
+
+/// Create a copy of ImageFilter
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ImageFilter_MoodCopyWith<ImageFilter_Mood> get copyWith => _$ImageFilter_MoodCopyWithImpl<ImageFilter_Mood>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ImageFilter_Mood&&(identical(other.preset, preset) || other.preset == preset)&&(identical(other.strength, strength) || other.strength == strength));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,preset,strength);
+
+@override
+String toString() {
+  return 'ImageFilter.mood(preset: $preset, strength: $strength)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ImageFilter_MoodCopyWith<$Res> implements $ImageFilterCopyWith<$Res> {
+  factory $ImageFilter_MoodCopyWith(ImageFilter_Mood value, $Res Function(ImageFilter_Mood) _then) = _$ImageFilter_MoodCopyWithImpl;
+@useResult
+$Res call({
+ MoodFilterPreset preset, double strength
+});
+
+
+
+
+}
+/// @nodoc
+class _$ImageFilter_MoodCopyWithImpl<$Res>
+    implements $ImageFilter_MoodCopyWith<$Res> {
+  _$ImageFilter_MoodCopyWithImpl(this._self, this._then);
+
+  final ImageFilter_Mood _self;
+  final $Res Function(ImageFilter_Mood) _then;
+
+/// Create a copy of ImageFilter
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? preset = null,Object? strength = null,}) {
+  return _then(ImageFilter_Mood(
+preset: null == preset ? _self.preset : preset // ignore: cast_nullable_to_non_nullable
+as MoodFilterPreset,strength: null == strength ? _self.strength : strength // ignore: cast_nullable_to_non_nullable
+as double,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ImageFilter_SkinSmooth extends ImageFilter {
+  const ImageFilter_SkinSmooth({required this.strength}): super._();
+  
+
+/// 0.0 = none, 1.0 = full smooth.
+ final  double strength;
+
+/// Create a copy of ImageFilter
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ImageFilter_SkinSmoothCopyWith<ImageFilter_SkinSmooth> get copyWith => _$ImageFilter_SkinSmoothCopyWithImpl<ImageFilter_SkinSmooth>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ImageFilter_SkinSmooth&&(identical(other.strength, strength) || other.strength == strength));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,strength);
+
+@override
+String toString() {
+  return 'ImageFilter.skinSmooth(strength: $strength)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ImageFilter_SkinSmoothCopyWith<$Res> implements $ImageFilterCopyWith<$Res> {
+  factory $ImageFilter_SkinSmoothCopyWith(ImageFilter_SkinSmooth value, $Res Function(ImageFilter_SkinSmooth) _then) = _$ImageFilter_SkinSmoothCopyWithImpl;
+@useResult
+$Res call({
+ double strength
+});
+
+
+
+
+}
+/// @nodoc
+class _$ImageFilter_SkinSmoothCopyWithImpl<$Res>
+    implements $ImageFilter_SkinSmoothCopyWith<$Res> {
+  _$ImageFilter_SkinSmoothCopyWithImpl(this._self, this._then);
+
+  final ImageFilter_SkinSmooth _self;
+  final $Res Function(ImageFilter_SkinSmooth) _then;
+
+/// Create a copy of ImageFilter
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? strength = null,}) {
+  return _then(ImageFilter_SkinSmooth(
+strength: null == strength ? _self.strength : strength // ignore: cast_nullable_to_non_nullable
+as double,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class ImageFilter_Beauty extends ImageFilter {
+  const ImageFilter_Beauty({required this.params}): super._();
+  
+
+ final  BeautyParams params;
+
+/// Create a copy of ImageFilter
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$ImageFilter_BeautyCopyWith<ImageFilter_Beauty> get copyWith => _$ImageFilter_BeautyCopyWithImpl<ImageFilter_Beauty>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is ImageFilter_Beauty&&(identical(other.params, params) || other.params == params));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,params);
+
+@override
+String toString() {
+  return 'ImageFilter.beauty(params: $params)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $ImageFilter_BeautyCopyWith<$Res> implements $ImageFilterCopyWith<$Res> {
+  factory $ImageFilter_BeautyCopyWith(ImageFilter_Beauty value, $Res Function(ImageFilter_Beauty) _then) = _$ImageFilter_BeautyCopyWithImpl;
+@useResult
+$Res call({
+ BeautyParams params
+});
+
+
+
+
+}
+/// @nodoc
+class _$ImageFilter_BeautyCopyWithImpl<$Res>
+    implements $ImageFilter_BeautyCopyWith<$Res> {
+  _$ImageFilter_BeautyCopyWithImpl(this._self, this._then);
+
+  final ImageFilter_Beauty _self;
+  final $Res Function(ImageFilter_Beauty) _then;
+
+/// Create a copy of ImageFilter
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? params = null,}) {
+  return _then(ImageFilter_Beauty(
+params: null == params ? _self.params : params // ignore: cast_nullable_to_non_nullable
+as BeautyParams,
   ));
 }
 

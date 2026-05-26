@@ -8,8 +8,10 @@ import 'package:rust_image/src/rust/api/layers.dart';
 import 'package:rust_image/src/rust/frb_generated.dart';
 
 export 'package:rust_image/src/rust/api/advanced.dart';
+export 'package:rust_image/src/rust/api/face.dart';
 export 'package:rust_image/src/rust/api/image.dart';
 export 'package:rust_image/src/rust/api/layers.dart';
+export 'package:rust_image/src/rust/api/texture.dart';
 export 'package:rust_image/src/rust/frb_generated.dart' show RustLib;
 
 /// High-performance image editor powered by Rust.
@@ -33,7 +35,14 @@ class RustImageEditor {
         if (!file.existsSync()) {
           throw StateError('RUST_IMAGE_DYLIB not found: $explicit');
         }
-        await RustLib.init(externalLibrary: ExternalLibrary.open(file.absolute.path));
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.open(file.absolute.path),
+        );
+      } else if (Platform.isMacOS || Platform.isIOS) {
+        // Cargokit static-links Rust into the plugin pod (rust_image.framework).
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.process(iKnowHowToUseIt: true),
+        );
       } else {
         await RustLib.init();
       }
@@ -397,6 +406,8 @@ class RustImageEditor {
     required int x,
     required int y,
     BlendMode blendMode = BlendMode.normal,
+    int overlayWidth = 0,
+    int overlayHeight = 0,
   }) {
     return overlayOnRgbaBuffer(
       base: base,
@@ -404,6 +415,8 @@ class RustImageEditor {
       x: x,
       y: y,
       blendMode: blendMode,
+      overlayWidth: overlayWidth,
+      overlayHeight: overlayHeight,
     );
   }
 

@@ -10,8 +10,8 @@ buildscript {
     }
 
     dependencies {
-        // The Android Gradle Plugin knows how to build native code with the NDK.
         classpath 'com.android.tools.build:gradle:7.3.0'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.24'
     }
 }
 
@@ -23,6 +23,7 @@ rootProject.allprojects {
 }
 
 apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
 
 android {
     if (project.android.hasProperty("namespace")) {
@@ -44,9 +45,19 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
     defaultConfig {
         minSdkVersion 21
     }
+}
+
+dependencies {
+    implementation 'com.google.mlkit:face-detection:16.1.7'
+    implementation 'com.google.mlkit:segmentation-selfie:16.0.0-beta6'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
 }
 
 apply from: "../cargokit/gradle/plugin.gradle"

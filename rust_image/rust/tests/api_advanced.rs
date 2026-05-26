@@ -394,7 +394,7 @@ fn overlay_on_rgba_each_blend_mode() {
         BlendMode::Add,
     ] {
         let buf = common::synthetic_rgba(64, 64);
-        let out = overlay_on_rgba_buffer(buf, over_bytes.clone(), 10, 10, mode)
+        let out = overlay_on_rgba_buffer(buf, over_bytes.clone(), 10, 10, mode, 0, 0)
             .unwrap_or_else(|e| panic!("overlay {mode:?} failed: {e}"));
         assert_eq!((out.width, out.height), (64, 64), "blend {mode:?}");
     }
@@ -404,12 +404,12 @@ fn overlay_on_rgba_each_blend_mode() {
 fn overlay_on_rgba_offscreen_offsets_dont_panic() {
     let over_bytes = synthetic_png(16, 16);
     let buf = common::synthetic_rgba(64, 64);
-    let out = overlay_on_rgba_buffer(buf, over_bytes.clone(), -100, -100, BlendMode::Normal)
+    let out = overlay_on_rgba_buffer(buf, over_bytes.clone(), -100, -100, BlendMode::Normal, 0, 0)
         .expect("offscreen ok");
     assert_eq!((out.width, out.height), (64, 64));
 
     let buf = common::synthetic_rgba(64, 64);
-    let out = overlay_on_rgba_buffer(buf, over_bytes, 9999, 9999, BlendMode::Normal)
+    let out = overlay_on_rgba_buffer(buf, over_bytes, 9999, 9999, BlendMode::Normal, 0, 0)
         .expect("far offscreen ok");
     assert_eq!((out.width, out.height), (64, 64));
 }

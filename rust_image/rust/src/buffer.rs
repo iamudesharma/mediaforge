@@ -229,6 +229,8 @@ fn filter_rgba_with_backend_inner(
                     | ImageFilter::HueRotate { .. }
                     | ImageFilter::Blur { .. }
                     | ImageFilter::Sharpen
+                    | ImageFilter::Vignette { .. }
+                    | ImageFilter::Mood { .. }
             ) {
                 return crate::gpu::filter_rgba(buffer, filter);
             }

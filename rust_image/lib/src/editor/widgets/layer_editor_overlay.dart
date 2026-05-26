@@ -171,22 +171,6 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
                   },
                 ),
               ),
-        if (widget.paintMode)
-          Positioned.fill(
-            child: PaintCanvas(
-              imageWidth: widget.imageWidth,
-              imageHeight: widget.imageHeight,
-              childSize: childSize,
-              viewerTransform: widget.viewerTransform,
-              onStroke: widget.onPaintStroke == null
-                  ? null
-                  : (pts) => widget.onPaintStroke!(
-                        pts,
-                        childSize: childSize,
-                      ),
-              onStrokeUpdate: widget.onActiveStrokeUpdate,
-            ),
-          ),
         if (stackBox != null)
           for (final layer in _hitTestLayersList())
             if (layer.visible &&
@@ -198,6 +182,7 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
                 coords: _layerCoords(),
                 stackBox: stackBox,
                 selected: layer.id == widget.stack.selectedId,
+                ignorePointer: widget.paintMode,
                 onTransformCommit: widget.onStackChanged,
                 onTap: () {
                   if (widget.stack.selectedId == layer.id) return;
@@ -224,6 +209,22 @@ class _LayerEditorOverlayState extends State<LayerEditorOverlay> {
                 },
                 onTransformBegin: widget.onTransformBegin,
               ),
+        if (widget.paintMode)
+          Positioned.fill(
+            child: PaintCanvas(
+              imageWidth: widget.imageWidth,
+              imageHeight: widget.imageHeight,
+              childSize: childSize,
+              viewerTransform: widget.viewerTransform,
+              onStroke: widget.onPaintStroke == null
+                  ? null
+                  : (pts) => widget.onPaintStroke!(
+                        pts,
+                        childSize: childSize,
+                      ),
+              onStrokeUpdate: widget.onActiveStrokeUpdate,
+            ),
+          ),
           ],
         );
       },

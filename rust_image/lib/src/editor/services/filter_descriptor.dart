@@ -1,3 +1,4 @@
+import 'package:rust_image/src/rust/api/face.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
 /// Serializable filter spec for isolate messages.
@@ -15,6 +16,18 @@ class FilterDescriptor {
         'preset': p.index,
         'strength': strength,
       });
+
+  factory FilterDescriptor.mood(
+    MoodFilterPreset p, {
+    double strength = 1.0,
+  }) =>
+      FilterDescriptor('mood', {
+        'preset': p.index,
+        'strength': strength,
+      });
+
+  /// True for swipe mood filters (not Filters-tab presets).
+  bool get isMood => kind == 'mood';
 
   factory FilterDescriptor.blur({required int radius}) =>
       FilterDescriptor('blur', {'radius': radius});
@@ -50,6 +63,22 @@ class FilterDescriptor {
 
   factory FilterDescriptor.structure({required double amount}) =>
       FilterDescriptor('structure', {'amount': amount});
+
+  /// Regional skin smooth (0–1); mask applied outside the edit graph.
+  factory FilterDescriptor.skinSmooth({required double strength}) =>
+      FilterDescriptor('skinSmooth', {'strength': strength});
+
+  /// Regional beauty (Nexus B); masks applied outside the edit graph.
+  factory FilterDescriptor.beauty({required BeautyParams params}) =>
+      FilterDescriptor('beauty', {
+        'skinSmooth': params.skinSmooth,
+        'eyeBrighten': params.eyeBrighten,
+        'lipTint': params.lipTint.index,
+        'lipTintStrength': params.lipTintStrength,
+        'lipPlump': params.lipPlump,
+        'blush': params.blush,
+        'underEye': params.underEye,
+      });
 
   factory FilterDescriptor.oil({required int radius, required double intensity}) =>
       FilterDescriptor('oil', {'radius': radius, 'intensity': intensity});
@@ -95,6 +124,12 @@ class FilterDescriptor {
       ImageFilter_Solarize() => FilterDescriptor.solarize(),
       ImageFilter_Preset(:final preset, :final strength) =>
         FilterDescriptor.preset(preset, strength: strength),
+      ImageFilter_Mood(:final preset, :final strength) =>
+        FilterDescriptor.mood(preset, strength: strength),
+      ImageFilter_SkinSmooth(:final strength) =>
+        FilterDescriptor.skinSmooth(strength: strength),
+      ImageFilter_Beauty(:final params) =>
+        FilterDescriptor.beauty(params: params),
     };
   }
 
@@ -103,6 +138,11 @@ class FilterDescriptor {
       case 'preset':
         return ImageFilter.preset(
           preset: FilterPreset.values[params['preset']!.toInt()],
+          strength: presetStrength,
+        );
+      case 'mood':
+        return ImageFilter.mood(
+          preset: MoodFilterPreset.values[params['preset']!.toInt()],
           strength: presetStrength,
         );
       case 'blur':
@@ -140,6 +180,22 @@ class FilterDescriptor {
         return ImageFilter.pixelize(size: params['size']!.toInt());
       case 'solarize':
         return const ImageFilter.solarize();
+      case 'skinSmooth':
+        return ImageFilter.skinSmooth(
+          strength: (params['strength'] ?? 0).toDouble().clamp(0.0, 1.0),
+        );
+      case 'beauty':
+        return ImageFilter.beauty(
+          params: BeautyParams(
+            skinSmooth: (params['skinSmooth'] ?? 0).toDouble(),
+            eyeBrighten: (params['eyeBrighten'] ?? 0).toDouble(),
+            lipTint: LipTintPreset.values[(params['lipTint'] ?? 0).toInt()],
+            lipTintStrength: (params['lipTintStrength'] ?? 0).toDouble(),
+            lipPlump: (params['lipPlump'] ?? 0).toDouble(),
+            blush: (params['blush'] ?? 0).toDouble(),
+            underEye: (params['underEye'] ?? 0).toDouble(),
+          ),
+        );
       default:
         throw ArgumentError('Unknown filter kind: $kind');
     }

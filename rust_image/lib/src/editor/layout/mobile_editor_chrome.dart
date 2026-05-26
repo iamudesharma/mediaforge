@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../crop_controller.dart';
@@ -539,12 +541,16 @@ class _LuminaTopBar extends StatelessWidget {
             IconButton(
               icon: const Icon(Icons.undo_rounded, size: 22),
               tooltip: 'Undo',
-              onPressed: session.canUndo && !session.busy ? session.undo : null,
+              onPressed: session.canUndo && !session.busy
+                  ? () => unawaited(session.undo())
+                  : null,
             ),
             IconButton(
               icon: const Icon(Icons.redo_rounded, size: 22),
               tooltip: 'Redo',
-              onPressed: session.canRedo && !session.busy ? session.redo : null,
+              onPressed: session.canRedo && !session.busy
+                  ? () => unawaited(session.redo())
+                  : null,
             ),
             if (showCropDone && onCropDone != null)
               Padding(

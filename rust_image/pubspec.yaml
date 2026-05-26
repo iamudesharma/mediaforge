@@ -17,6 +17,7 @@ dependencies:
   plugin_platform_interface: ^2.1.8
   file_selector: ^1.1.0
   image_picker: ^1.2.2
+  camera: ^0.11.1
   gal: ^2.3.2
   path_provider: ^2.1.5
 dev_dependencies:
@@ -51,12 +52,16 @@ flutter:
     platforms:
       android:
         ffiPlugin: true
+        package: com.flutter_rust_bridge.rust_image
+        pluginClass: RustImagePlugin
       ios:
         ffiPlugin: true
+        pluginClass: RustImagePlugin
       linux:
         ffiPlugin: true
       macos:
         ffiPlugin: true
+        pluginClass: RustImagePlugin
       windows:
         ffiPlugin: true
 

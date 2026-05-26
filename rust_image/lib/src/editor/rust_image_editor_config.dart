@@ -16,6 +16,7 @@ class RustImageEditorConfig {
       EditorTool.import,
       EditorTool.transform,
       EditorTool.filters,
+      EditorTool.beauty,
       EditorTool.adjust,
       EditorTool.draw,
       EditorTool.layers,
@@ -39,10 +40,18 @@ class RustImageEditorConfig {
     this.previewMaxEdge = EditorPipelineDefaults.previewMaxEdge,
     this.showPerformanceInStatus = true,
     this.useRgbaPreview = true,
+    this.useGpuTexturePreview = false,
     this.layoutMode = EditorLayoutMode.auto,
     this.toolBarPlacement = EditorToolBarPlacement.auto,
     this.showMobileMetaOverlay = true,
     this.showCanvasFloatingChrome = true,
+    this.enableSwipeMoodFilters = true,
+    this.swipeMoodFilterStrength = 1.0,
+    this.enableSwipeBeautyLooks = true,
+    this.enableLiveCameraBeauty = true,
+    this.showDebugFaceLandmarks = false,
+    this.liveCameraMaxEdge = 720,
+    this.liveCameraAnalyzeEveryNFrames = 3,
     this.session,
   });
 
@@ -68,7 +77,8 @@ class RustImageEditorConfig {
   final void Function(EditorSession session, Uint8List bytes)? onImageChanged;
 
   /// Optional custom export handler. When null, **Export image** saves to
-  /// Photos/gallery (mobile) or Downloads (desktop) via [ImageExportSaver].
+  /// Photos/gallery (mobile), Downloads (Windows/Linux), or app Documents/Exports
+  /// (macOS sandbox) via [ImageExportSaver].
   final void Function(Uint8List bytes, ImageInfo info)? onExport;
 
   /// Example / host apps: snackbars or analytics when the user holds compare.
@@ -95,6 +105,10 @@ class RustImageEditorConfig {
   /// Sprint 4 — show preview via [decodeImageFromPixels] (no per-frame JPEG).
   final bool useRgbaPreview;
 
+  /// Sprint 11b.2 — Flutter [Texture] preview via GPU surface (macOS first).
+  /// Falls back to [useRgbaPreview] when unavailable.
+  final bool useGpuTexturePreview;
+
   /// [EditorLayoutMode.auto]: sidebar ≥900px wide, immersive stack on phones.
   final EditorLayoutMode layoutMode;
 
@@ -106,6 +120,27 @@ class RustImageEditorConfig {
 
   /// Flip + compact layers popover on the canvas (mobile); layers omitted from bottom nav.
   final bool showCanvasFloatingChrome;
+
+  /// Sprint 11 — swipe left/right on preview for mood filters (Rose, Clarendon, …).
+  final bool enableSwipeMoodFilters;
+
+  /// Strength for swipe mood filters (0–1, default full like Instagram).
+  final double swipeMoodFilterStrength;
+
+  /// Nexus C — swipe left/right on preview for beauty looks (Beauty tool only).
+  final bool enableSwipeBeautyLooks;
+
+  /// Nexus A — front-camera live beauty preview (mobile).
+  final bool enableLiveCameraBeauty;
+
+  /// Nexus A — draw landmark dots on preview (dev / debug).
+  final bool showDebugFaceLandmarks;
+
+  /// Max long edge for live camera beauty processing.
+  final int liveCameraMaxEdge;
+
+  /// Run native face analysis every N camera frames (temporal smooth between).
+  final int liveCameraAnalyzeEveryNFrames;
 
   /// Optional external session (you manage [EditorSession.dispose]).
   final EditorSession? session;

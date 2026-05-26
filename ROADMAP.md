@@ -2,8 +2,8 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** Sprint 10 (Layers, draw polish, tone depth, straighten)  
-**Status:** Sprint 9 **done** — IG crop overlay, filter strength, warmth/fade/vignette, paint eraser
+**Current sprint:** Sprint Nexus (face AR + beauty looks)  
+**Status:** Nexus A v1 + Nexus E (partial) shipped; MediaPipe 468 + texture-only live remain
 
 ---
 
@@ -240,14 +240,165 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 | Track | Notes |
 |-------|-------|
 | Straighten gestures | Two-finger refine on trackpad |
-| GPU vignette + LUT pack | Sprint 2b (`vignette.wgsl`, `.cube` presets) |
-| Metal texture preview | Sprint 4b (`Texture` + shared wgpu handle) |
+
+*(GPU LUT + texture preview moved to Sprint 11b.)*
 
 ---
 
-## Sprint 11 — Beauty / face (planned)
+## Sprint 11 — Swipe mood filters (done)
 
-Regional tone masks from face landmarks (ML Kit / native); not a small FRB filter.
+**Goal:** Instagram/Snapchat-style global mood filters (Rose, Clarendon, …) via horizontal swipe on the preview — not in the Filters tab. Existing 14 Filters-tab presets unchanged.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `MoodFilterPreset` + parametric recipes | Done | [`mood_presets.rs`](rust_image/rust/src/filters/mood_presets.rs) |
+| `ImageFilter::Mood` + RGBA path | Done | Separate from `FilterPreset` / photon presets |
+| Swipe on preview + name chip | Done | [`swipe_mood_filter.dart`](rust_image/lib/src/editor/widgets/swipe_mood_filter.dart) |
+| Dedicated mood slot in edit graph | Done | `EditGraph.replaceMoodFilter` |
+| Commit on finger release | Done | `EditorSession.setMoodFilter` |
+
+---
+
+## Sprint 11b.1 — GPU LUT + vignette (done)
+
+**Goal:** Mood swipe + Adjust vignette on wgpu (WGSL compute); ~1–2 GPU passes + one readback. Filters-tab photon presets unchanged.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `lut.wgsl` + 33³ mood LUT bake | Done | Color grade from `MoodRecipe`; vignette + structure as GPU sidecars |
+| `vignette.wgsl` | Done | Matches `apply_vignette_rgba` |
+| Wire `ImageFilter::Mood` + `Vignette` in GPU pipeline | Done | `is_gpu_capable`, `process_gpu_pipeline`, `perf.rs` |
+| Benchmark + GPU vs CPU tolerance tests | Done | `--only filter_rgba_mood_*` |
+
+**Backend note:** Metal / Vulkan / DX12 via wgpu `Backends::all()` — no separate `.metal` / GLSL tree.
+
+```bash
+cd rust_image/rust
+cargo run --release --features gpu --bin rust_image_benchmark -- \
+  --synthetic -n 10 --only filter_rgba_mood_clarendon
+```
+
+---
+
+## Sprint 11b.2 — Flutter Texture preview (done)
+
+**Goal:** GPU-resident edit surface; Flutter `Texture` widget (no Dart `ui.Image` decode). macOS Metal first.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `GpuEditSurface` + FRB texture handle API | Done | `api/texture.rs`, `gpu/surface.rs` |
+| macOS CVPixelBuffer → `TextureRegistry` | Done | `macos/Classes/RustImageTexturePlugin.swift` |
+| `GpuTexturePreview` + `useGpuTexturePreview` | Done | Fallback to `RgbaPreviewImage` |
+
+---
+
+## Sprint 12 — MediaPipe face + beauty (Phase 3, static photo v1) — done
+
+**Goal:** Regional face beauty on still images (macOS + iOS). Live camera deferred to Sprint 12b.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Native face analysis (`rust_image/face`) | Done | Apple Vision landmarks + person mask; MediaPipe `.task` optional via [`scripts/download_mediapipe_models.sh`](rust_image/scripts/download_mediapipe_models.sh) |
+| FRB `api/face.rs` + `regions.rs` mask | Done | Feathered R8 skin mask at edit resolution |
+| `EditorTool.beauty` + skin smooth slider | Done | Mask in session; strength in edit graph slot |
+| GPU preview beauty pass | Done | `apply_gpu_beauty_pipeline` — skin/eye/lip/blush WGSL on texture preview (Nexus D) |
+| Design doc | Done | [`docs/PHASE3_MEDIAPIPE.md`](docs/PHASE3_MEDIAPIPE.md) |
+
+**Verify:** Import portrait → Beauty tab → slider (face only) → export. No face → “No face detected”. Mood/filters regression unchanged.
+
+---
+
+## Sprint Nexus — Face AR + beauty looks (in progress)
+
+**Goal:** Instagram / Snapchat-style face beautification: one-tap looks, regional makeup sliders (eyes, lips, blush), then live front-camera. Replaces the old “Sprint 12b” scope and extends it.
+
+**Done (still photo):** Nexus B (regional makeup), Nexus C (looks strip + swipe), Nexus D (GPU WGSL + Android ML Kit). **Next:** Nexus A (live camera).
+
+**Design:** [`docs/PHASE3_MEDIAPIPE.md`](docs/PHASE3_MEDIAPIPE.md)
+
+```text
+Still / camera → face analysis → regional masks → makeup passes → optional BeautyLook preset
+  (Mood swipe + Filters tab stay global — unchanged)
+```
+
+### Nexus A — Live camera + mesh upgrade (v1)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Front-camera → live RGBA preview | Done | `LiveCameraService` + YUV→RGBA; beauty every frame |
+| `TemporalSmoother` per frame | Done | FRB `api/temporal.rs`; α = 0.25; analyze every 3 frames |
+| MediaPipe Face Landmarker (468 pts) | Planned | Vision / ML Kit fallback today; `.task` bundle optional |
+| Live beauty at ≥24 fps | Done (v1) | CPU beauty on mobile; macOS GPU path when texture preview on |
+| Debug landmark overlay | Done | `showDebugFaceLandmarks` + `FaceLandmarkOverlay` |
+| Skip GPU readback (texture-only) | Planned | Live uses RGBA preview on mobile; macOS still readback v1 |
+
+**Acceptance:** Front camera preview with stable skin mask after ~5 frames; no full-frame JPEG in loop.
+
+### Nexus B — Regional makeup (still photo first, then live) — done
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `build_lip_mask` / `build_eye_mask` / blush regions | Done | [`regions.rs`](rust_image/rust/src/face/regions.rs); Vision lip indices; eraser exclude mask |
+| Eye brighten | Done | CPU + GPU [`eye_brighten.wgsl`](rust_image/rust/src/gpu/shaders/eye_brighten.wgsl) |
+| Lip color + swatches | Done | HSL tint; Nude / Rose / Berry / Coral / Red |
+| Lip size (plump / thin) | Done | [`warp.rs`](rust_image/rust/src/face/warp.rs) — CPU warp; cap ±15% at 100% |
+| Cheek blush | Done | Cheek ellipses; CPU + [`blush.wgsl`](rust_image/rust/src/gpu/shaders/blush.wgsl) |
+| `BeautyParams` in edit graph | Done | Structured slot replaces scalar `skinSmooth` |
+| Beauty panel fine-tune sliders | Done | Collapsible section under looks strip; eraser |
+
+**Acceptance:** Portrait at edit-res — each slider affects only its region; 100% lip plump still recognizable; export at full res.
+
+### Nexus C — Beauty looks (one-tap presets) — done
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `BeautyLookPreset` + `BeautyRecipe` | Done | [`face/looks.rs`](rust_image/rust/src/face/looks.rs) — mirror [`mood_presets.rs`](rust_image/rust/src/filters/mood_presets.rs) |
+| Horizontal looks strip in Beauty panel | Done | Natural, Soft, Glow, Glam, Clear |
+| Tap to apply / commit | Done | Sets all regional sliders; user can override after |
+| Undo / redo / export | Done | Committed look + overrides in graph |
+| Optional: swipe between looks on preview | Done | Same UX pattern as mood swipe on Beauty tool |
+
+Example recipes (face-only, not global grade):
+
+| Look | Skin | Eyes | Lips | Plump | Blush |
+|------|------|------|------|-------|-------|
+| Natural | 0.35 | 0.10 | nude 0.2 | 0.0 | 0.0 |
+| Soft | 0.55 | 0.20 | rose 0.3 | 0.15 | 0.15 |
+| Glow | 0.45 | 0.35 | coral 0.25 | 0.10 | 0.20 |
+| Glam | 0.50 | 0.40 | berry 0.5 | 0.25 | 0.10 |
+| Clear | 0.70 | 0.15 | none | 0.0 | 0.0 |
+
+**Acceptance:** Pick “Soft” → visible skin + lip change on face; tweak lip color → export matches preview.
+
+### Nexus D — Platform parity + GPU bind — done
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Bind `skin_smooth.wgsl` on GPU surface | Done | [`beauty_pass.rs`](rust_image/rust/src/gpu/beauty_pass.rs) on texture preview |
+| `lip_tint.wgsl`, `eye_brighten.wgsl`, `blush.wgsl` | Done | Chained on `GpuEditSurface`; lip plump CPU warp |
+| Android ML Kit face plugin | Done | [`RustImageFacePlugin.kt`](rust_image/android/src/main/kotlin/com/flutter_rust_bridge/rust_image/RustImageFacePlugin.kt) — same FRB shape |
+| Benchmark beauty passes | Done | `--only beauty_skin_smooth_gpu` / `beauty_skin_smooth_cpu` |
+| Optional model download UX | Planned | Feature flag if bundle size too large |
+
+**Acceptance:** iOS + Android portrait beauty looks; status line shows `gpu_lip` / `gpu_eye` when GPU path used.
+
+### Nexus E — Polish (partial)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Under-eye softening | Done | `under_eye` in `BeautyParams`; `build_under_eye_mask` |
+| Teeth whiten | Planned | Low priority |
+| Compare-hold for beauty | Done | Compare shows pre-beauty RGBA on Beauty tool |
+| Preset thumbnails | Done | Gradient look chips in Beauty panel |
+
+### Suggested build order
+
+1. ~~**Nexus B (still)**~~ — done  
+2. ~~**Nexus C**~~ — done  
+3. **Nexus A** — live camera + temporal smooth  
+4. ~~**Nexus D**~~ — done (GPU + Android)
+
+*(12b items are folded into Nexus A/D; do not track separately.)*
 
 ---
 
@@ -292,13 +443,17 @@ Run in **rust_image Studio** after changes; record status-line timings.
 | C | 4K JPEG | Blur r=4 commit | auto | < 2 s (preview-scale live) |
 | D | 768×1152 | Preset “Dramatic” | auto | < 400 ms |
 | E | 768×1152 | Resize 50% | auto | GPU path in status |
+| F | 768×1024 portrait | Beauty look “Soft” commit | auto | < 600 ms still |
+| G | 768×1024 | Lip color live drag | auto | < 200 ms debounced |
+| H | 720p front camera | Skin smooth live | gpu | ≥ 24 fps sustained |
 
 ## References
 
 - Root README: [README.md](README.md)
 - Plugin README: [rust_image/README.md](rust_image/README.md)
+- Face / beauty design: [docs/PHASE3_MEDIAPIPE.md](docs/PHASE3_MEDIAPIPE.md)
 - GPU notes: Metal via wgpu when `gpu` feature enabled
 
 ---
 
-*Last updated: Sprint 10 complete*
+*Last updated: Nexus B–D complete; Nexus A (live camera) next*

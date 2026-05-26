@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// Captures pointer strokes in image pixel space (Sprint 7).
@@ -41,21 +42,27 @@ class _PaintCanvasState extends State<PaintCanvas> {
   @override
   Widget build(BuildContext context) {
     return Listener(
-      behavior: HitTestBehavior.translucent,
+      behavior: HitTestBehavior.opaque,
       onPointerDown: (e) {
+        if (!_isDrawingPointer(e)) return;
         _points
           ..clear()
           ..add(_toPixel(e.localPosition));
         widget.onStrokeUpdate?.call(List.unmodifiable(_points));
       },
       onPointerMove: (e) {
+        if (_points.isEmpty || !_isDrawingPointer(e)) return;
         final p = _toPixel(e.localPosition);
-        if (_points.isEmpty || (p - _points.last).distance > 1) {
+        if ((p - _points.last).distance > 0.5) {
           _points.add(p);
           widget.onStrokeUpdate?.call(List.unmodifiable(_points));
         }
       },
-      onPointerUp: (_) {
+      onPointerUp: (e) {
+        if (_points.isEmpty) return;
+        if (_points.length == 1) {
+          _points.add(_points.last);
+        }
         if (_points.length >= 2) {
           widget.onStroke?.call(List.from(_points));
         }
@@ -68,6 +75,17 @@ class _PaintCanvasState extends State<PaintCanvas> {
       },
       child: const SizedBox.expand(),
     );
+  }
+
+  /// Mouse, pen, and touch; ignore trackpad hover (buttons == 0).
+  static bool _isDrawingPointer(PointerEvent e) {
+    if (e.kind == PointerDeviceKind.mouse) {
+      return e.buttons != 0;
+    }
+    return e.kind == PointerDeviceKind.touch ||
+        e.kind == PointerDeviceKind.stylus ||
+        e.kind == PointerDeviceKind.invertedStylus ||
+        e.kind == PointerDeviceKind.unknown;
   }
 
   Offset _toPixel(Offset local) {

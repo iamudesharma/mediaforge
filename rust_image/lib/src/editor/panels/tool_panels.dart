@@ -20,12 +20,14 @@ import '../widgets/editor_animations.dart';
 import 'blank_canvas_sheet.dart';
 import 'layers_panel.dart';
 import 'paint_panel.dart';
+import 'beauty_panel.dart';
 import 'stickers_panel.dart';
 
 enum EditorTool {
   import,
   transform,
   filters,
+  beauty,
   adjust,
   paint,
   stickers,
@@ -41,6 +43,7 @@ extension EditorToolX on EditorTool {
         EditorTool.import => 'Import',
         EditorTool.transform => 'Transform',
         EditorTool.filters => 'Filters',
+        EditorTool.beauty => 'Beauty',
         EditorTool.adjust => 'Adjust',
         EditorTool.paint => 'Paint',
         EditorTool.stickers => 'Stickers',
@@ -56,6 +59,7 @@ extension EditorToolX on EditorTool {
         EditorTool.import => 'Import',
         EditorTool.transform => 'Crop',
         EditorTool.filters => 'Filters',
+        EditorTool.beauty => 'Beauty',
         EditorTool.adjust => 'Adjust',
         EditorTool.paint => 'Paint',
         EditorTool.stickers => 'Stickers',
@@ -70,6 +74,7 @@ extension EditorToolX on EditorTool {
         EditorTool.import => Icons.photo_library_outlined,
         EditorTool.transform => Icons.crop_rotate,
         EditorTool.filters => Icons.auto_awesome,
+        EditorTool.beauty => Icons.face_retouching_natural,
         EditorTool.adjust => Icons.tune,
         EditorTool.paint => Icons.brush_outlined,
         EditorTool.stickers => Icons.emoji_emotions_outlined,
@@ -85,6 +90,7 @@ extension EditorToolX on EditorTool {
         EditorTool.import => Icons.photo_library_outlined,
         EditorTool.transform => Icons.crop,
         EditorTool.filters => Icons.photo_filter_outlined,
+        EditorTool.beauty => Icons.face_retouching_natural,
         EditorTool.adjust => Icons.tune,
         EditorTool.paint => Icons.brush_outlined,
         EditorTool.stickers => Icons.emoji_emotions_outlined,
@@ -105,6 +111,7 @@ extension EditorToolX on EditorTool {
   /// Context strip above bottom nav (filters, adjust, crop, paint, stickers).
   bool get hasMobileContextStrip => switch (this) {
         EditorTool.filters ||
+        EditorTool.beauty ||
         EditorTool.adjust ||
         EditorTool.transform ||
         EditorTool.paint ||
@@ -160,6 +167,10 @@ class ToolPanelHost extends StatelessWidget {
             stripHostedExternally: stripHostedExternally,
           ),
         EditorTool.filters => FiltersPanel(
+            session: session,
+            stripHostedExternally: stripHostedExternally,
+          ),
+        EditorTool.beauty => BeautyPanel(
             session: session,
             stripHostedExternally: stripHostedExternally,
           ),
@@ -1319,8 +1330,11 @@ class ExportPanel extends StatefulWidget {
 class _ExportPanelState extends State<ExportPanel> {
   @override
   Widget build(BuildContext context) {
-    final s = widget.session;
-    return Column(
+    return ListenableBuilder(
+      listenable: widget.session,
+      builder: (context, _) {
+        final s = widget.session;
+        return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SectionHeader('Output format'),
@@ -1380,6 +1394,8 @@ class _ExportPanelState extends State<ExportPanel> {
           },
         ),
       ],
+        );
+      },
     );
   }
 }
@@ -1669,7 +1685,7 @@ class _OverlayPanelState extends State<OverlayPanel> {
         LabeledSlider(
           label: 'X offset',
           value: p.x.toDouble(),
-          min: -200,
+          min: 0,
           max: maxW,
           divisions: 50,
           display: '${p.x}',
@@ -1677,13 +1693,13 @@ class _OverlayPanelState extends State<OverlayPanel> {
               ? null
               : (v) {
                   p.setPosition(v.round(), p.y);
-                  s.scheduleOverlayLivePreview(x: p.x, y: p.y);
+                  s.scheduleOverlayLivePreview(p);
                 },
         ),
         LabeledSlider(
           label: 'Y offset',
           value: p.y.toDouble(),
-          min: -200,
+          min: 0,
           max: maxH,
           divisions: 50,
           display: '${p.y}',
@@ -1691,9 +1707,39 @@ class _OverlayPanelState extends State<OverlayPanel> {
               ? null
               : (v) {
                   p.setPosition(p.x, v.round());
-                  s.scheduleOverlayLivePreview(x: p.x, y: p.y);
+                  s.scheduleOverlayLivePreview(p);
                 },
         ),
+        if (_overlayBytes != null) ...[
+          LabeledSlider(
+            label: 'Overlay width',
+            value: p.overlayWidth.toDouble(),
+            min: OverlayPlacementController.minOverlayEdge.toDouble(),
+            max: maxW,
+            divisions: 40,
+            display: '${p.overlayWidth}',
+            onChanged: s.busy
+                ? null
+                : (v) {
+                    p.setOverlaySize(v.round(), p.overlayHeight);
+                    s.scheduleOverlayLivePreview(p);
+                  },
+          ),
+          LabeledSlider(
+            label: 'Overlay height',
+            value: p.overlayHeight.toDouble(),
+            min: OverlayPlacementController.minOverlayEdge.toDouble(),
+            max: maxH,
+            divisions: 40,
+            display: '${p.overlayHeight}',
+            onChanged: s.busy
+                ? null
+                : (v) {
+                    p.setOverlaySize(p.overlayWidth, v.round());
+                    s.scheduleOverlayLivePreview(p);
+                  },
+          ),
+        ],
         const SectionHeader('Blend mode'),
         ActionChipRow<BlendMode>(
           items: BlendMode.values,
@@ -1703,7 +1749,7 @@ class _OverlayPanelState extends State<OverlayPanel> {
               ? (_) {}
               : (v) {
                   setState(() => s.overlayBlendMode = v);
-                  s.scheduleOverlayLivePreview(x: p.x, y: p.y);
+                  s.scheduleOverlayLivePreview(p);
                 },
         ),
         const SizedBox(height: 8),
@@ -1716,16 +1762,21 @@ class _OverlayPanelState extends State<OverlayPanel> {
             s.overlayStickerBytes = overlay;
             s.runOverlay(
               label: 'Overlay',
-              work: (buf) => RustWorker.overlayComposite(
-                base: buf,
-                overlayBytes: overlay,
-                x: p.x,
-                y: p.y,
-                blendMode: s.overlayBlendMode,
-                previewMaxEdge: EditorPipelineDefaults.previewMaxEdge,
-                previewQuality: EditorSession.previewQuality,
-                encodePreviewJpeg: !s.useRgbaPreview,
-              ),
+              work: (buf) {
+                p.normalize();
+                return RustWorker.overlayComposite(
+                  base: buf,
+                  overlayBytes: overlay,
+                  x: p.x,
+                  y: p.y,
+                  blendMode: s.overlayBlendMode,
+                  overlayWidth: p.overlayWidth,
+                  overlayHeight: p.overlayHeight,
+                  previewMaxEdge: EditorPipelineDefaults.previewMaxEdge,
+                  previewQuality: EditorSession.previewQuality,
+                  encodePreviewJpeg: !s.useRgbaPreview,
+                );
+              },
             );
           },
         ),

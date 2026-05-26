@@ -4,8 +4,11 @@
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
 import 'api/advanced.dart';
+import 'api/face.dart';
 import 'api/image.dart';
 import 'api/layers.dart';
+import 'api/temporal.dart';
+import 'api/texture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi' as ffi;
@@ -27,10 +30,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BatchResizeItem dco_decode_batch_resize_item(dynamic raw);
 
   @protected
+  BeautyLookPreset dco_decode_beauty_look_preset(dynamic raw);
+
+  @protected
+  BeautyParams dco_decode_beauty_params(dynamic raw);
+
+  @protected
   BlendMode dco_decode_blend_mode(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  BeautyParams dco_decode_box_autoadd_beauty_params(dynamic raw);
 
   @protected
   DrawCircle dco_decode_box_autoadd_draw_circle(dynamic raw);
@@ -39,10 +51,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DrawLine dco_decode_box_autoadd_draw_line(dynamic raw);
 
   @protected
+  FaceAnalysisResult dco_decode_box_autoadd_face_analysis_result(dynamic raw);
+
+  @protected
   ImageFilter dco_decode_box_autoadd_image_filter(dynamic raw);
 
   @protected
   RgbaImageBuffer dco_decode_box_autoadd_rgba_image_buffer(dynamic raw);
+
+  @protected
+  SegmentationMask dco_decode_box_autoadd_segmentation_mask(dynamic raw);
 
   @protected
   TextOverlay dco_decode_box_autoadd_text_overlay(dynamic raw);
@@ -69,6 +87,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_f_64(dynamic raw);
 
   @protected
+  FaceAnalysisResult dco_decode_face_analysis_result(dynamic raw);
+
+  @protected
   FilterPreset dco_decode_filter_preset(dynamic raw);
 
   @protected
@@ -81,10 +102,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
   ImageFilter dco_decode_image_filter(dynamic raw);
 
   @protected
   ImageInfo dco_decode_image_info(dynamic raw);
+
+  @protected
+  Landmark2D dco_decode_landmark_2_d(dynamic raw);
+
+  @protected
+  LipTintPreset dco_decode_lip_tint_preset(dynamic raw);
 
   @protected
   List<BatchResizeItem> dco_decode_list_batch_resize_item(dynamic raw);
@@ -93,10 +123,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<EditOp> dco_decode_list_edit_op(dynamic raw);
 
   @protected
+  List<Landmark2D> dco_decode_list_landmark_2_d(dynamic raw);
+
+  @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
 
   @protected
   List<PaintStrokeInput> dco_decode_list_paint_stroke_input(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_32_loose(dynamic raw);
+
+  @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
 
   @protected
   List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
@@ -111,7 +150,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<(double, double)> dco_decode_list_record_f_32_f_32(dynamic raw);
 
   @protected
+  MoodFilterPreset dco_decode_mood_filter_preset(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  SegmentationMask? dco_decode_opt_box_autoadd_segmentation_mask(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
@@ -153,6 +198,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Rotation dco_decode_rotation(dynamic raw);
 
   @protected
+  SegmentationMask dco_decode_segmentation_mask(dynamic raw);
+
+  @protected
   TextOverlay dco_decode_text_overlay(dynamic raw);
 
   @protected
@@ -177,10 +225,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   BatchResizeItem sse_decode_batch_resize_item(SseDeserializer deserializer);
 
   @protected
+  BeautyLookPreset sse_decode_beauty_look_preset(SseDeserializer deserializer);
+
+  @protected
+  BeautyParams sse_decode_beauty_params(SseDeserializer deserializer);
+
+  @protected
   BlendMode sse_decode_blend_mode(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  BeautyParams sse_decode_box_autoadd_beauty_params(
+    SseDeserializer deserializer,
+  );
 
   @protected
   DrawCircle sse_decode_box_autoadd_draw_circle(SseDeserializer deserializer);
@@ -189,10 +248,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DrawLine sse_decode_box_autoadd_draw_line(SseDeserializer deserializer);
 
   @protected
+  FaceAnalysisResult sse_decode_box_autoadd_face_analysis_result(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ImageFilter sse_decode_box_autoadd_image_filter(SseDeserializer deserializer);
 
   @protected
   RgbaImageBuffer sse_decode_box_autoadd_rgba_image_buffer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SegmentationMask sse_decode_box_autoadd_segmentation_mask(
     SseDeserializer deserializer,
   );
 
@@ -221,6 +290,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
+  FaceAnalysisResult sse_decode_face_analysis_result(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   FilterPreset sse_decode_filter_preset(SseDeserializer deserializer);
 
   @protected
@@ -233,10 +307,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
   ImageFilter sse_decode_image_filter(SseDeserializer deserializer);
 
   @protected
   ImageInfo sse_decode_image_info(SseDeserializer deserializer);
+
+  @protected
+  Landmark2D sse_decode_landmark_2_d(SseDeserializer deserializer);
+
+  @protected
+  LipTintPreset sse_decode_lip_tint_preset(SseDeserializer deserializer);
 
   @protected
   List<BatchResizeItem> sse_decode_list_batch_resize_item(
@@ -247,6 +330,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<EditOp> sse_decode_list_edit_op(SseDeserializer deserializer);
 
   @protected
+  List<Landmark2D> sse_decode_list_landmark_2_d(SseDeserializer deserializer);
+
+  @protected
   List<Uint8List> sse_decode_list_list_prim_u_8_strict(
     SseDeserializer deserializer,
   );
@@ -255,6 +341,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<PaintStrokeInput> sse_decode_list_paint_stroke_input(
     SseDeserializer deserializer,
   );
+
+  @protected
+  List<int> sse_decode_list_prim_u_32_loose(SseDeserializer deserializer);
+
+  @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
 
   @protected
   List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
@@ -273,7 +365,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  MoodFilterPreset sse_decode_mood_filter_preset(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  SegmentationMask? sse_decode_opt_box_autoadd_segmentation_mask(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
@@ -317,6 +417,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Rotation sse_decode_rotation(SseDeserializer deserializer);
 
   @protected
+  SegmentationMask sse_decode_segmentation_mask(SseDeserializer deserializer);
+
+  @protected
   TextOverlay sse_decode_text_overlay(SseDeserializer deserializer);
 
   @protected
@@ -344,10 +447,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_beauty_look_preset(
+    BeautyLookPreset self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_beauty_params(BeautyParams self, SseSerializer serializer);
+
+  @protected
   void sse_encode_blend_mode(BlendMode self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_beauty_params(
+    BeautyParams self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_draw_circle(
@@ -362,6 +480,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_face_analysis_result(
+    FaceAnalysisResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_image_filter(
     ImageFilter self,
     SseSerializer serializer,
@@ -370,6 +494,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_rgba_image_buffer(
     RgbaImageBuffer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_segmentation_mask(
+    SegmentationMask self,
     SseSerializer serializer,
   );
 
@@ -401,6 +531,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_face_analysis_result(
+    FaceAnalysisResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_filter_preset(FilterPreset self, SseSerializer serializer);
 
   @protected
@@ -416,10 +552,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
   void sse_encode_image_filter(ImageFilter self, SseSerializer serializer);
 
   @protected
   void sse_encode_image_info(ImageInfo self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_landmark_2_d(Landmark2D self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_lip_tint_preset(LipTintPreset self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_batch_resize_item(
@@ -431,6 +576,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_list_edit_op(List<EditOp> self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_landmark_2_d(
+    List<Landmark2D> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_list_prim_u_8_strict(
     List<Uint8List> self,
     SseSerializer serializer,
@@ -439,6 +590,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_paint_stroke_input(
     List<PaintStrokeInput> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_u_32_loose(
+    List<int> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_u_32_strict(
+    Uint32List self,
     SseSerializer serializer,
   );
 
@@ -464,7 +627,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_mood_filter_preset(
+    MoodFilterPreset self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_segmentation_mask(
+    SegmentationMask? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);
@@ -531,6 +706,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_rotation(Rotation self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_segmentation_mask(
+    SegmentationMask self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_text_overlay(TextOverlay self, SseSerializer serializer);

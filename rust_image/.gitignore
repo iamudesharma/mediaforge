@@ -31,3 +31,6 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+
+# Copied by ios/rust_image.podspec prepare_command (pod install).
+/ios/Classes/Darwin/
