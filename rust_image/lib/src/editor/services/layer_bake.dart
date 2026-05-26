@@ -1,17 +1,19 @@
-import 'package:rust_image/src/rust/api/image.dart';
 import 'package:rust_image/src/rust/api/layers.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
 import '../models/layer_stack.dart';
 import '../models/overlay_layer.dart';
 import 'layer_rasterizer.dart';
+import 'rust_worker.dart';
 
 /// Prepare FRB inputs and bake [stack] onto [buffer].
 abstract final class LayerBake {
-  static Future<RgbaImageBuffer> bakeOnto(
-    RgbaImageBuffer buffer,
-    LayerStack stack,
-  ) async {
+  /// Rasterize overlay layers on the UI thread; composite in worker isolate.
+  static Future<
+      ({
+        List<RasterLayerInput> rasterLayers,
+        List<PaintStrokeInput> paintStrokes,
+      })> prepareInputs(LayerStack stack) async {
     final rasterInputs = <RasterLayerInput>[];
 
     for (final layer in stack.layers) {
@@ -56,10 +58,21 @@ abstract final class LayerBake {
       );
     }
 
-    return RustImageEditor.bakeLayers(
+    return (rasterLayers: rasterInputs, paintStrokes: strokeInputs);
+  }
+
+  static Future<RgbaImageBuffer> bakeOnto(
+    RgbaImageBuffer buffer,
+    LayerStack stack,
+  ) async {
+    final inputs = await prepareInputs(stack);
+    if (inputs.rasterLayers.isEmpty && inputs.paintStrokes.isEmpty) {
+      return buffer;
+    }
+    return RustWorker.bakeLayersRgba(
       buffer: buffer,
-      rasterLayers: rasterInputs,
-      paintStrokes: strokeInputs,
+      rasterLayers: inputs.rasterLayers,
+      paintStrokes: inputs.paintStrokes,
     );
   }
 }

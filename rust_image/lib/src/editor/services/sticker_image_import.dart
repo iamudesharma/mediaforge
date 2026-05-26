@@ -10,6 +10,7 @@ import '../panels/shape_mask_sheet.dart';
 import 'image_bytes_normalizer.dart';
 import 'image_source_picker.dart';
 import 'layer_rasterizer.dart';
+import 'rust_worker.dart';
 import 'sticker_image_cache.dart';
 
 /// Import gallery images as [StickerLayer]s with shape masks (Sprint 8).
@@ -17,9 +18,17 @@ abstract final class StickerImageImport {
   static const defaultLayerScale = 1.4;
 
   static Future<Size> probeImageDimensions(Uint8List bytes) async {
-    final prepared = await ImageBytesNormalizer.prepareForEditor(bytes);
+    final prepared = await _prepareBytes(bytes);
     final dims = await StickerImageCache.dimensionsFor(prepared);
     return Size(dims.width, dims.height);
+  }
+
+  static Future<Uint8List> _prepareBytes(Uint8List bytes) async {
+    if (ImageBytesNormalizer.isHeicOrHeif(bytes)) {
+      await RustWorker.ensureStarted();
+      return RustWorker.transcribeHeicToPng(bytes);
+    }
+    return bytes;
   }
 
   static double scaleForCanvas({
@@ -122,7 +131,7 @@ abstract final class StickerImageImport {
 
     session.pushLayerUndo();
     for (var i = 0; i < images.length; i++) {
-      final bytes = await ImageBytesNormalizer.prepareForEditor(images[i]);
+      final bytes = await _prepareBytes(images[i]);
       final dims = await probeImageDimensions(bytes);
       final layer = StickerLayer(
         id: newLayerId(),

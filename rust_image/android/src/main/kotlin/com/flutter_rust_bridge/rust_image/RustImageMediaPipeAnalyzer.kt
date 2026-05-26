@@ -3,6 +3,7 @@ package com.flutter_rust_bridge.rust_image
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.ByteBufferExtractor
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
@@ -119,7 +120,7 @@ internal object RustImageMediaPipeAnalyzer {
         val mask = result.categoryMask().get()
         val maskWidth = mask.width
         val maskHeight = mask.height
-        val buffer = mask.buffer
+        val buffer = ByteBufferExtractor.extract(mask)
         val out = ByteArray(width * height)
 
         for (y in 0 until height) {

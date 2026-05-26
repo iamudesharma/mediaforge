@@ -39,8 +39,12 @@ enum RustImageMediaPipeAnalyzer {
         userInfo: [NSLocalizedDescriptionKey: "MediaPipe models not found"]
       )
     }
-    guard let cgImage = decodeImage(imageData, pixelFormat: pixelFormat, width: targetWidth, height: targetHeight)
-    else {
+    guard let cgImage = RustImageImageDecode.cgImage(
+      from: imageData,
+      pixelFormat: pixelFormat,
+      width: targetWidth,
+      height: targetHeight
+    ) else {
       throw NSError(domain: "rust_image", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not decode image"])
     }
     let tw = max(1, targetWidth)
@@ -142,35 +146,6 @@ enum RustImageMediaPipeAnalyzer {
     return out
   }
   #endif
-
-  private static func decodeImage(_ data: Data, pixelFormat: String, width: Int, height: Int) -> CGImage? {
-    if pixelFormat == "rgba", width > 0, height > 0, data.count >= width * height * 4 {
-      let colorSpace = CGColorSpaceCreateDeviceRGB()
-      return data.withUnsafeBytes { raw -> CGImage? in
-        guard let base = raw.baseAddress else { return nil }
-        guard let ctx = CGContext(
-          data: UnsafeMutableRawPointer(mutating: base),
-          width: width,
-          height: height,
-          bitsPerComponent: 8,
-          bytesPerRow: width * 4,
-          space: colorSpace,
-          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
-        return ctx.makeImage()
-      }
-    }
-    #if canImport(UIKit)
-    guard let img = UIImage(data: data) else { return nil }
-    return img.cgImage
-    #elseif canImport(AppKit)
-    guard let img = NSImage(data: data) else { return nil }
-    var rect = CGRect(origin: .zero, size: img.size)
-    return img.cgImage(forProposedRect: &rect, context: nil, hints: nil)
-    #else
-    return nil
-    #endif
-  }
 
   private static func resize(_ image: CGImage, width: Int, height: Int) -> CGImage? {
     let colorSpace = CGColorSpaceCreateDeviceRGB()

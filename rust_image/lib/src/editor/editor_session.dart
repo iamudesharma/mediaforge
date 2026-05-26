@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'dart:ui';
 
@@ -9,6 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show PlatformInt64;
 import 'package:rust_image/src/rust/api/advanced.dart';
 import 'package:rust_image/src/rust/api/face.dart';
+import 'package:rust_image/src/rust/api/layers.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
 import 'crop_controller.dart';
@@ -23,16 +25,15 @@ import 'services/layer_bake.dart';
 import 'rust_image_editor_config.dart';
 import 'services/beauty_exclude_mask.dart';
 import 'services/beauty_look_names.dart';
-import 'services/camera_rgba_converter.dart';
+import 'services/coalesce_tracker.dart';
 import 'services/face_analysis_service.dart';
-import 'services/live_camera_service.dart';
-import 'services/temporal_face_smoother.dart';
 import 'services/filter_descriptor.dart';
-import 'services/image_buffer_utils.dart';
 import 'services/image_bytes_normalizer.dart';
 import 'services/image_export_saver.dart';
 import 'services/gpu_texture_registry.dart';
+import 'services/live_camera_service.dart';
 import 'services/rust_worker.dart';
+import 'services/temporal_face_smoother.dart';
 import 'widgets/gpu_texture_preview.dart';
 import 'widgets/paint_stroke_painter.dart';
 
@@ -358,10 +359,11 @@ class EditorSession extends ChangeNotifier {
     _disposeGpuSurface();
     _temporalSmoother?.dispose();
     _temporalSmoother = null;
-    if (liveCameraActive) {
+    if (liveCameraActive || LiveCameraService.isActive) {
+      liveCameraActive = false;
       unawaited(LiveCameraService.stop());
     }
-    RustWorker.shutdown();
+    unawaited(RustWorker.shutdown());
     super.dispose();
   }
 
@@ -413,12 +415,13 @@ class EditorSession extends ChangeNotifier {
       final prog = await RustWorker.decodeProgressive(
         bytes: src,
         previewMaxEdge: 200,
+        liveEditMaxEdge: liveEditMaxEdge,
       );
       if (gen != _opGeneration) return;
 
-      rgbaBuffer = prog.buffer;
-      rgbaBase = _cloneRgba(prog.buffer);
-      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
+      rgbaBase = prog.base;
+      rgbaEditBase = prog.edit;
+      rgbaBuffer = prog.edit;
       previewRgba = prog.previewRgba;
       if (!useRgbaPreview) {
         displayBytes = await RustWorker.encodePreview(
@@ -507,7 +510,8 @@ class EditorSession extends ChangeNotifier {
       if (ImageBytesNormalizer.isHeicOrHeif(bytes)) {
         status = 'Converting HEIC…';
         notifyListeners();
-        bytes = await ImageBytesNormalizer.prepareForEditor(bytes);
+        await RustWorker.ensureStarted();
+        bytes = await RustWorker.transcribeHeicToPng(bytes);
       }
       final info = RustImageEditor.probe(bytes);
       sourceBytes = bytes;
@@ -534,20 +538,26 @@ class EditorSession extends ChangeNotifier {
       layerStack = LayerStack();
       _undoLayers.clear();
       _redoLayers.clear();
-      await refreshGpuInfo();
       status = 'Loaded ${info.width}×${info.height} — preparing fast pipeline…';
       notifyListeners();
 
       await _yieldToUi();
       await RustWorker.ensureStarted();
-      final decoded = await RustWorker.decodeRgba(bytes);
-      rgbaBase = _cloneRgba(decoded);
-      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-      rgbaBuffer = _cloneRgba(rgbaEditBase!);
-      previewRgba = rgbaBuffer;
+      final results = await Future.wait([
+        RustWorker.decodeAndPrepareEditBase(
+          bytes: bytes,
+          liveEditMaxEdge: liveEditMaxEdge,
+        ),
+        refreshGpuInfo(),
+      ]);
+      final prepared = results[0] as ({RgbaImageBuffer base, RgbaImageBuffer edit});
+      rgbaBase = prepared.base;
+      rgbaEditBase = prepared.edit;
+      rgbaBuffer = prepared.edit;
+      previewRgba = prepared.edit;
       rgbaPipeline = true;
       status =
-          'Ready · RGBA ${decoded.width}×${decoded.height} · edit ≤$liveEditMaxEdge px · graph';
+          'Ready · RGBA ${prepared.base.width}×${prepared.base.height} · edit ≤$liveEditMaxEdge px · graph';
       if (FaceAnalysisService.isSupported) {
         unawaited(analyzeFaceForBeauty());
       }
@@ -808,6 +818,7 @@ class EditorSession extends ChangeNotifier {
     rgbaPipeline = true;
     useRgbaPreview = true;
     try {
+      await LiveCameraService.warmup();
       await LiveCameraService.start(
         onFrame: _onLiveCameraFrame,
         maxWidth: liveCameraMaxEdge,
@@ -848,6 +859,9 @@ class EditorSession extends ChangeNotifier {
     liveBeautyGpuActive = false;
     notifyListeners();
     try {
+      await _yieldToUi();
+      await _waitForLiveFrameIdle();
+      _disposeGpuSurface();
       await LiveCameraService.stop();
     } finally {
       _temporalSmoother?.dispose();
@@ -860,6 +874,15 @@ class EditorSession extends ChangeNotifier {
     }
   }
 
+  Future<void> _waitForLiveFrameIdle({
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (_liveFrameBusy && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+  }
+
   void _onLiveCameraFrame(CameraImage image) {
     if (!liveCameraActive || _liveFrameBusy) return;
     _liveFrameBusy = true;
@@ -868,10 +891,27 @@ class EditorSession extends ChangeNotifier {
 
   Future<void> _processLiveCameraFrame(CameraImage image) async {
     try {
-      final raw = CameraRgbaConverter.toRgba(image);
-      if (raw == null || !liveCameraActive) return;
-      var base = CameraRgbaConverter.downscaleMaxEdge(raw, liveCameraMaxEdge);
-      base = CameraRgbaConverter.mirrorHorizontal(base);
+      if (!liveCameraActive) return;
+      final planesData = image.planes.map((p) => TransferableTypedData.fromList([p.bytes])).toList();
+      final planesBytesPerRow = image.planes.map((p) => p.bytesPerRow).toList();
+      final planesBytesPerPixel = image.planes.map((p) => p.bytesPerPixel).toList();
+
+      final raw = await RustWorker.convertCameraImage(
+        width: image.width,
+        height: image.height,
+        planesData: planesData,
+        planesBytesPerRow: planesBytesPerRow,
+        planesBytesPerPixel: planesBytesPerPixel,
+        liveCameraMaxEdge: liveCameraMaxEdge,
+        isAndroid: defaultTargetPlatform == TargetPlatform.android,
+      );
+      if (!liveCameraActive) return;
+
+      final base = RgbaImageBuffer(
+        width: raw['width']! as int,
+        height: raw['height']! as int,
+        pixels: (raw['pixels']! as TransferableTypedData).materialize().asUint8List(),
+      );
 
       _liveFrameCount++;
       if (_liveFrameCount % liveCameraAnalyzeEveryNFrames == 0 &&
@@ -890,7 +930,7 @@ class EditorSession extends ChangeNotifier {
         }
         faceAnalysis = result;
         if (result != null && FaceAnalysisService.isAnalysisValid(result)) {
-          skinMask = await RustWorker.buildSkinMaskFromAnalysis(
+          skinMask = await RustWorker.buildSkinMaskFromAnalysisCamera(
             analysis: result,
             width: base.width,
             height: base.height,
@@ -957,7 +997,7 @@ class EditorSession extends ChangeNotifier {
             liveBeautyGpuActive = false;
           }
         }
-        final display = await RustWorker.applyBeauty(
+        final display = await RustWorker.applyBeautyCamera(
           buffer: base,
           analysis: analysis,
           skinMask: mask,
@@ -1297,7 +1337,7 @@ class EditorSession extends ChangeNotifier {
   /// Live beauty slider — re-smooth cached pipeline output only (no full graph replay).
   Future<void> _replayBeautyOnly({int? gen}) async {
     final g = gen ?? _opGeneration;
-    var base = _beautyPipelineBase;
+    var base = _beautyPipelineBase ?? rgbaEditBase;
     if (base == null) {
       await _replayPreview(gen: g);
       return;
@@ -1314,6 +1354,11 @@ class EditorSession extends ChangeNotifier {
         if (g != _opGeneration) return;
         try {
           uploadGpuPreviewSurface(id: handle, buffer: base);
+          applyGpuPreviewOps(
+            id: handle,
+            ops: editGraph.ops,
+            backend: backend,
+          );
           final params = _activeBeautyParams();
           final mask = await _maskForBuffer(base);
           final analysis = faceAnalysis;
@@ -1333,7 +1378,7 @@ class EditorSession extends ChangeNotifier {
           final displayRb = readbackGpuPreviewSurface(id: handle);
           if (g != _opGeneration) return;
           rgbaBuffer = displayRb;
-          previewRgba = null;
+          previewRgba = displayRb;
           await GpuTextureRegistry.updateTexture(
             handle: handle.toInt(),
             pixels: displayRb.pixels,
@@ -1602,8 +1647,7 @@ class EditorSession extends ChangeNotifier {
     if (rgbaBase == null) {
       throw StateError('No RGBA base');
     }
-    rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-    return rgbaEditBase!;
+    throw StateError('Edit base not prepared');
   }
 
   EditGraphState _captureGraphState() => EditGraphState(
@@ -1665,27 +1709,29 @@ class EditorSession extends ChangeNotifier {
         if (handle != null) {
           uploadGpuPreviewSurface(id: handle, buffer: base);
           applyGpuPreviewOps(id: handle, ops: ops, backend: backend);
-          final pipelineRb = readbackGpuPreviewSurface(id: handle);
-          _beautyPipelineBase = pipelineRb;
           final params = _activeBeautyParams();
-          final mask = await _maskForBuffer(pipelineRb);
+          final mask = await _maskForBuffer(base);
           final analysis = faceAnalysis;
-          if (params != null &&
+          final needsBeauty = params != null &&
               params.hasEffect &&
               mask != null &&
               analysis != null &&
-              FaceAnalysisService.isAnalysisValid(analysis)) {
+              FaceAnalysisService.isAnalysisValid(analysis);
+          if (needsBeauty) {
             _applyGpuBeautyPipelineSync(
               handle: handle,
-              buffer: pipelineRb,
+              buffer: base,
               skinMask: mask,
               analysis: analysis,
               params: params,
             );
           }
           final displayRb = readbackGpuPreviewSurface(id: handle);
+          if (ops.isNotEmpty || needsBeauty) {
+            _beautyPipelineBase = needsBeauty ? null : displayRb;
+          }
           rgbaBuffer = displayRb;
-          previewRgba = null;
+          previewRgba = displayRb;
           await GpuTextureRegistry.updateTexture(
             handle: handle.toInt(),
             pixels: displayRb.pixels,
@@ -1697,28 +1743,33 @@ class EditorSession extends ChangeNotifier {
       } catch (e) {
         status = 'GPU texture preview failed — RGBA fallback: $e';
         _bumpStatus();
+        _disposeGpuSurface();
       }
     }
     final edge = previewEdge ?? previewMaxEdge;
-    final result = await RustWorker.replayEditPipeline(
-      base: base,
-      ops: ops,
-      backend: backend,
-      previewMaxEdge: edge,
-      previewQuality: previewQuality,
-      encodePreviewJpeg: !useRgbaPreview,
-    );
-    if (g != _opGeneration) return;
-    lastProfile = result.profile;
-    _beautyPipelineBase = result.buffer;
-    final smoothed = await _applyBeautyAsync(result.buffer);
-    if (g != _opGeneration) return;
-    rgbaBuffer = smoothed;
-    previewRgba = smoothed;
-    if (result.preview != null) {
-      displayBytes = result.preview;
+    try {
+      final result = await RustWorker.replayEditPipeline(
+        base: base,
+        ops: ops,
+        backend: backend,
+        previewMaxEdge: edge,
+        previewQuality: previewQuality,
+        encodePreviewJpeg: !useRgbaPreview,
+      );
+      if (g != _opGeneration) return;
+      lastProfile = result.profile;
+      _beautyPipelineBase = result.buffer;
+      final smoothed = await _applyBeautyAsync(result.buffer);
+      if (g != _opGeneration) return;
+      rgbaBuffer = smoothed;
+      previewRgba = smoothed;
+      if (result.preview != null) {
+        displayBytes = result.preview;
+      }
+      notifyPreviewChanged();
+    } on CoalesceCancelledException {
+      return;
     }
-    notifyPreviewChanged();
   }
 
   void _disposeGpuSurface() {
@@ -1759,8 +1810,12 @@ class EditorSession extends ChangeNotifier {
       backend: backend,
     );
     editGraph = EditGraph();
-    rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-    rgbaBuffer = _cloneRgba(rgbaEditBase!);
+    final prepared = await RustWorker.prepareEditBaseFromRgba(
+      buffer: rgbaBase!,
+      liveEditMaxEdge: liveEditMaxEdge,
+    );
+    rgbaEditBase = prepared.edit;
+    rgbaBuffer = prepared.edit;
   }
 
   /// Map [CropController] rect from preview/edit space into [buffer] pixel coordinates.
@@ -1863,9 +1918,13 @@ class EditorSession extends ChangeNotifier {
       if (gen != _opGeneration) return;
 
       rgbaBuffer = result.buffer;
-      rgbaBase = _cloneRgba(result.buffer);
-      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-      previewRgba = result.buffer;
+      final prepared = await RustWorker.prepareEditBaseFromRgba(
+        buffer: result.buffer,
+        liveEditMaxEdge: liveEditMaxEdge,
+      );
+      rgbaBase = prepared.base;
+      rgbaEditBase = prepared.edit;
+      previewRgba = prepared.edit;
       rgbaPipeline = true;
       if (result.preview != null) {
         displayBytes = result.preview;
@@ -1922,8 +1981,12 @@ class EditorSession extends ChangeNotifier {
 
       rgbaBuffer = result.buffer;
       if (saveUndo) {
-        rgbaBase = _cloneRgba(result.buffer);
-        rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
+        final prepared = await RustWorker.prepareEditBaseFromRgba(
+          buffer: result.buffer,
+          liveEditMaxEdge: liveEditMaxEdge,
+        );
+        rgbaBase = prepared.base;
+        rgbaEditBase = prepared.edit;
       }
       previewRgba = result.buffer;
       rgbaPipeline = true;
@@ -1993,11 +2056,14 @@ class EditorSession extends ChangeNotifier {
     final bytes = displayBytes;
     if (bytes == null) return;
     await RustWorker.ensureStarted();
-    final decoded = await RustWorker.decodeRgba(bytes);
-    rgbaBase = _cloneRgba(decoded);
-    rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-    rgbaBuffer = _cloneRgba(rgbaEditBase!);
-    previewRgba = rgbaBuffer;
+    final prepared = await RustWorker.decodeAndPrepareEditBase(
+      bytes: bytes,
+      liveEditMaxEdge: liveEditMaxEdge,
+    );
+    rgbaBase = prepared.base;
+    rgbaEditBase = prepared.edit;
+    rgbaBuffer = prepared.edit;
+    previewRgba = prepared.edit;
     rgbaPipeline = true;
   }
 
@@ -2053,9 +2119,13 @@ class EditorSession extends ChangeNotifier {
       if (gen != _opGeneration) return;
 
       rgbaBuffer = result.buffer;
-      rgbaBase = _cloneRgba(result.buffer);
-      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-      previewRgba = rgbaBuffer;
+      final prepared = await RustWorker.prepareEditBaseFromRgba(
+        buffer: result.buffer,
+        liveEditMaxEdge: liveEditMaxEdge,
+      );
+      rgbaBase = prepared.base;
+      rgbaEditBase = prepared.edit;
+      previewRgba = prepared.edit;
       rgbaPipeline = true;
       displayBytes = result.preview;
       if (displayBytes != null) {
@@ -2251,33 +2321,64 @@ class EditorSession extends ChangeNotifier {
     final base = rgbaBase;
     if (base != null) {
       await RustWorker.ensureStarted();
-      var exportBuf = base;
-      if (editGraph.isNotEmpty) {
-        exportBuf = await RustWorker.applyEditPipelineFull(
-          base: base,
-          ops: editGraph.ops,
-          backend: backend,
-        );
-      }
-      if (layerStack.isNotEmpty) {
-        exportBuf = await LayerBake.bakeOnto(exportBuf, layerStack);
-      }
+      
       final beautyParams = editGraph.committedBeautyParams;
       final analysis = faceAnalysis;
-      if (beautyParams != null &&
+      final needsBeauty = beautyParams != null &&
           beautyParams.hasEffect &&
           analysis != null &&
-          FaceAnalysisService.isAnalysisValid(analysis)) {
-        final exportMask = FaceAnalysisService.buildSkinMask(
-          analysis: analysis,
-          width: exportBuf.width,
-          height: exportBuf.height,
-        );
-        exportBuf = applyBeautyCpu(
+          FaceAnalysisService.isAnalysisValid(analysis);
+
+      final (finalW, finalH) = _calculateOutputSize(base.width, base.height, editGraph.ops);
+
+      final Future<RgbaImageBuffer> pipelineFuture = editGraph.isNotEmpty
+          ? RustWorker.applyEditPipelineFull(
+              base: base,
+              ops: editGraph.ops,
+              backend: backend,
+            )
+          : Future.value(base);
+
+      final Future<SegmentationMask?> maskFuture = needsBeauty
+          ? RustWorker.buildSkinMaskFromAnalysis(
+              analysis: analysis,
+              width: finalW,
+              height: finalH,
+            )
+          : Future.value(null);
+
+      final layerInputsFuture = layerStack.isNotEmpty
+          ? LayerBake.prepareInputs(layerStack)
+          : Future.value((
+              rasterLayers: <RasterLayerInput>[],
+              paintStrokes: <PaintStrokeInput>[],
+            ));
+
+      final results = await Future.wait([
+        pipelineFuture,
+        maskFuture,
+        layerInputsFuture,
+      ]);
+      var exportBuf = results[0] as RgbaImageBuffer;
+      final exportMask = results[1] as SegmentationMask?;
+      final layerInputs = results[2] as ({
+        List<RasterLayerInput> rasterLayers,
+        List<PaintStrokeInput> paintStrokes,
+      });
+
+      if (layerInputs.rasterLayers.isNotEmpty ||
+          layerInputs.paintStrokes.isNotEmpty) {
+        exportBuf = await RustWorker.bakeLayersRgba(
           buffer: exportBuf,
-          landmarks: analysis.landmarks,
-          faceContourCount: analysis.faceContourCount,
-          regionCounts: regionCountsForAnalysis(analysis),
+          rasterLayers: layerInputs.rasterLayers,
+          paintStrokes: layerInputs.paintStrokes,
+        );
+      }
+
+      if (needsBeauty && exportMask != null) {
+        exportBuf = await RustWorker.applyBeauty(
+          buffer: exportBuf,
+          analysis: analysis,
           skinMask: exportMask,
           params: beautyParams,
           excludeMask: _beautyExcludeForBuffer(exportBuf),
@@ -2311,11 +2412,14 @@ class EditorSession extends ChangeNotifier {
     if (bytes == null) return;
     try {
       await RustWorker.ensureStarted();
-      final decoded = await RustWorker.decodeRgba(bytes);
-      rgbaBase = _cloneRgba(decoded);
-      rgbaEditBase = ImageBufferUtils.fitMaxEdge(rgbaBase!, liveEditMaxEdge);
-      rgbaBuffer = _cloneRgba(rgbaEditBase!);
-      previewRgba = rgbaBuffer;
+      final prepared = await RustWorker.decodeAndPrepareEditBase(
+        bytes: bytes,
+        liveEditMaxEdge: liveEditMaxEdge,
+      );
+      rgbaBase = prepared.base;
+      rgbaEditBase = prepared.edit;
+      rgbaBuffer = prepared.edit;
+      previewRgba = prepared.edit;
       rgbaPipeline = true;
       notifyPreviewChanged();
     } catch (_) {
@@ -2338,5 +2442,26 @@ class EditorSession extends ChangeNotifier {
       completer.complete();
     });
     return completer.future;
+  }
+
+  static (int, int) _calculateOutputSize(int inputWidth, int inputHeight, List<EditOp> ops) {
+    var w = inputWidth;
+    var h = inputHeight;
+    for (final op in ops) {
+      if (op is EditOp_Resize) {
+        w = op.width;
+        h = op.height;
+      } else if (op is EditOp_Crop) {
+        w = op.width;
+        h = op.height;
+      } else if (op is EditOp_Rotate) {
+        if (op.rotation == Rotation.rotate90 || op.rotation == Rotation.rotate270) {
+          final tmp = w;
+          w = h;
+          h = tmp;
+        }
+      }
+    }
+    return (w, h);
   }
 }

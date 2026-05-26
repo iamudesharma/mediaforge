@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 /// Front-camera stream for Nexus A live beauty preview.
 abstract final class LiveCameraService {
@@ -24,6 +25,13 @@ abstract final class LiveCameraService {
   /// Initialized while live mode is active; use with [CameraPreview].
   static CameraController? get controller => _controller;
 
+  /// Resolve camera list on the UI isolate before first open (avoids CameraX
+  /// refresh races during [stop] on some Android builds).
+  static Future<void> warmup() async {
+    if (!isSupported) return;
+    _cachedCameras ??= await availableCameras();
+  }
+
   static Future<void> start({
     required void Function(CameraImage image) onFrame,
     int maxWidth = 1280,
@@ -32,6 +40,7 @@ abstract final class LiveCameraService {
       if (!isSupported) {
         throw UnsupportedError('Live camera is mobile-only');
       }
+      await warmup();
       await _stopInternal();
       _onFrame = onFrame;
 
@@ -74,8 +83,10 @@ abstract final class LiveCameraService {
     _onFrame = null;
 
     final controller = _controller;
-    _controller = null;
     if (controller == null) return;
+
+    // Let Flutter detach [CameraPreview] before CameraX surfaces close.
+    await _waitForUiFrame();
 
     try {
       if (controller.value.isInitialized &&
@@ -84,18 +95,28 @@ abstract final class LiveCameraService {
       }
     } catch (_) {}
 
-    // Xiaomi / CameraX: brief pause before dispose avoids drain timeouts.
+    // CameraX on Xiaomi / Redmi: pipeline needs time before dispose.
     if (Platform.isAndroid) {
-      await Future<void>.delayed(const Duration(milliseconds: 350));
+      await Future<void>.delayed(const Duration(milliseconds: 500));
     }
+
+    _controller = null;
 
     try {
       await controller.dispose();
     } catch (_) {}
 
     if (Platform.isAndroid) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
     }
+  }
+
+  static Future<void> _waitForUiFrame() async {
+    final completer = Completer<void>();
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      if (!completer.isCompleted) completer.complete();
+    });
+    await completer.future;
   }
 
   static Future<CameraDescription> _frontCamera() async {

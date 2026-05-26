@@ -180,13 +180,16 @@ class _LivePreviewState extends State<LivePreview> {
   }
 
   Object? get _imageKey {
+    final r = widget.previewRgba;
+    if (widget.useRgbaPreview && r != null) {
+      return Object.hash('r', r.width, r.height, identityHashCode(r.pixels));
+    }
     final b = widget.bytes;
     if (b != null) return Object.hash('b', _bytesFingerprint(b));
     final cam = widget.liveCameraController;
     if (cam != null && cam.value.isInitialized) {
       return Object.hash('cam', cam.description.name);
     }
-    final r = widget.previewRgba;
     if (r != null) {
       return Object.hash('r', r.width, r.height, identityHashCode(r.pixels));
     }
@@ -580,6 +583,15 @@ class _PreviewContent extends StatelessWidget {
       );
     }
 
+    // Still photo: RGBA readback is authoritative (mood swipe, filters, beauty).
+    // GpuTexturePreview is reserved for live camera where previewRgba stays null.
+    if (useRgbaPreview && previewRgba != null) {
+      return RgbaPreviewImage(
+        key: ValueKey(identityHashCode(previewRgba!.pixels)),
+        buffer: previewRgba!,
+        fit: BoxFit.contain,
+      );
+    }
     if (useGpuTexturePreview &&
         gpuTextureId != null &&
         gpuTextureId! > 0) {
@@ -589,13 +601,6 @@ class _PreviewContent extends StatelessWidget {
         textureId: gpuTextureId!,
         width: w,
         height: h,
-      );
-    }
-    if (useRgbaPreview && previewRgba != null) {
-      return RgbaPreviewImage(
-        key: ValueKey(identityHashCode(previewRgba!.pixels)),
-        buffer: previewRgba!,
-        fit: BoxFit.contain,
       );
     }
     final b = bytes;
