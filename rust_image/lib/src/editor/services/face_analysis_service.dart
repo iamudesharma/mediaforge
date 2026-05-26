@@ -7,6 +7,7 @@ import 'package:rust_image/src/rust/api/face.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
 import '../models/beauty_params.dart';
+import 'mediapipe_model_service.dart';
 
 /// Native MediaPipe / Vision face analysis (Sprint 12).
 abstract final class FaceAnalysisService {
@@ -37,14 +38,21 @@ abstract final class FaceAnalysisService {
     }
   }
 
-  /// Analyze [jpegOrPng] at [targetWidth]×[targetHeight] (edit-scale).
+  /// Whether optional MediaPipe models are on disk (468-point mesh when native SDK linked).
+  static Future<bool> isMediaPipeReady() => MediaPipeModelService.isMediaPipeReady();
+
+  /// Analyze image bytes at [targetWidth]×[targetHeight] (edit-scale).
+  /// Pass [pixelFormat] `rgba` for raw RGBA frames (live camera); default JPEG/PNG.
   static Future<FaceAnalysisResult?> analyzeImage({
     required Uint8List bytes,
     required int targetWidth,
     required int targetHeight,
     int maxEdge = 1280,
+    String pixelFormat = 'jpeg',
+    String? modelDir,
   }) async {
     if (!isSupported) return null;
+    final dir = modelDir ?? await MediaPipeModelService.modelDirectory();
     try {
       final raw = await _channel.invokeMethod<Map<Object?, Object?>>(
         'analyzeImage',
@@ -53,6 +61,8 @@ abstract final class FaceAnalysisService {
           'width': targetWidth,
           'height': targetHeight,
           'maxEdge': maxEdge,
+          'pixelFormat': pixelFormat,
+          'modelDir': dir,
         },
       );
       if (raw == null) return null;

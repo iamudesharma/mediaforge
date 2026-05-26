@@ -100,6 +100,7 @@ class EditorSession extends ChangeNotifier {
   bool liveCameraActive = false;
   bool liveCameraTransitioning = false;
   bool enableLiveCameraBeauty = true;
+  bool enableMediaPipeDownloadPrompt = true;
   bool showDebugFaceLandmarks = false;
   int liveCameraMaxEdge = 720;
   int liveCameraAnalyzeEveryNFrames = 3;
@@ -107,6 +108,9 @@ class EditorSession extends ChangeNotifier {
   CropAspect livePreviewAspect = CropAspect.original;
   TemporalFaceSmoother? _temporalSmoother;
   int _liveFrameCount = 0;
+  int _liveFramesPerSecond = 0;
+  int _liveFpsWindowFrames = 0;
+  DateTime? _liveFpsWindowStart;
   bool _liveFrameBusy = false;
 
   /// Pre-beauty frame for compare-hold on Beauty tool (Nexus E).
@@ -202,9 +206,12 @@ class EditorSession extends ChangeNotifier {
   bool get hasWorkingImage =>
       rgbaBase != null || displayBytes != null || liveCameraActive;
 
-  /// Processed RGBA replaces [CameraPreview] once beauty has been applied.
+  /// GPU texture path active for live beauty (no Dart RGBA widget).
+  bool liveBeautyGpuActive = false;
+
+  /// Processed preview replaces [CameraPreview] once beauty has been applied.
   bool get liveBeautyRgbaActive =>
-      liveCameraActive && previewRgba != null;
+      liveCameraActive && (previewRgba != null || liveBeautyGpuActive);
 
   /// Active beauty params during live (preview or committed).
   BeautyParams? get liveActiveBeautyParams =>
@@ -747,16 +754,13 @@ class EditorSession extends ChangeNotifier {
       final base = rgbaEditBase!;
       // Analyze the same EXIF-corrected edit-scale pixels we beautify (not raw sourceBytes).
       await RustWorker.ensureStarted();
-      final analysisBytes = await RustWorker.encodeFullRgba(
-        buffer: base,
-        format: OutputFormat.jpeg,
-        quality: 88,
-      );
+      final analysisBytes = base.pixels;
       final result = await FaceAnalysisService.analyzeImage(
         bytes: analysisBytes,
         targetWidth: base.width,
         targetHeight: base.height,
         maxEdge: liveEditMaxEdge,
+        pixelFormat: 'rgba',
       );
       faceAnalysis = result;
       if (result != null && FaceAnalysisService.isAnalysisValid(result)) {
@@ -841,6 +845,7 @@ class EditorSession extends ChangeNotifier {
     liveCameraTransitioning = true;
     _bumpFaceChrome();
     liveCameraActive = false;
+    liveBeautyGpuActive = false;
     notifyListeners();
     try {
       await LiveCameraService.stop();
@@ -872,16 +877,12 @@ class EditorSession extends ChangeNotifier {
       if (_liveFrameCount % liveCameraAnalyzeEveryNFrames == 0 &&
           FaceAnalysisService.isSupported) {
         await RustWorker.ensureStarted();
-        final jpeg = await RustWorker.encodeFullRgba(
-          buffer: base,
-          format: OutputFormat.jpeg,
-          quality: 82,
-        );
         var result = await FaceAnalysisService.analyzeImage(
-          bytes: jpeg,
+          bytes: base.pixels,
           targetWidth: base.width,
           targetHeight: base.height,
           maxEdge: liveCameraMaxEdge,
+          pixelFormat: 'rgba',
         );
         final smoother = _temporalSmoother;
         if (result != null && smoother != null) {
@@ -900,6 +901,8 @@ class EditorSession extends ChangeNotifier {
         _bumpFaceChrome();
       }
 
+      _recordLiveFps();
+
       beautyCompareRgba = base;
       rgbaEditBase = base;
       rgbaBase = base;
@@ -909,7 +912,6 @@ class EditorSession extends ChangeNotifier {
         format: null,
       );
 
-      var display = base;
       final params = _activeBeautyParams() ?? committedBeautyParams;
       final analysis = faceAnalysis;
       final mask = skinMask;
@@ -918,13 +920,51 @@ class EditorSession extends ChangeNotifier {
           mask != null &&
           analysis != null &&
           FaceAnalysisService.isAnalysisValid(analysis)) {
-        display = await RustWorker.applyBeauty(
+        if (_gpuBeautyActive()) {
+          try {
+            await _ensureGpuSurface(base);
+            final handle = gpuPreviewHandle;
+            if (handle != null) {
+              uploadGpuPreviewSurface(id: handle, buffer: base);
+              _applyGpuBeautyPipelineSync(
+                handle: handle,
+                buffer: base,
+                skinMask: mask,
+                analysis: analysis,
+                params: params,
+              );
+              final displayRb = readbackGpuPreviewSurface(id: handle);
+              rgbaBuffer = displayRb;
+              previewRgba = null;
+              liveBeautyGpuActive = true;
+              _beautyPipelineBase = base;
+              await GpuTextureRegistry.updateTexture(
+                handle: handle.toInt(),
+                pixels: displayRb.pixels,
+              );
+              gpuTextureListenable.value = gpuTextureId ?? 0;
+              final look = previewBeautyLook ?? committedBeautyLook;
+              final fps = _liveFramesPerSecond > 0 ? ' · ${_liveFramesPerSecond}fps' : '';
+              status = look != null
+                  ? 'Live · ${beautyLookLabel(look)}$fps'
+                  : 'Live · beauty$fps';
+              _bumpStatus();
+              displayBytes = null;
+              _bumpPreviewOnly();
+              return;
+            }
+          } catch (_) {
+            liveBeautyGpuActive = false;
+          }
+        }
+        final display = await RustWorker.applyBeauty(
           buffer: base,
           analysis: analysis,
           skinMask: mask,
           params: params,
           excludeMask: _beautyExcludeForBuffer(base),
         );
+        liveBeautyGpuActive = false;
         rgbaBuffer = display;
         previewRgba = display;
         _beautyPipelineBase = base;
@@ -936,6 +976,7 @@ class EditorSession extends ChangeNotifier {
       } else {
         previewRgba = null;
         rgbaBuffer = null;
+        liveBeautyGpuActive = false;
         _beautyPipelineBase = null;
         final pending = params?.hasEffect ?? false;
         if (pending) {
@@ -949,6 +990,23 @@ class EditorSession extends ChangeNotifier {
       // Drop frame on error — keep stream alive.
     } finally {
       _liveFrameBusy = false;
+    }
+  }
+
+  void _recordLiveFps() {
+    final now = DateTime.now();
+    _liveFpsWindowFrames++;
+    final start = _liveFpsWindowStart;
+    if (start == null) {
+      _liveFpsWindowStart = now;
+      return;
+    }
+    final elapsed = now.difference(start).inMilliseconds;
+    if (elapsed >= 1000) {
+      _liveFramesPerSecond =
+          (_liveFpsWindowFrames * 1000 / elapsed).round().clamp(0, 120);
+      _liveFpsWindowFrames = 0;
+      _liveFpsWindowStart = now;
     }
   }
 
@@ -1172,6 +1230,7 @@ class EditorSession extends ChangeNotifier {
       parts.add('gpu_lip');
     }
     if (p.blush > 0.001) parts.add('gpu_blush');
+    if (p.teethWhiten > 0.001) parts.add('gpu_teeth');
     if (p.underEye > 0.001) parts.add('cpu_under_eye');
     if (p.lipPlump > 0.001) parts.add('cpu_plump');
     return parts.isEmpty ? '' : ' · ${parts.join(' · ')}';

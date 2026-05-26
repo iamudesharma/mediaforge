@@ -249,6 +249,51 @@ pub fn apply_under_eye_soften_rgba(
     }
 }
 
+/// Lift luminance and reduce yellow in teeth mask (Nexus E).
+pub fn apply_teeth_whiten_rgba(
+    buffer: &RgbaImageBuffer,
+    mask: &SegmentationMask,
+    strength: f32,
+) -> RgbaImageBuffer {
+    let strength = strength.clamp(0.0, 1.0);
+    if strength <= 0.001 {
+        return buffer.clone();
+    }
+    if mask.width != buffer.width || mask.height != buffer.height {
+        return buffer.clone();
+    }
+    let lift = strength * 0.45;
+    let desat = strength * 0.25;
+    let mut out = buffer.pixels.clone();
+    for i in 0..mask.pixels.len() {
+        let m = mask.pixels[i] as f32 / 255.0;
+        if m < 0.02 {
+            continue;
+        }
+        let o = i * 4;
+        let r = out[o] as f32;
+        let g = out[o + 1] as f32;
+        let b = out[o + 2] as f32;
+        let luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        let lift_amt = (255.0 - luma) * lift * m;
+        let mut nr = (r + lift_amt).min(255.0);
+        let mut ng = (g + lift_amt).min(255.0);
+        let mut nb = (b + lift_amt * 1.05).min(255.0);
+        let avg = (nr + ng + nb) / 3.0;
+        nr = nr * (1.0 - desat * m) + avg * (desat * m);
+        ng = ng * (1.0 - desat * m) + avg * (desat * m);
+        nb = nb * (1.0 - desat * m) + avg * (desat * m);
+        out[o] = nr.clamp(0.0, 255.0) as u8;
+        out[o + 1] = ng.clamp(0.0, 255.0) as u8;
+        out[o + 2] = nb.clamp(0.0, 255.0) as u8;
+    }
+    RgbaImageBuffer {
+        width: buffer.width,
+        height: buffer.height,
+        pixels: out,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

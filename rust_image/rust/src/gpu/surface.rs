@@ -5,7 +5,8 @@ use std::sync::{Mutex, OnceLock};
 use crate::api::face::{BeautyParams, SegmentationMask};
 use crate::api::image::{EditOp, ProcessingBackend, RgbaImageBuffer};
 use crate::face::{
-    apply_beauty_rgba, build_blush_mask, build_eye_mask, build_lip_mask, FaceAnalysisResult,
+    apply_beauty_rgba, build_blush_mask, build_eye_mask, build_lip_mask, build_teeth_mask,
+    FaceAnalysisResult,
 };
 
 use super::engine;
@@ -107,6 +108,7 @@ pub fn apply_surface_beauty(
             None,
             None,
             None,
+            None,
         );
     }
     #[cfg(not(feature = "gpu"))]
@@ -145,6 +147,11 @@ pub fn apply_surface_beauty_pipeline(
         } else {
             None
         };
+        let teeth_mask = if params.teeth_whiten > 0.001 {
+            Some(build_teeth_mask(analysis, w, h))
+        } else {
+            None
+        };
 
         let mut gpu_params = *params;
         gpu_params.lip_plump = 0.0;
@@ -157,6 +164,7 @@ pub fn apply_surface_beauty_pipeline(
             eye_mask.as_ref(),
             lip_mask.as_ref(),
             blush_mask.as_ref(),
+            teeth_mask.as_ref(),
             exclude,
         )?;
 
@@ -176,6 +184,26 @@ pub fn apply_surface_beauty_pipeline(
     #[cfg(not(feature = "gpu"))]
     {
         let _ = (id, analysis, skin_mask, params, exclude);
+        Err("GPU feature disabled".into())
+    }
+}
+
+/// Composite one RGBA overlay layer on the GPU preview cache (Sprint 2 P2).
+pub fn apply_surface_overlay(
+    id: i64,
+    overlay: RgbaImageBuffer,
+    opacity: f32,
+    blend_mode: u32,
+) -> Result<(), String> {
+    let _surface = surface_for(id)?;
+    #[cfg(feature = "gpu")]
+    {
+        let gpu = engine::engine()?;
+        return super::overlay_pass::composite_overlay_on_cache(gpu, &overlay, opacity, blend_mode);
+    }
+    #[cfg(not(feature = "gpu"))]
+    {
+        let _ = (id, overlay, opacity, blend_mode);
         Err("GPU feature disabled".into())
     }
 }

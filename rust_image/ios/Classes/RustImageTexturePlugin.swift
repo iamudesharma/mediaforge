@@ -1,7 +1,7 @@
+import Cocoa
 import CoreVideo
 
 #if canImport(FlutterMacOS)
-import Cocoa
 import FlutterMacOS
 #else
 import Flutter

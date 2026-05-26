@@ -1,12 +1,38 @@
 //! MediaPipe-compatible landmark region indices (for future mesh shaders).
 
 use super::FaceAnalysisResult;
+use crate::face::Landmark2D;
 
 /// Minimum landmarks from Apple Vision fallback for [FaceAnalysisResult::is_valid].
 pub const VISION_MIN_LANDMARKS: usize = 68;
 
 /// Full MediaPipe Face Landmarker mesh count.
 pub const MEDIAPIPE_LANDMARK_COUNT: usize = 468;
+
+/// MediaPipe left eye contour indices.
+pub const MP_LEFT_EYE_INDICES: &[usize] = &[
+    33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246,
+];
+
+/// MediaPipe right eye contour indices.
+pub const MP_RIGHT_EYE_INDICES: &[usize] = &[
+    362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398,
+];
+
+/// MediaPipe outer lip indices.
+pub const MP_OUTER_LIP_INDICES: &[usize] = &[
+    61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185,
+];
+
+/// MediaPipe inner lip indices.
+pub const MP_INNER_LIP_INDICES: &[usize] = &[
+    78, 95, 88, 178, 87, 14, 317, 402, 318, 324, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191,
+];
+
+/// Teeth region — lower inner lip + mouth interior (whiten mask).
+pub const MP_TEETH_INDICES: &[usize] = &[
+    78, 81, 80, 82, 13, 312, 311, 310, 415, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95,
+];
 
 /// Indices used to build a soft face oval when segmenter mask is weak (subset of MP mesh).
 pub const FACE_OVAL_INDICES: &[usize] = &[
@@ -29,12 +55,42 @@ pub struct LandmarkRegions {
 impl LandmarkRegions {
     /// Resolve region slices from native analysis (region_counts or Vision fallback).
     pub fn from_analysis(analysis: &FaceAnalysisResult) -> Option<Self> {
+        if analysis.landmarks.len() >= MEDIAPIPE_LANDMARK_COUNT {
+            return Self::from_mediapipe_indices(analysis);
+        }
         if let Some(regions) = Self::from_region_counts(analysis) {
             if Self::regions_plausible(analysis, &regions) {
                 return Some(regions);
             }
         }
         Self::vision_87_fallback(analysis)
+    }
+
+    /// MP 468 mesh — regions resolved via fixed index tables (not contiguous slices).
+    fn from_mediapipe_indices(analysis: &FaceAnalysisResult) -> Option<Self> {
+        let n = analysis.landmarks.len();
+        if n < MEDIAPIPE_LANDMARK_COUNT {
+            return None;
+        }
+        // Placeholder contiguous ranges — mask builders use MP index gather when len == 468.
+        Some(Self {
+            left_eye: (0, MP_LEFT_EYE_INDICES.len()),
+            right_eye: (0, MP_RIGHT_EYE_INDICES.len()),
+            outer_lips: (0, MP_OUTER_LIP_INDICES.len()),
+            inner_lips: (0, MP_INNER_LIP_INDICES.len()),
+        })
+    }
+
+    pub fn is_mediapipe_mesh(analysis: &FaceAnalysisResult) -> bool {
+        analysis.landmarks.len() >= MEDIAPIPE_LANDMARK_COUNT
+    }
+
+    /// Gather landmarks by MP index table.
+    pub fn gather_mp_indices(lm: &[Landmark2D], indices: &[usize]) -> Vec<Landmark2D> {
+        indices
+            .iter()
+            .filter_map(|&i| lm.get(i).copied())
+            .collect()
     }
 
     fn from_region_counts(analysis: &FaceAnalysisResult) -> Option<Self> {

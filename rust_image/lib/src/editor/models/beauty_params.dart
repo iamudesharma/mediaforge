@@ -10,6 +10,7 @@ extension BeautyParamsX on BeautyParams {
     lipPlump: 0,
     blush: 0,
     underEye: 0,
+    teethWhiten: 0,
   );
 
   bool get hasEffect =>
@@ -18,7 +19,8 @@ extension BeautyParamsX on BeautyParams {
       (lipTint != LipTintPreset.none && lipTintStrength > 0.001) ||
       lipPlump > 0.001 ||
       blush > 0.001 ||
-      underEye > 0.001;
+      underEye > 0.001 ||
+      teethWhiten > 0.001;
 
   BeautyParams copyWith({
     double? skinSmooth,
@@ -28,6 +30,7 @@ extension BeautyParamsX on BeautyParams {
     double? lipPlump,
     double? blush,
     double? underEye,
+    double? teethWhiten,
   }) {
     return BeautyParams(
       skinSmooth: skinSmooth ?? this.skinSmooth,
@@ -37,6 +40,7 @@ extension BeautyParamsX on BeautyParams {
       lipPlump: lipPlump ?? this.lipPlump,
       blush: blush ?? this.blush,
       underEye: underEye ?? this.underEye,
+      teethWhiten: teethWhiten ?? this.teethWhiten,
     );
   }
 
@@ -49,6 +53,7 @@ extension BeautyParamsX on BeautyParams {
       lipPlump: lipPlump.clamp(0.0, 1.0),
       blush: blush.clamp(0.0, 1.0),
       underEye: underEye.clamp(0.0, 1.0),
+      teethWhiten: teethWhiten.clamp(0.0, 1.0),
     );
   }
 }

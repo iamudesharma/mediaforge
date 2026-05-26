@@ -15,7 +15,7 @@ pub use landmark::{LandmarkRegions, MEDIAPIPE_LANDMARK_COUNT, VISION_MIN_LANDMAR
 pub use looks::{params_for_look, recipe_for, BeautyRecipe};
 pub use regions::{
     apply_exclude_mask, build_blush_mask, build_eye_mask, build_lip_mask, build_skin_mask,
-    build_under_eye_mask,
+    build_teeth_mask, build_under_eye_mask,
 };
 pub use smoothing::TemporalSmoother;
 

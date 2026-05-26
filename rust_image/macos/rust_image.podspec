@@ -24,7 +24,8 @@ A new Flutter FFI plugin project.
   s.resource_bundles = { 'rust_image_mediapipe' => ['../darwin/Resources/mediapipe/**'] }
   s.dependency 'FlutterMacOS'
 
-  s.platform = :osx, '10.11'
+  s.platform = :osx, '12.0'
+  s.dependency 'MediaPipeTasksVision', '0.10.14'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
 

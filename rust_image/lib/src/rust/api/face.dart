@@ -161,6 +161,9 @@ class BeautyParams {
   /// 0–1 under-eye softening (Nexus E).
   final double underEye;
 
+  /// 0–1 teeth whitening (Nexus E).
+  final double teethWhiten;
+
   const BeautyParams({
     required this.skinSmooth,
     required this.eyeBrighten,
@@ -169,6 +172,7 @@ class BeautyParams {
     required this.lipPlump,
     required this.blush,
     required this.underEye,
+    required this.teethWhiten,
   });
 
   static Future<BeautyParams> default_() =>
@@ -185,7 +189,8 @@ class BeautyParams {
       lipTintStrength.hashCode ^
       lipPlump.hashCode ^
       blush.hashCode ^
-      underEye.hashCode;
+      underEye.hashCode ^
+      teethWhiten.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -198,7 +203,8 @@ class BeautyParams {
           lipTintStrength == other.lipTintStrength &&
           lipPlump == other.lipPlump &&
           blush == other.blush &&
-          underEye == other.underEye;
+          underEye == other.underEye &&
+          teethWhiten == other.teethWhiten;
 }
 
 /// Output of native face pipeline (Vision or MediaPipe).

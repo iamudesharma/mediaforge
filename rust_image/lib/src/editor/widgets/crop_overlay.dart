@@ -32,6 +32,7 @@ class _CropOverlayState extends State<CropOverlay> {
   int _startCropY = 0;
   int _startCropW = 0;
   int _startCropH = 0;
+  double? _straightenAtScaleStart;
 
   CropController get c => widget.crop;
 
@@ -151,6 +152,21 @@ class _CropOverlayState extends State<CropOverlay> {
                       _mode = null;
                       _startPixel = null;
                     },
+                    onScaleStart: (d) {
+                      if (d.pointerCount >= 2) {
+                        _straightenAtScaleStart = c.straightenDegrees;
+                      }
+                    },
+                    onScaleUpdate: (d) {
+                      if (d.pointerCount >= 2 &&
+                          _straightenAtScaleStart != null &&
+                          d.rotation.abs() > 0.0005) {
+                        final deg = _straightenAtScaleStart! +
+                            d.rotation * 180 / math.pi;
+                        c.setStraightenDegrees(deg);
+                      }
+                    },
+                    onScaleEnd: (_) => _straightenAtScaleStart = null,
                     child: CustomPaint(
                       painter: _CropOverlayPainter(
                         crop: c,
@@ -186,7 +202,7 @@ class _CropHint extends StatelessWidget {
       child: const Padding(
         padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Text(
-          'Drag box or corners · pinch to zoom',
+          'Drag box · two-finger rotate to straighten',
           style: TextStyle(color: Colors.white, fontSize: 11),
         ),
       ),

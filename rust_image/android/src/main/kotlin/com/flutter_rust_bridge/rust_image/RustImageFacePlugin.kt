@@ -29,18 +29,35 @@ object RustImageFacePlugin {
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "isAvailable" -> result.success(true)
+                "isMediaPipeReady" -> {
+                    val args = call.arguments as? Map<*, *>
+                    val modelDir = args?.get("modelDir") as? String
+                    result.success(RustImageMediaPipeAnalyzer.modelsReady(modelDir))
+                }
                 "analyzeImage" -> {
                     val args = call.arguments as? Map<*, *>
                     val bytes = byteArrayFromArg(args?.get("bytes"))
                     val width = (args?.get("width") as? Number)?.toInt() ?: 0
                     val height = (args?.get("height") as? Number)?.toInt() ?: 0
+                    val pixelFormat = args?.get("pixelFormat") as? String ?: "jpeg"
+                    val modelDir = args?.get("modelDir") as? String
                     if (bytes == null || width <= 0 || height <= 0) {
                         result.error("bad_args", "bytes/width/height required", null)
                         return@setMethodCallHandler
                     }
                     CoroutineScope(Dispatchers.Default).launch {
                         try {
-                            val payload = analyze(bytes, width, height)
+                            val payload = if (RustImageMediaPipeAnalyzer.modelsReady(modelDir)) {
+                                RustImageMediaPipeAnalyzer.analyze(
+                                    bytes,
+                                    pixelFormat,
+                                    width,
+                                    height,
+                                    modelDir!!,
+                                )
+                            } else {
+                                analyzeMlKit(bytes, pixelFormat, width, height)
+                            }
                             CoroutineScope(Dispatchers.Main).launch { result.success(payload) }
                         } catch (e: Exception) {
                             CoroutineScope(Dispatchers.Main).launch {
@@ -63,13 +80,26 @@ object RustImageFacePlugin {
         else -> null
     }
 
-    private suspend fun analyze(
+    private suspend fun analyzeMlKit(
         jpegOrPng: ByteArray,
+        pixelFormat: String,
         targetWidth: Int,
         targetHeight: Int,
     ): Map<String, Any> {
-        val decoded = android.graphics.BitmapFactory.decodeByteArray(jpegOrPng, 0, jpegOrPng.size)
-            ?: throw IllegalArgumentException("Could not decode image")
+        val decoded = if (pixelFormat == "rgba" && targetWidth > 0 && targetHeight > 0 &&
+            jpegOrPng.size >= targetWidth * targetHeight * 4
+        ) {
+            android.graphics.Bitmap.createBitmap(
+                targetWidth,
+                targetHeight,
+                android.graphics.Bitmap.Config.ARGB_8888,
+            ).also { bmp ->
+                bmp.copyPixelsFromBuffer(java.nio.ByteBuffer.wrap(jpegOrPng))
+            }
+        } else {
+            android.graphics.BitmapFactory.decodeByteArray(jpegOrPng, 0, jpegOrPng.size)
+                ?: throw IllegalArgumentException("Could not decode image")
+        }
         val scaled = android.graphics.Bitmap.createScaledBitmap(decoded, targetWidth, targetHeight, true)
         val image = InputImage.fromBitmap(scaled, 0)
 

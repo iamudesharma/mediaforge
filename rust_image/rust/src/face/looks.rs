@@ -82,6 +82,11 @@ pub fn params_for_look(preset: BeautyLookPreset) -> BeautyParams {
         lip_plump: r.lip_plump,
         blush: r.blush,
         under_eye: 0.0,
+        teeth_whiten: if matches!(preset, BeautyLookPreset::Glam) {
+            0.25
+        } else {
+            0.0
+        },
     }
 }
 

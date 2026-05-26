@@ -12,6 +12,7 @@ const SKIN_SMOOTH_SHADER: &str = include_str!("shaders/skin_smooth.wgsl");
 const EYE_BRIGHTEN_SHADER: &str = include_str!("shaders/eye_brighten.wgsl");
 const LIP_TINT_SHADER: &str = include_str!("shaders/lip_tint.wgsl");
 const BLUSH_SHADER: &str = include_str!("shaders/blush.wgsl");
+const TEETH_WHITEN_SHADER: &str = include_str!("shaders/teeth_whiten.wgsl");
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -56,6 +57,7 @@ pub(crate) struct BeautyGpuPipelines {
     pub eye_brighten: wgpu::ComputePipeline,
     pub lip_tint: wgpu::ComputePipeline,
     pub blush: wgpu::ComputePipeline,
+    pub teeth_whiten: wgpu::ComputePipeline,
 }
 
 impl BeautyGpuPipelines {
@@ -79,6 +81,7 @@ impl BeautyGpuPipelines {
             eye_brighten: mk("eye_brighten_pipeline", EYE_BRIGHTEN_SHADER),
             lip_tint: mk("lip_tint_pipeline", LIP_TINT_SHADER),
             blush: mk("blush_pipeline", BLUSH_SHADER),
+            teeth_whiten: mk("teeth_whiten_pipeline", TEETH_WHITEN_SHADER),
         }
     }
 }
@@ -108,6 +111,7 @@ impl GpuEngine {
         eye_mask: Option<&SegmentationMask>,
         lip_mask: Option<&SegmentationMask>,
         blush_mask: Option<&SegmentationMask>,
+        teeth_mask: Option<&SegmentationMask>,
         exclude: Option<&SegmentationMask>,
     ) -> Result<(), String> {
         if !params.is_active() {
@@ -262,6 +266,25 @@ impl GpuEngine {
                     &beauty.blush,
                     blush,
                     "blush_pass",
+                    bytemuck::bytes_of(&p),
+                    active_is_1,
+                );
+            }
+        }
+
+        if params.teeth_whiten > 0.001 {
+            if let Some(teeth) = teeth_mask {
+                let p = EyeBrightenParams {
+                    width,
+                    height,
+                    strength: params.teeth_whiten,
+                    _pad: 0.0,
+                };
+                active_is_1 = dispatch(
+                    &mut encoder,
+                    &beauty.teeth_whiten,
+                    teeth,
+                    "teeth_whiten_pass",
                     bytemuck::bytes_of(&p),
                     active_is_1,
                 );

@@ -6,6 +6,7 @@ import io.flutter.plugin.common.MethodChannel
 /** Registers platform channels for rust_image on Android (Nexus D). */
 class RustImagePlugin : FlutterPlugin {
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        RustImageAppContext.init(binding.applicationContext)
         RustImageFacePlugin.register(binding.binaryMessenger)
     }
 

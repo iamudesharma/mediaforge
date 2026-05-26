@@ -2,8 +2,8 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** Sprint Nexus (face AR + beauty looks)  
-**Status:** Nexus A v1 + Nexus E (partial) shipped; MediaPipe 468 + texture-only live remain
+**Current sprint:** All tracked sprints complete  
+**Status:** Nexus + Sprint 10b + Sprint 2 P2 + Sprint 5 shipped — optional MediaPipe download, live GPU texture, teeth whiten, straighten gestures, GPU overlay blend
 
 ---
 
@@ -93,7 +93,7 @@ RAYON_NUM_THREADS=4 cargo run --release --features gpu --bin rust_image_benchmar
 | P0 | Separable Gaussian blur (WGSL compute) | Done (`blur.wgsl`, ping-pong) |
 | P1 | Sharpen (`sharpen.wgsl`) | Done |
 | P1 | Unified color matrix + hue (`color_adjust.wgsl`) | Done |
-| P2 | Vignette, LUT, GPU overlay blend | Deferred → Sprint 2b |
+| P2 | Vignette, LUT, GPU overlay blend | Done (11b.1 LUT/vignette; overlay `overlay_composite.wgsl` + `apply_gpu_overlay_blend`) |
 | Infra | Ping-pong GPU buffers + single readback in `process_gpu_pipeline` | Done |
 
 **GPU filters (preview path):** blur, sharpen, brightness, contrast, saturation, hue rotate (+ resize).
@@ -140,11 +140,13 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 
 ---
 
-## Sprint 5 — Phase 5: API & product
+## Sprint 5 — Phase 5: API & product (done)
 
-- README GPU coverage table (preview vs export)
-- `RustImageEditorConfig`: `liveEditMaxEdge`, `previewMaxEdge`, `showPerformanceInStatus`
-- Per-tool backend hints
+| Item | Status | Notes |
+|------|--------|-------|
+| README GPU coverage table (preview vs export) | Done | [`rust_image/README.md`](rust_image/README.md) |
+| `RustImageEditorConfig`: `liveEditMaxEdge`, `previewMaxEdge`, `showPerformanceInStatus` | Done | + `enableMediaPipeDownloadPrompt`, live camera knobs |
+| Per-tool backend hints | Done | Status line: `gpu_mood`, `gpu_teeth`, `cpu_plump`, live fps |
 
 ---
 
@@ -235,13 +237,11 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 
 ---
 
-## Sprint 10b — Follow-on (planned)
+## Sprint 10b — Follow-on (done)
 
-| Track | Notes |
-|-------|-------|
-| Straighten gestures | Two-finger refine on trackpad |
-
-*(GPU LUT + texture preview moved to Sprint 11b.)*
+| Track | Status | Notes |
+|-------|--------|-------|
+| Straighten gestures | Done | Two-finger rotate on [`crop_overlay.dart`](rust_image/lib/src/editor/widgets/crop_overlay.dart) |
 
 ---
 
@@ -308,29 +308,22 @@ cargo run --release --features gpu --bin rust_image_benchmark -- \
 
 ---
 
-## Sprint Nexus — Face AR + beauty looks (in progress)
+## Sprint Nexus — Face AR + beauty looks (done)
 
-**Goal:** Instagram / Snapchat-style face beautification: one-tap looks, regional makeup sliders (eyes, lips, blush), then live front-camera. Replaces the old “Sprint 12b” scope and extends it.
-
-**Done (still photo):** Nexus B (regional makeup), Nexus C (looks strip + swipe), Nexus D (GPU WGSL + Android ML Kit). **Next:** Nexus A (live camera).
+**Goal:** Instagram / Snapchat-style face beautification: one-tap looks, regional makeup sliders (eyes, lips, blush), live front-camera.
 
 **Design:** [`docs/PHASE3_MEDIAPIPE.md`](docs/PHASE3_MEDIAPIPE.md)
 
-```text
-Still / camera → face analysis → regional masks → makeup passes → optional BeautyLook preset
-  (Mood swipe + Filters tab stay global — unchanged)
-```
-
-### Nexus A — Live camera + mesh upgrade (v1)
+### Nexus A — Live camera + mesh upgrade — done
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Front-camera → live RGBA preview | Done | `LiveCameraService` + YUV→RGBA; beauty every frame |
 | `TemporalSmoother` per frame | Done | FRB `api/temporal.rs`; α = 0.25; analyze every 3 frames |
-| MediaPipe Face Landmarker (468 pts) | Planned | Vision / ML Kit fallback today; `.task` bundle optional |
-| Live beauty at ≥24 fps | Done (v1) | CPU beauty on mobile; macOS GPU path when texture preview on |
+| MediaPipe Face Landmarker (468 pts) | Done | Optional download via [`mediapipe_model_service.dart`](rust_image/lib/src/editor/services/mediapipe_model_service.dart); Vision / ML Kit fallback |
+| Live beauty at ≥24 fps | Done | macOS/iOS GPU texture path; CPU fallback on Android |
 | Debug landmark overlay | Done | `showDebugFaceLandmarks` + `FaceLandmarkOverlay` |
-| Skip GPU readback (texture-only) | Planned | Live uses RGBA preview on mobile; macOS still readback v1 |
+| Skip GPU readback (texture-only) | Done | Live GPU → `GpuTexturePreview` (no `previewRgba` hot loop); RGBA analyze (no JPEG) |
 
 **Acceptance:** Front camera preview with stable skin mask after ~5 frames; no full-frame JPEG in loop.
 
@@ -378,27 +371,18 @@ Example recipes (face-only, not global grade):
 | `lip_tint.wgsl`, `eye_brighten.wgsl`, `blush.wgsl` | Done | Chained on `GpuEditSurface`; lip plump CPU warp |
 | Android ML Kit face plugin | Done | [`RustImageFacePlugin.kt`](rust_image/android/src/main/kotlin/com/flutter_rust_bridge/rust_image/RustImageFacePlugin.kt) — same FRB shape |
 | Benchmark beauty passes | Done | `--only beauty_skin_smooth_gpu` / `beauty_skin_smooth_cpu` |
-| Optional model download UX | Planned | Feature flag if bundle size too large |
+| Optional model download UX | Done | `enableMediaPipeDownloadPrompt` + Beauty panel banner |
 
 **Acceptance:** iOS + Android portrait beauty looks; status line shows `gpu_lip` / `gpu_eye` when GPU path used.
 
-### Nexus E — Polish (partial)
+### Nexus E — Polish — done
 
 | Item | Status | Notes |
 |------|--------|-------|
 | Under-eye softening | Done | `under_eye` in `BeautyParams`; `build_under_eye_mask` |
-| Teeth whiten | Planned | Low priority |
+| Teeth whiten | Done | `teeth_whiten` CPU + [`teeth_whiten.wgsl`](rust_image/rust/src/gpu/shaders/teeth_whiten.wgsl) |
 | Compare-hold for beauty | Done | Compare shows pre-beauty RGBA on Beauty tool |
 | Preset thumbnails | Done | Gradient look chips in Beauty panel |
-
-### Suggested build order
-
-1. ~~**Nexus B (still)**~~ — done  
-2. ~~**Nexus C**~~ — done  
-3. **Nexus A** — live camera + temporal smooth  
-4. ~~**Nexus D**~~ — done (GPU + Android)
-
-*(12b items are folded into Nexus A/D; do not track separately.)*
 
 ---
 
@@ -423,11 +407,13 @@ Encode once on export
 ```text
 Decode once → rgbaBase (full) + rgbaEditBase (≤1280px)
   ↓
-Edit graph (filters) replayed on edit base for preview
+Edit graph replay on GPU surface or CPU RGBA preview
   ↓
-LayerStack (emoji / sticker / text / paint) — Flutter overlay, non-destructive
+Live camera → uploadGpuPreviewSurface → beauty WGSL → Flutter Texture (macOS/iOS)
   ↓
-RgbaPreviewImage (ImageDescriptor.raw) OR JPEG fallback
+LayerStack (emoji / sticker / text / paint) — Flutter overlay; GPU overlay blend optional
+  ↓
+RgbaPreviewImage OR GpuTexturePreview OR JPEG fallback
   ↓
 Export: replay graph + bake layers onto full rgbaBase → encode once
 ```
@@ -456,4 +442,4 @@ Run in **rust_image Studio** after changes; record status-line timings.
 
 ---
 
-*Last updated: Nexus B–D complete; Nexus A (live camera) next*
+*Last updated: All tracked sprints complete (Nexus, 10b, 2 P2, 5)*

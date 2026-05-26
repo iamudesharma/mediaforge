@@ -61,6 +61,8 @@ pub struct BeautyParams {
     pub blush: f32,
     /// 0–1 under-eye softening (Nexus E).
     pub under_eye: f32,
+    /// 0–1 teeth whitening (Nexus E).
+    pub teeth_whiten: f32,
 }
 
 impl BeautyParams {
@@ -71,6 +73,7 @@ impl BeautyParams {
             || self.lip_plump > 0.001
             || self.blush > 0.001
             || self.under_eye > 0.001
+            || self.teeth_whiten > 0.001
     }
 }
 
