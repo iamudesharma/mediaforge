@@ -14,9 +14,10 @@ abstract final class LayerBake {
         List<RasterLayerInput> rasterLayers,
         List<PaintStrokeInput> paintStrokes,
       })> prepareInputs(LayerStack stack) async {
+    final flat = stack.flattenForBake();
     final rasterInputs = <RasterLayerInput>[];
 
-    for (final layer in stack.layers) {
+    for (final layer in flat) {
       if (!layer.visible) continue;
       if (layer is PaintStrokeLayer) continue;
       await LayerRasterizer.cacheLayerBitmap(layer);
@@ -40,7 +41,7 @@ abstract final class LayerBake {
     }
 
     final strokeInputs = <PaintStrokeInput>[];
-    for (final layer in stack.paintStrokes) {
+    for (final layer in flat.whereType<PaintStrokeLayer>()) {
       if (!layer.visible || layer.points.length < 2) continue;
       final c = layer.color;
       strokeInputs.add(
@@ -54,6 +55,7 @@ abstract final class LayerBake {
           opacity: layer.opacity,
           erase: layer.brush == PaintBrushKind.eraser,
           brushKind: layer.brush.index,
+          filled: layer.filled,
         ),
       );
     }

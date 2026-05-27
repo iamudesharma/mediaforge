@@ -587,7 +587,7 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
                 region_counts: vec![],
             };
             let mask = build_skin_mask(&analysis, buf.width, buf.height);
-            let _ = apply_skin_smooth_rgba(&buf, &mask, 0.6);
+            let _ = apply_skin_smooth_rgba(&buf, &mask, 0.6, 0.0);
             Ok(())
         },
     )?;

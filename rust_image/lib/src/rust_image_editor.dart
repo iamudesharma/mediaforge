@@ -49,6 +49,28 @@ class RustImageEditor {
     } on StateError catch (e) {
       // Already initialized in this isolate (e.g. main + widget both called init).
       if (!e.message.contains('twice')) rethrow;
+    } catch (e, st) {
+      if (Platform.isIOS || Platform.isMacOS) {
+        final msg = e.toString();
+        if (msg.contains('frb_get_rust_content_hash') ||
+            msg.contains('symbol not found') ||
+            msg.contains('Failed to lookup symbol')) {
+          Error.throwWithStackTrace(
+            StateError(
+              'Rust FFI failed to load on ${Platform.operatingSystem} (common on '
+              'Release/Archive when Xcode strips Rust symbols). '
+              'Clean rebuild: delete ios/Pods, ios/Podfile.lock, then '
+              'flutter clean && flutter pub get && cd ios && pod install. '
+              'In Xcode Runner target: Build Settings → Strip Style → '
+              'Non-Global Symbols; Strip Linked Product → No. '
+              'See rust_image/README.md § iOS Release / Rust FFI. '
+              'Original: $msg',
+            ),
+            st,
+          );
+        }
+      }
+      rethrow;
     }
   }
 

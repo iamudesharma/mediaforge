@@ -234,7 +234,7 @@ class _LayersPopover extends StatelessWidget {
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: LayersPanel(session: session),
+                child: LayersPanel(session: session, compact: true),
               ),
             ),
           ],

@@ -31,7 +31,7 @@ base class RustWorkerService {
     required int quality,
   }) async {
     await _ensureInitialized();
-    final filter = FilterDescriptor(filterKind, Map<String, num>.from(filterParams));
+    final filter = FilterDescriptor(filterKind, Map<String, dynamic>.from(filterParams));
     final format = OutputFormat.values[formatIndex];
     return RustImageEditor.filter(
       bytes: bytes.materialize().asUint8List(),
@@ -54,7 +54,7 @@ base class RustWorkerService {
     required bool encodePreviewJpeg,
   }) async {
     await _ensureInitialized();
-    final filter = FilterDescriptor(filterKind, Map<String, num>.from(filterParams));
+    final filter = FilterDescriptor(filterKind, Map<String, dynamic>.from(filterParams));
     final backend = ProcessingBackend.values[backendIndex];
     
     final total = Stopwatch()..start();
@@ -253,6 +253,12 @@ base class RustWorkerService {
       blush: blush,
       underEye: underEye,
       teethWhiten: teethWhiten,
+      skinPreserveDetail: 0,
+      eyeEnlarge: 0,
+      jawSlim: 0,
+      noseSlim: 0,
+      faceSlim: 0,
+      chinVshape: 0,
     );
     SegmentationMask? excludeMask;
     if (exRaw != null && exW > 0 && exH > 0) {

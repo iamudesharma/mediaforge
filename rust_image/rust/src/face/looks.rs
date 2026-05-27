@@ -87,6 +87,12 @@ pub fn params_for_look(preset: BeautyLookPreset) -> BeautyParams {
         } else {
             0.0
         },
+        skin_preserve_detail: 0.0,
+        eye_enlarge: 0.0,
+        jaw_slim: 0.0,
+        nose_slim: 0.0,
+        face_slim: 0.0,
+        chin_vshape: 0.0,
     }
 }
 

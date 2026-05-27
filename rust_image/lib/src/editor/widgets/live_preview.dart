@@ -21,7 +21,8 @@ import 'gpu_texture_preview.dart';
 import 'rgba_preview_image.dart';
 import 'crop_overlay.dart';
 import 'placement_overlay.dart';
-import 'swipe_mood_filter.dart';
+import 'swipe_look_filter.dart';
+import 'swipe_look_particles.dart';
 import 'swipe_beauty_look.dart';
 import '../editor_session.dart';
 import 'face_landmark_overlay.dart';
@@ -50,6 +51,7 @@ class LivePreview extends StatefulWidget {
     this.layerStack,
     this.showLayerOverlay = false,
     this.layerInteractionEnabled = false,
+    this.layersToolActive = false,
     this.paintMode = false,
     this.imageWidth = 0,
     this.imageHeight = 0,
@@ -64,11 +66,14 @@ class LivePreview extends StatefulWidget {
     this.activePaintWidth,
     this.activePaintOpacity,
     this.activePaintBrush,
+    this.activePaintFilled = false,
     this.hiddenTextLayerId,
-    this.enableSwipeMoodFilters = false,
-    this.swipeMoodFiltersEnabled = false,
-    this.moodFilterStrength = 1.0,
-    this.moodSession,
+    this.eraserMode = EraserMode.partial,
+    this.onObjectErase,
+    this.enableSwipeLooks = false,
+    this.swipeLooksEnabled = false,
+    this.swipeLookStrength = 1.0,
+    this.swipeLookSession,
     this.enableSwipeBeautyLooks = false,
     this.swipeBeautyLooksEnabled = false,
     this.beautySession,
@@ -110,6 +115,7 @@ class LivePreview extends StatefulWidget {
 
   /// Drag, pinch, and layer gestures (Stickers / Paint / Layers only).
   final bool layerInteractionEnabled;
+  final bool layersToolActive;
   final bool paintMode;
   final int imageWidth;
   final int imageHeight;
@@ -125,11 +131,14 @@ class LivePreview extends StatefulWidget {
   final double? activePaintWidth;
   final double? activePaintOpacity;
   final PaintBrushKind? activePaintBrush;
+  final bool activePaintFilled;
   final String? hiddenTextLayerId;
-  final bool enableSwipeMoodFilters;
-  final bool swipeMoodFiltersEnabled;
-  final double moodFilterStrength;
-  final EditorSession? moodSession;
+  final EraserMode eraserMode;
+  final void Function(Offset imagePixel)? onObjectErase;
+  final bool enableSwipeLooks;
+  final bool swipeLooksEnabled;
+  final double swipeLookStrength;
+  final EditorSession? swipeLookSession;
   final bool enableSwipeBeautyLooks;
   final bool swipeBeautyLooksEnabled;
   final EditorSession? beautySession;
@@ -230,6 +239,7 @@ class _LivePreviewState extends State<LivePreview> {
             child: widget.bytes == null &&
                     widget.previewRgba == null &&
                     !_liveCameraReady &&
+                    widget.liveCameraController == null &&
                     (widget.gpuTextureId == null || widget.gpuTextureId! <= 0)
                 ? _EmptyPreview(
                     key: const ValueKey('empty'),
@@ -261,6 +271,7 @@ class _LivePreviewState extends State<LivePreview> {
                     layerStack: widget.layerStack,
                     showLayerOverlay: widget.showLayerOverlay,
                     layerInteractionEnabled: widget.layerInteractionEnabled,
+                    layersToolActive: widget.layersToolActive,
                     paintMode: widget.paintMode,
                     imageWidth: widget.imageWidth,
                     imageHeight: widget.imageHeight,
@@ -276,7 +287,10 @@ class _LivePreviewState extends State<LivePreview> {
                     activePaintWidth: widget.activePaintWidth,
                     activePaintOpacity: widget.activePaintOpacity,
                     activePaintBrush: widget.activePaintBrush,
+                    activePaintFilled: widget.activePaintFilled,
                     hiddenTextLayerId: widget.hiddenTextLayerId,
+                    eraserMode: widget.eraserMode,
+                    onObjectErase: widget.onObjectErase,
                       ),
                       if (widget.showFaceLandmarks &&
                           widget.faceLandmarks != null &&
@@ -333,12 +347,12 @@ class _LivePreviewState extends State<LivePreview> {
     );
 
     if (widget.immersive) {
-      return _wrapSwipeBeauty(_wrapSwipeMood(canvas));
+      return _wrapSwipeBeauty(_wrapSwipeLook(canvas));
     }
     return Card(
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
-      child: _wrapSwipeBeauty(_wrapSwipeMood(canvas)),
+      child: _wrapSwipeBeauty(_wrapSwipeLook(canvas)),
     );
   }
 
@@ -361,21 +375,27 @@ class _LivePreviewState extends State<LivePreview> {
     );
   }
 
-  Widget _wrapSwipeMood(Widget canvas) {
-    if (!widget.enableSwipeMoodFilters ||
-        widget.moodSession == null ||
-        !widget.swipeMoodFiltersEnabled) {
+  Widget _wrapSwipeLook(Widget canvas) {
+    if (!widget.enableSwipeLooks ||
+        widget.swipeLookSession == null ||
+        !widget.swipeLooksEnabled) {
       return canvas;
     }
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        return SwipeMoodFilterLayer(
-          session: widget.moodSession!,
-          enabled: widget.swipeMoodFiltersEnabled,
+        return SwipeLookFilterLayer(
+          session: widget.swipeLookSession!,
+          enabled: widget.swipeLooksEnabled,
           viewerScale: _controller.value.getMaxScaleOnAxis(),
-          strength: widget.moodFilterStrength,
-          child: canvas,
+          strength: widget.swipeLookStrength,
+          child: SwipeLookParticleOverlay(
+            active: swipeLookUsesParticles(
+              widget.swipeLookSession!.previewSwipeLook ??
+                  widget.swipeLookSession!.committedSwipeLookPreset,
+            ),
+            child: canvas,
+          ),
         );
       },
     );
@@ -445,6 +465,7 @@ class _PreviewContent extends StatelessWidget {
     this.layerStack,
     this.showLayerOverlay = false,
     this.layerInteractionEnabled = false,
+    this.layersToolActive = false,
     this.paintMode = false,
     this.imageWidth = 0,
     this.imageHeight = 0,
@@ -459,7 +480,10 @@ class _PreviewContent extends StatelessWidget {
     this.activePaintWidth,
     this.activePaintOpacity,
     this.activePaintBrush,
+    this.activePaintFilled = false,
     this.hiddenTextLayerId,
+    required this.eraserMode,
+    this.onObjectErase,
   });
 
   final Uint8List? bytes;
@@ -483,6 +507,7 @@ class _PreviewContent extends StatelessWidget {
   final LayerStack? layerStack;
   final bool showLayerOverlay;
   final bool layerInteractionEnabled;
+  final bool layersToolActive;
   final bool paintMode;
   final int imageWidth;
   final int imageHeight;
@@ -498,7 +523,10 @@ class _PreviewContent extends StatelessWidget {
   final double? activePaintWidth;
   final double? activePaintOpacity;
   final PaintBrushKind? activePaintBrush;
+  final bool activePaintFilled;
   final String? hiddenTextLayerId;
+  final EraserMode eraserMode;
+  final void Function(Offset imagePixel)? onObjectErase;
 
   Widget _frameLiveChild(Widget child, {Size? sourceSize}) {
     final ratio = livePreviewAspect.targetRatio;
@@ -715,6 +743,8 @@ class _PreviewContent extends StatelessWidget {
                       childSize: childSize,
                       viewerTransform: controller.value,
                       paintMode: paintMode,
+                      layersToolActive: layersToolActive,
+                      eraserMode: eraserMode,
                       onStackChanged: onLayerStackChanged ?? () {},
                       onTransformBegin: onTransformBegin,
                       onUserImageStickerTap: onUserImageStickerTap,
@@ -726,7 +756,9 @@ class _PreviewContent extends StatelessWidget {
                       activePaintWidth: activePaintWidth,
                       activePaintOpacity: activePaintOpacity,
                       activePaintBrush: activePaintBrush,
+                      activePaintFilled: activePaintFilled,
                       hiddenTextLayerId: hiddenTextLayerId,
+                      onObjectErase: onObjectErase,
                     );
                   },
                 )
@@ -737,6 +769,8 @@ class _PreviewContent extends StatelessWidget {
                   childSize: childSize,
                   viewerTransform: controller.value,
                   paintMode: paintMode,
+                  layersToolActive: layersToolActive,
+                  eraserMode: eraserMode,
                   onStackChanged: onLayerStackChanged ?? () {},
                   onTransformBegin: onTransformBegin,
                   onUserImageStickerTap: onUserImageStickerTap,
@@ -748,7 +782,9 @@ class _PreviewContent extends StatelessWidget {
                   activePaintWidth: activePaintWidth,
                   activePaintOpacity: activePaintOpacity,
                   activePaintBrush: activePaintBrush,
+                  activePaintFilled: activePaintFilled,
                   hiddenTextLayerId: hiddenTextLayerId,
+                  onObjectErase: onObjectErase,
                 );
           // Read-only layer preview on crop/filter/etc.; paint must keep receiving pointers.
           if (!layerInteractionEnabled && !paintMode) {

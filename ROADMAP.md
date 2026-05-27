@@ -2,8 +2,8 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** All tracked sprints complete (Sprint 13)  
-**Status:** Sprint 13 + Nexus + Sprint 10b + Sprint 2 P2 + Sprint 5 shipped — Squadron worker pool, parallel pipelines, offload camera YUV conversion, MediaPipe download, live GPU texture, teeth whiten
+**Current sprint:** Sprint 14 (Flutter state — Riverpod)  
+**Status:** Sprint 13 + Nexus shipped; Sprint 14 in progress — internal Riverpod, split preview/chrome rebuilds, DevTools baseline
 
 ---
 
@@ -398,6 +398,126 @@ Example recipes (face-only, not global grade):
 
 ---
 
+## Sprint 14 — Flutter state: Riverpod (in progress)
+
+**Goal:** Reduce unnecessary widget rebuilds; centralize editor lifecycle; make preview/status/layer updates independently subscribable. Riverpod is **internal** to the plugin (`ProviderScope` inside `RustImageEditorWidget`); host apps keep `RustImageEditorConfig` + optional `session` — no Riverpod dependency required.
+
+**Design:** [`docs/FLUTTER_STATE.md`](docs/FLUTTER_STATE.md)
+
+| Phase | Deliverable | Status | Notes |
+|-------|-------------|--------|-------|
+| **14.0 Baseline** | DevTools rebuild checklist (shell vs preview vs swipe) | Done | Scenarios B, G, H in perf matrix |
+| **14.1 Foundation** | `flutter_riverpod`, `ProviderScope`, `editorSessionProvider` | Done | Override when `config.session != null` |
+| **14.2 Split providers** | `previewStateProvider`, `statusProvider`, `layerStackProvider`, etc. | Done | `previewListenable` removed from `editorChromeListenable` merge |
+| **14.3 Shell migration** | `Consumer` / `select` on shell; `ref.listen` for placement + `onImageChanged` | Done | Live status throttled; preview subtree isolated |
+| **14.4 Widget migration** | Swipe mood/beauty, `ExportPanel`, meta chips → narrow listenables | Done | No full `EditorSession` `ListenableBuilder` on hot paths |
+| **14.5 Panel state** | Beauty/filter `Notifier` sync (optional) | Planned | Local panel state → commit to session |
+| **14.6 Cleanup** | Remove redundant `notifyListeners` + duplicate `ValueNotifier`s | Planned | Measure vs 14.0 baseline |
+
+**Acceptance (perf matrix):**
+
+- **B / G:** Adjust/beauty slider — tool panel does not rebuild on each preview tick (canvas + active control only).
+- **H:** Live camera — shell rebuild rate ≪ frame rate; FPS/status via status channel only.
+- **Regression:** Undo/redo, mood swipe commit, beauty looks, export unchanged.
+
+**Out of scope:** Replacing Rust `EditGraph`, Squadron workers, or GPU pipeline (Dart UI only).
+
+**Dependencies:** `flutter_riverpod` (internal); optional `riverpod_generator` later.
+
+---
+
+## Sprint 15 — Swipe combo looks (mood + beauty) — done
+
+**Goal:** Replace swipe carousel with 8 TikTok/Instagram combo filters (global grade + regional beauty); move classic 16 mood presets to Filters tab.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| `SwipeLookPreset` + recipes | Done | [`swipe_looks.rs`](rust_image/rust/src/filters/swipe_looks.rs) |
+| `ImageFilter::SwipeLook` + GPU LUT | Done | Separate slot from Filters-tab `ImageFilter::Mood` |
+| `setSwipeLook` atomic commit | Done | Grade + `BeautyParams` + undo |
+| Filters tab mood strip | Done | Rose, Clarendon, … + intensity slider |
+| Extras: glow, grain, halation, rgb split | Done | CPU + GPU post-grade in [`swipe_extras.rs`](rust_image/rust/src/filters/swipe_extras.rs) |
+| Face warp (eye/jaw/nose/chin) | Done | [`warp_mesh.rs`](rust_image/rust/src/face/warp_mesh.rs) |
+| Snow Princess particles | Done | Flutter overlay [`swipe_look_particles.dart`](rust_image/lib/src/editor/widgets/swipe_look_particles.dart) |
+| `skin_preserve_detail` | Done | CPU + [`skin_smooth.wgsl`](rust_image/rust/src/gpu/shaders/skin_smooth.wgsl) |
+
+**Config:** `enableSwipeLooks` (default true); `enableSwipeBeautyLooks` default false on Beauty tab swipe.
+
+---
+
+## Sprint 16 — Paint Editor Shapes, Censorship Brushes, & Eraser Modes
+
+**Goal:** Implement vector shape drawing, local blur/pixelate brushes, and object-level erasing to match `pro_image_editor`'s Paint canvas features.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Paint modes: Line, Arrow, Double Arrow, Circle, Rectangle, Hexagon, Polygon | Planned | Draw vectors on `PaintCanvas` using custom path builders |
+| Censorship brushes: Local Blur & Pixelate | Planned | Selective region blur/pixelate overlays |
+| Eraser modes: Object vs Partial | Planned | Object (delete whole stroke/shape on hit); Partial (rub out stroke segment) |
+| Path Builder Registry | Planned | Allow developer-provided custom drawing shapes |
+
+---
+
+## Sprint 17 — Multi-Layer Selection, Grouping, & Layer Duplication
+
+**Goal:** Allow users to manipulate multiple layers simultaneously and copy/duplicate layers.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Multi-layer selection (Drag-to-select) | Done | Marquee on Layers tool; Shift+tap / long-press in panel |
+| Layer Grouping & Ungrouping | Done | `GroupLayer` + Group/Ungroup in Layers panel |
+| Layer Duplication UI | Done | Duplicate toolbar, row menu, Ctrl/Cmd+D on Layers tool |
+
+---
+
+## Sprint 18 — Smart Snapping, Guides & Haptics
+
+**Goal:** Assist layer alignment with center snapping, rotation increments, layer-to-layer alignments, and feedback.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Screen center snapping (H/V) | Planned | Snap layer position to screen center; show overlay guide lines |
+| 45° rotation snapping | Planned | Snap rotation to 45-degree steps; show rotation guide line |
+| Layer-to-layer alignment lines | Planned | Draw alignment guide lines when layers align with other layers |
+| Haptic/vibration callbacks | Planned | Trigger `onLineHit` callbacks for device haptic feedback |
+
+---
+
+## Sprint 19 — Serialized Draft State (Import/Export)
+
+**Goal:** Enable session state persistence so users can save drafts and resume editing later.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| History/Session serialization | Planned | Serialize undo/redo stack, layers, paints, adjustments to JSON/Map |
+| History/Session deserialization | Planned | Load serialized JSON state to restore editor to the exact previous state |
+
+---
+
+## Sprint 20 — Video Clips & Audio Timeline Editors
+
+**Goal:** Implement multi-track video trimming, audio mixing, and timeline-aligned layer visibility.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Video Clips Editor | Planned | Visual trimming, splitting, and merging of video tracks |
+| Audio Mixer Editor | Planned | Add background tracks, volume controls, and start offsets |
+| Layer Timeline visibility | Planned | Set `startTime` and `endTime` for layers with transition animations |
+
+---
+
+## Sprint 21 — Dynamic Background Swap & AI Command Hooks
+
+**Goal:** Allow background replacing mid-session and integrate hooks for AI text commands and background removal.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Dynamic background swap | Planned | Implement `updateBackgroundImage` to change background image mid-session |
+| AI Prompt Command Assistant | Planned | Interpret natural language text inputs to execute editor operations |
+| AI Background Removal hook | Planned | Hook for ONNX background removal/replacement models |
+
+---
+
 ## Architecture target (end state)
 
 ```text
@@ -450,8 +570,9 @@ Run in **rust_image Studio** after changes; record status-line timings.
 - Root README: [README.md](README.md)
 - Plugin README: [rust_image/README.md](rust_image/README.md)
 - Face / beauty design: [docs/PHASE3_MEDIAPIPE.md](docs/PHASE3_MEDIAPIPE.md)
+- Flutter state / rebuild rules: [docs/FLUTTER_STATE.md](docs/FLUTTER_STATE.md)
 - GPU notes: Metal via wgpu when `gpu` feature enabled
 
 ---
 
-*Last updated: All tracked sprints complete (Sprint 13, Nexus, 10b, 2 P2, 5)*
+*Last updated: Sprints 16–21 added based on pro_image_editor analysis*

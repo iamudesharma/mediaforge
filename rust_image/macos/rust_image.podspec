@@ -25,7 +25,7 @@ A new Flutter FFI plugin project.
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '12.0'
-  s.dependency 'MediaPipeTasksVision', '0.10.14'
+  s.static_framework = true
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
 
@@ -39,10 +39,15 @@ A new Flutter FFI plugin project.
     # created by this build step.
     :output_files => ["${PODS_CONFIGURATION_BUILD_DIR}/rust_image/librust_image_core.a"],
   }
+  rust_ldflags = '$(inherited) -force_load "$(PODS_CONFIGURATION_BUILD_DIR)/rust_image/librust_image_core.a" -Wl,-u,_frb_get_rust_content_hash -Wl,-u,_rust_image_link_rust_for_frb'
+
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    # Flutter.framework does not contain a i386 slice.
-    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS' => '-force_load ${PODS_CONFIGURATION_BUILD_DIR}/rust_image/librust_image_core.a',
+    'OTHER_LDFLAGS' => rust_ldflags,
+    'DEAD_CODE_STRIPPING' => 'NO',
+  }
+  s.user_target_xcconfig = {
+    'OTHER_LDFLAGS' => rust_ldflags,
+    'DEAD_CODE_STRIPPING' => 'NO',
   }
 end

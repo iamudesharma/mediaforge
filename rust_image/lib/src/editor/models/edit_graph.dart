@@ -31,11 +31,34 @@ class EditGraph {
     );
   }
 
+  /// Strip combo swipe look ops.
+  EditGraph withoutSwipeLookFilter() {
+    return EditGraph(
+      ops.where((op) => !_isSwipeLookOp(op)).toList(),
+    );
+  }
+
+  /// Strip committed beauty ops.
+  EditGraph withoutBeautyFilter() {
+    return EditGraph(
+      ops.where((op) => !_isBeautyOp(op)).toList(),
+    );
+  }
+
   /// Replace the dedicated mood-filter slot (append mood last in pipeline).
   EditGraph replaceMoodFilter(FilterDescriptor? mood) {
     final kept = ops.where((op) => !_isMoodOp(op)).toList();
     if (mood != null) {
       kept.add(EditOp.filter(filter: mood.toImageFilter()));
+    }
+    return EditGraph(kept);
+  }
+
+  /// Replace the dedicated combo swipe look slot.
+  EditGraph replaceSwipeLookFilter(FilterDescriptor? look) {
+    final kept = ops.where((op) => !_isSwipeLookOp(op)).toList();
+    if (look != null) {
+      kept.add(EditOp.filter(filter: look.toImageFilter()));
     }
     return EditGraph(kept);
   }
@@ -78,6 +101,12 @@ class EditGraph {
             blush: 0,
             underEye: 0,
             teethWhiten: 0,
+            skinPreserveDetail: 0,
+            eyeEnlarge: 0,
+            jawSlim: 0,
+            noseSlim: 0,
+            faceSlim: 0,
+            chinVshape: 0,
           );
         }
       }
@@ -102,9 +131,29 @@ class EditGraph {
     return null;
   }
 
+  /// Committed combo swipe look, if any.
+  SwipeLookPreset? get committedSwipeLookPreset {
+    for (final op in ops.reversed) {
+      if (op is EditOp_Filter) {
+        final filter = op.filter;
+        if (filter is ImageFilter_SwipeLook) {
+          return filter.preset;
+        }
+      }
+    }
+    return null;
+  }
+
   static bool _isMoodOp(EditOp op) {
     if (op is EditOp_Filter) {
       return op.filter is ImageFilter_Mood;
+    }
+    return false;
+  }
+
+  static bool _isSwipeLookOp(EditOp op) {
+    if (op is EditOp_Filter) {
+      return op.filter is ImageFilter_SwipeLook;
     }
     return false;
   }

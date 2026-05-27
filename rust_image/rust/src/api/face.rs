@@ -63,6 +63,18 @@ pub struct BeautyParams {
     pub under_eye: f32,
     /// 0–1 teeth whitening (Nexus E).
     pub teeth_whiten: f32,
+    /// 0–1 high-pass skin texture preserve (Glass Skin / Clean Beauty).
+    pub skin_preserve_detail: f32,
+    /// 0–1 eye enlarge warp.
+    pub eye_enlarge: f32,
+    /// 0–1 jaw slim warp.
+    pub jaw_slim: f32,
+    /// 0–1 nose slim warp.
+    pub nose_slim: f32,
+    /// 0–1 overall face slim.
+    pub face_slim: f32,
+    /// 0–1 chin V-shape warp.
+    pub chin_vshape: f32,
 }
 
 impl BeautyParams {
@@ -74,6 +86,11 @@ impl BeautyParams {
             || self.blush > 0.001
             || self.under_eye > 0.001
             || self.teeth_whiten > 0.001
+            || self.eye_enlarge > 0.001
+            || self.jaw_slim > 0.001
+            || self.nose_slim > 0.001
+            || self.face_slim > 0.001
+            || self.chin_vshape > 0.001
     }
 }
 
@@ -210,7 +227,7 @@ pub fn apply_skin_smooth_cpu(
     mask: SegmentationMask,
     strength: f32,
 ) -> RgbaImageBuffer {
-    apply_skin_smooth_rgba(&buffer, &mask, strength)
+    apply_skin_smooth_rgba(&buffer, &mask, strength, 0.0)
 }
 
 /// Full regional beauty on still photo (Nexus B).

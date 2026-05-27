@@ -11,6 +11,7 @@ enum OverlayLayerKind {
   text,
   shape,
   paintStroke,
+  group,
 }
 
 enum TextBackgroundStyle { none, solid, rounded }
@@ -20,7 +21,26 @@ enum TextFillMode { solid, gradient }
 
 enum ShapeKind { rect, ellipse, line, arrow }
 
-enum PaintBrushKind { pen, marker, highlighter, eraser, neon }
+enum PaintBrushKind {
+  pen,
+  marker,
+  highlighter,
+  eraser,
+  neon,
+  line,
+  arrow,
+  doubleArrow,
+  rect,
+  circle,
+  hexagon,
+  polygon,
+  dashLine,
+  dashDotLine,
+  blur,
+  pixelate,
+}
+
+enum EraserMode { object, partial }
 
 /// Clip mask for image stickers (Sprint 8).
 enum StickerShapeMask {
@@ -255,6 +275,7 @@ class PaintStrokeLayer extends OverlayLayer {
     this.width = 8,
     this.opacity = 1,
     this.brush = PaintBrushKind.pen,
+    this.filled = false,
   }) : super(
           cachedPixels: null,
           cachedWidth: 0,
@@ -266,6 +287,7 @@ class PaintStrokeLayer extends OverlayLayer {
   final double width;
   final double opacity;
   final PaintBrushKind brush;
+  final bool filled;
 
   /// Prebuilt stack-space path for canvas paint (set at commit).
   Path? displayPath;
@@ -283,7 +305,138 @@ class PaintStrokeLayer extends OverlayLayer {
         width: width,
         opacity: opacity,
         brush: brush,
+        filled: filled,
       )..displayPath = displayPath;
 }
 
+/// Container for multiple layers moved/scaled/rotated as one unit (Sprint 17).
+class GroupLayer extends OverlayLayer {
+  GroupLayer({
+    required super.id,
+    required super.transform,
+    super.visible,
+    required List<OverlayLayer> children,
+    super.cachedPixels,
+    super.cachedWidth,
+    super.cachedHeight,
+  }) : children = List<OverlayLayer>.from(children);
+
+  final List<OverlayLayer> children;
+
+  @override
+  OverlayLayerKind get kind => OverlayLayerKind.group;
+
+  @override
+  GroupLayer copy() => GroupLayer(
+        id: id,
+        transform: transform.copyWith(),
+        visible: visible,
+        children: children.map((c) => c.copy()).toList(),
+        cachedPixels: cachedPixels != null ? Uint8List.fromList(cachedPixels!) : null,
+        cachedWidth: cachedWidth,
+        cachedHeight: cachedHeight,
+      );
+}
+
 String newLayerId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+LayerTransform _offsetTransform(LayerTransform t, Offset offset) =>
+    t.copyWith(
+      centerX: t.centerX + offset.dx,
+      centerY: t.centerY + offset.dy,
+    );
+
+/// Deep copy with a new id (Sprint 17 duplicate).
+OverlayLayer cloneLayerWithNewId(
+  OverlayLayer layer, {
+  Offset offset = const Offset(12, 12),
+}) {
+  return switch (layer) {
+    EmojiLayer l => EmojiLayer(
+        id: newLayerId(),
+        transform: _offsetTransform(l.transform, offset),
+        visible: l.visible,
+        glyph: l.glyph,
+        fontSize: l.fontSize,
+        cachedPixels: l.cachedPixels != null ? Uint8List.fromList(l.cachedPixels!) : null,
+        cachedWidth: l.cachedWidth,
+        cachedHeight: l.cachedHeight,
+      ),
+    StickerLayer l => StickerLayer(
+        id: newLayerId(),
+        transform: _offsetTransform(l.transform, offset),
+        visible: l.visible,
+        assetKey: l.assetKey,
+        userBytes: l.userBytes != null ? Uint8List.fromList(l.userBytes!) : null,
+        userSourceWidth: l.userSourceWidth,
+        userSourceHeight: l.userSourceHeight,
+        shapeMask: l.shapeMask,
+        maskCornerRadius: l.maskCornerRadius,
+        cachedPixels: l.cachedPixels != null ? Uint8List.fromList(l.cachedPixels!) : null,
+        cachedWidth: l.cachedWidth,
+        cachedHeight: l.cachedHeight,
+      ),
+    TextLayer l => TextLayer(
+        id: newLayerId(),
+        transform: _offsetTransform(l.transform, offset),
+        visible: l.visible,
+        text: l.text,
+        fontSize: l.fontSize,
+        color: l.color,
+        fillMode: l.fillMode,
+        gradientEnd: l.gradientEnd,
+        gradientAngleDeg: l.gradientAngleDeg,
+        fontWeight: l.fontWeight,
+        fontStyle: l.fontStyle,
+        fontFamily: l.fontFamily,
+        backgroundStyle: l.backgroundStyle,
+        backgroundColor: l.backgroundColor,
+        padding: l.padding,
+        cornerRadius: l.cornerRadius,
+        cachedPixels: l.cachedPixels != null ? Uint8List.fromList(l.cachedPixels!) : null,
+        cachedWidth: l.cachedWidth,
+        cachedHeight: l.cachedHeight,
+      ),
+    ShapeLayer l => ShapeLayer(
+        id: newLayerId(),
+        transform: _offsetTransform(l.transform, offset),
+        visible: l.visible,
+        shapeKind: l.shapeKind,
+        width: l.width,
+        height: l.height,
+        strokeWidth: l.strokeWidth,
+        filled: l.filled,
+        color: l.color,
+        cachedPixels: l.cachedPixels != null ? Uint8List.fromList(l.cachedPixels!) : null,
+        cachedWidth: l.cachedWidth,
+        cachedHeight: l.cachedHeight,
+      ),
+    PaintStrokeLayer l => PaintStrokeLayer(
+        id: newLayerId(),
+        transform: _offsetTransform(l.transform, offset),
+        visible: l.visible,
+        points: l.points
+            .map((p) => Offset(p.dx + offset.dx, p.dy + offset.dy))
+            .toList(),
+        color: l.color,
+        width: l.width,
+        opacity: l.opacity,
+        brush: l.brush,
+        filled: l.filled,
+      ),
+    GroupLayer l => GroupLayer(
+        id: newLayerId(),
+        transform: _offsetTransform(l.transform, offset),
+        visible: l.visible,
+        children: l.children
+            .map((c) => cloneLayerWithNewId(c, offset: Offset.zero))
+            .toList(),
+        cachedPixels: l.cachedPixels != null ? Uint8List.fromList(l.cachedPixels!) : null,
+        cachedWidth: l.cachedWidth,
+        cachedHeight: l.cachedHeight,
+      ),
+    _ => throw UnsupportedError(
+        'cloneLayerWithNewId: ${layer.runtimeType}',
+      ),
+  };
+}

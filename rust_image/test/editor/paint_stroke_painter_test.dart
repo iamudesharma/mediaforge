@@ -52,5 +52,29 @@ void main() {
       );
       expect(cfg.paint.maskFilter, isNotNull);
     });
+
+    test('filled shape uses fill style', () {
+      final cfg = paintConfigForBrush(
+        brush: PaintBrushKind.rect,
+        color: Colors.blue,
+        opacity: 1,
+        strokeWidth: 4,
+        filled: true,
+      );
+      expect(cfg.paint.style, PaintingStyle.fill);
+    });
+  });
+
+  group('buildPaintStrokePath', () {
+    test('line uses two endpoints', () {
+      final path = buildPaintStrokePath(
+        points: [const Offset(0, 0), const Offset(100, 50)],
+        imageWidth: 200,
+        imageHeight: 200,
+        childSize: const Size(200, 200),
+        brush: PaintBrushKind.line,
+      );
+      expect(path.getBounds().width, greaterThan(0));
+    });
   });
 }

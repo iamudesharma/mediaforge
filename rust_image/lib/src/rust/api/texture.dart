@@ -20,7 +20,7 @@ PlatformInt64 createGpuPreviewSurface({
 void destroyGpuPreviewSurface({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiTextureDestroyGpuPreviewSurface(id: id);
 
-void uploadGpuPreviewSurface({
+Future<void> uploadGpuPreviewSurface({
   required PlatformInt64 id,
   required RgbaImageBuffer buffer,
 }) => RustLib.instance.api.crateApiTextureUploadGpuPreviewSurface(
@@ -28,7 +28,7 @@ void uploadGpuPreviewSurface({
   buffer: buffer,
 );
 
-void applyGpuPreviewOps({
+Future<void> applyGpuPreviewOps({
   required PlatformInt64 id,
   required List<EditOp> ops,
   required ProcessingBackend backend,
@@ -38,11 +38,12 @@ void applyGpuPreviewOps({
   backend: backend,
 );
 
-RgbaImageBuffer readbackGpuPreviewSurface({required PlatformInt64 id}) =>
-    RustLib.instance.api.crateApiTextureReadbackGpuPreviewSurface(id: id);
+Future<RgbaImageBuffer> readbackGpuPreviewSurface({
+  required PlatformInt64 id,
+}) => RustLib.instance.api.crateApiTextureReadbackGpuPreviewSurface(id: id);
 
 /// Regional skin smooth on GPU preview cache (Sprint 12 / Nexus D WGSL).
-void applyGpuBeautyPass({
+Future<void> applyGpuBeautyPass({
   required PlatformInt64 id,
   required SegmentationMask mask,
   required double strength,
@@ -53,7 +54,7 @@ void applyGpuBeautyPass({
 );
 
 /// Full regional beauty on GPU preview (Nexus D): skin/eye/lip/blush WGSL; lip plump CPU warp.
-void applyGpuBeautyPipeline({
+Future<void> applyGpuBeautyPipeline({
   required PlatformInt64 id,
   required FaceAnalysisResult analysis,
   required SegmentationMask skinMask,
@@ -65,6 +66,19 @@ void applyGpuBeautyPipeline({
   skinMask: skinMask,
   params: params,
   excludeMask: excludeMask,
+);
+
+/// GPU overlay composite on preview cache (Sprint 2 P2 — normal/multiply/screen).
+Future<void> applyGpuOverlayBlend({
+  required PlatformInt64 id,
+  required RgbaImageBuffer overlay,
+  required double opacity,
+  required int blendMode,
+}) => RustLib.instance.api.crateApiTextureApplyGpuOverlayBlend(
+  id: id,
+  overlay: overlay,
+  opacity: opacity,
+  blendMode: blendMode,
 );
 
 /// Whether GPU texture preview is available on this build/device.

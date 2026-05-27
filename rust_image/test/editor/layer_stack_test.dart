@@ -176,6 +176,61 @@ void main() {
       expect(stack.copy().layers.first.visible, isFalse);
     });
 
+    test('selectMany and isSelected track multiple layers', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'), select: false)
+        ..add(_emoji('b'), select: false)
+        ..add(_emoji('c'), select: false);
+      stack.selectMany(['a', 'c']);
+      expect(stack.isSelected('a'), isTrue);
+      expect(stack.isSelected('b'), isFalse);
+      expect(stack.isSelected('c'), isTrue);
+      expect(stack.selectedId, 'c');
+      expect(stack.hasMultiSelection, isTrue);
+    });
+
+    test('toggleSelect adds and removes from selection', () {
+      final stack = LayerStack()..add(_emoji('a'));
+      stack.toggleSelect('a');
+      expect(stack.isSelected('a'), isFalse);
+      stack.toggleSelect('a');
+      expect(stack.isSelected('a'), isTrue);
+    });
+
+    test('groupSelected merges layers into GroupLayer', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'), select: false)
+        ..add(_emoji('b'), select: false);
+      stack.selectMany(['a', 'b']);
+      expect(stack.groupSelected(), isNull);
+      expect(stack.length, 1);
+      expect(stack.layers.single, isA<GroupLayer>());
+      expect((stack.layers.single as GroupLayer).children, hasLength(2));
+    });
+
+    test('ungroup restores children at group index', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'), select: false)
+        ..add(_emoji('b'), select: false);
+      stack.selectMany(['a', 'b']);
+      stack.groupSelected();
+      final groupId = stack.layers.single.id;
+      stack.ungroup(groupId);
+      expect(stack.length, 2);
+      expect(stack.layers.every((l) => l is! GroupLayer), isTrue);
+    });
+
+    test('flattenForBake expands group children', () {
+      final stack = LayerStack()
+        ..add(_emoji('a'), select: false)
+        ..add(_emoji('b'), select: false);
+      stack.selectMany(['a', 'b']);
+      stack.groupSelected();
+      final flat = stack.flattenForBake();
+      expect(flat, hasLength(2));
+      expect(flat.every((l) => l is! GroupLayer), isTrue);
+    });
+
     test('paintStrokes returns only PaintStrokeLayer instances in order', () {
       final s1 = _stroke('s1');
       final s2 = _stroke('s2');

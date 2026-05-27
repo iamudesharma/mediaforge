@@ -33,6 +33,7 @@ class PaintStrokeInput {
 
   /// 0=pen, 1=marker, 2=highlighter, 3=eraser, 4=neon (Sprint 10).
   final int brushKind;
+  final bool filled;
 
   const PaintStrokeInput({
     required this.points,
@@ -44,6 +45,7 @@ class PaintStrokeInput {
     required this.opacity,
     required this.erase,
     required this.brushKind,
+    required this.filled,
   });
 
   @override
@@ -56,7 +58,8 @@ class PaintStrokeInput {
       width.hashCode ^
       opacity.hashCode ^
       erase.hashCode ^
-      brushKind.hashCode;
+      brushKind.hashCode ^
+      filled.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -71,7 +74,8 @@ class PaintStrokeInput {
           width == other.width &&
           opacity == other.opacity &&
           erase == other.erase &&
-          brushKind == other.brushKind;
+          brushKind == other.brushKind &&
+          filled == other.filled;
 }
 
 class RasterLayerInput {

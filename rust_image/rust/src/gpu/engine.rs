@@ -4,10 +4,11 @@ use std::sync::OnceLock;
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use crate::api::image::{ImageFilter, MoodFilterPreset, ResizeAlgorithm, RgbaImageBuffer};
-use crate::filters::recipe_for;
+use crate::api::image::{ImageFilter, MoodFilterPreset, ResizeAlgorithm, RgbaImageBuffer, SwipeLookPreset};
+use crate::filters::{recipe_for, swipe_look_recipe_for};
 
 use super::lut_assets::{self, lut_size};
+use super::lut_bake::{bake_swipe_look_lut, pack_lut_pixels};
 
 const RESIZE_SHADER: &str = include_str!("shaders/resize.wgsl");
 const COLOR_SHADER: &str = include_str!("shaders/color_adjust.wgsl");
@@ -105,10 +106,21 @@ pub struct GpuEngine {
     pub(crate) cached_buffers: parking_lot::Mutex<Option<CachedGpuBuffers>>,
     resize_cache: parking_lot::Mutex<Option<CachedResizeBuffers>>,
     lut_buffers: parking_lot::Mutex<HashMap<MoodFilterPreset, wgpu::Buffer>>,
+    swipe_lut_buffers: parking_lot::Mutex<HashMap<SwipeLookPreset, wgpu::Buffer>>,
+    custom_lut_cache: parking_lot::Mutex<Option<(Vec<u8>, wgpu::Buffer, u32)>>,
     beauty_pipelines: std::sync::OnceLock<super::beauty_pass::BeautyGpuPipelines>,
 }
 
 static ENGINE: OnceLock<Result<GpuEngine, String>> = OnceLock::new();
+
+/// Serializes all wgpu queue / readback work — [GpuEngine] is process-wide and not thread-safe.
+static GPU_OP_LOCK: OnceLock<parking_lot::ReentrantMutex<()>> = OnceLock::new();
+
+pub(crate) fn gpu_op_lock() -> parking_lot::ReentrantMutexGuard<'static, ()> {
+    GPU_OP_LOCK
+        .get_or_init(|| parking_lot::ReentrantMutex::new(()))
+        .lock()
+}
 
 pub fn engine() -> Result<&'static GpuEngine, String> {
     ENGINE
@@ -259,6 +271,8 @@ impl GpuEngine {
             cached_buffers: parking_lot::Mutex::new(None),
             resize_cache: parking_lot::Mutex::new(None),
             lut_buffers: parking_lot::Mutex::new(HashMap::new()),
+            swipe_lut_buffers: parking_lot::Mutex::new(HashMap::new()),
+            custom_lut_cache: parking_lot::Mutex::new(None),
             beauty_pipelines: std::sync::OnceLock::new(),
         })
     }
@@ -864,6 +878,9 @@ impl GpuEngine {
             ImageFilter::Mood { preset, strength } => {
                 self.mood_filter_rgba(buffer, *preset, *strength)
             }
+            ImageFilter::SwipeLook { preset, strength } => {
+                self.swipe_look_filter_rgba(buffer, *preset, *strength)
+            }
             _ => Err(
                 "this filter is not implemented on GPU; use CPU backend or simpler adjustments"
                     .into(),
@@ -938,6 +955,7 @@ impl GpuEngine {
             width,
             height,
             t,
+            lut_size(),
         );
 
         let mut active_is_1 = false;
@@ -982,11 +1000,112 @@ impl GpuEngine {
         Ok(buffer)
     }
 
+    pub fn swipe_look_filter_rgba(
+        &self,
+        mut buffer: RgbaImageBuffer,
+        preset: SwipeLookPreset,
+        strength: f32,
+    ) -> Result<RgbaImageBuffer, String> {
+        let t = strength.clamp(0.0, 1.0);
+        if t < 0.001 {
+            return Ok(buffer);
+        }
+
+        let recipe = swipe_look_recipe_for(preset).mood;
+        let (width, height) = (buffer.width, buffer.height);
+        let len = (width as usize) * (height as usize);
+        let packed = pack_pixels(&buffer.pixels);
+
+        let storage_buf1 = self.upload_storage(&packed, len, "swipe_storage1")?;
+        let storage_buf2 = self.create_storage(len, "swipe_storage2")?;
+        let readback_buf = self.create_readback(len, "swipe_readback")?;
+        let lut_buf = self.swipe_lut_buffer_for(preset)?;
+
+        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("swipe_look_encoder"),
+        });
+
+        self.dispatch_lut(
+            &mut encoder,
+            &storage_buf1,
+            &storage_buf2,
+            &lut_buf,
+            width,
+            height,
+            t,
+            lut_size(),
+        );
+
+        let mut active_is_1 = false;
+        let mut current = &storage_buf2;
+        let mut next = &storage_buf1;
+
+        if recipe.vignette.abs() > 0.001 {
+            self.dispatch_vignette(
+                &mut encoder,
+                current,
+                width,
+                height,
+                recipe.vignette * t,
+            );
+        }
+
+        if recipe.structure.abs() > 0.001 {
+            let sharpen_strength = (recipe.structure / 100.0) * 0.35 * t;
+            self.dispatch_sharpen_pass(
+                &mut encoder,
+                current,
+                next,
+                width,
+                height,
+                sharpen_strength,
+            );
+            active_is_1 = true;
+        }
+
+        let out_buf = if active_is_1 { next } else { current };
+        encoder.copy_buffer_to_buffer(
+            out_buf,
+            0,
+            &readback_buf,
+            0,
+            (len * std::mem::size_of::<u32>()) as u64,
+        );
+
+        self.queue.submit(Some(encoder.finish()));
+        let out = self.map_read_u32(&readback_buf, len)?;
+        buffer.pixels = unpack_pixels(&out, len);
+
+        let full = swipe_look_recipe_for(preset);
+        let e = full.extras;
+        if e.glow > 0.001 {
+            crate::filters::apply_glow_rgba(&mut buffer, e.glow * t);
+        }
+        if preset == SwipeLookPreset::CleanGirlGlow && e.glow > 0.001 {
+            crate::filters::apply_dewy_highlight_rgba(&mut buffer, e.glow * t * 0.85);
+        }
+        if e.grain > 0.001 {
+            crate::filters::apply_grain_rgba(&mut buffer, e.grain * t);
+        }
+        if e.halation > 0.001 {
+            crate::filters::apply_halation_rgba(&mut buffer, e.halation * t);
+        }
+        if e.rgb_split > 0.001 {
+            crate::filters::apply_rgb_split_rgba(&mut buffer, e.rgb_split * t);
+        }
+        if e.sharpen > 0.001 {
+            crate::filters::apply_structure_rgba(&mut buffer, e.sharpen * 100.0 * t);
+        }
+
+        Ok(buffer)
+    }
+
     pub fn process_gpu_pipeline(
         &self,
         mut buffer: RgbaImageBuffer,
         ops: &[crate::api::image::EditOp],
     ) -> Result<RgbaImageBuffer, String> {
+        let _gpu = gpu_op_lock();
         if ops.is_empty() {
             return Ok(buffer);
         }
@@ -1248,6 +1367,7 @@ impl GpuEngine {
                                 width,
                                 height,
                                 t,
+                                lut_size(),
                             );
                             active_is_1 = !active_is_1;
                             let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
@@ -1273,6 +1393,64 @@ impl GpuEngine {
                                 );
                                 active_is_1 = !active_is_1;
                             }
+                        }
+                        ImageFilter::SwipeLook { preset, strength } => {
+                            let recipe = swipe_look_recipe_for(*preset).mood;
+                            let t = strength.clamp(0.0, 1.0);
+                            let lut_buf = self.swipe_lut_buffer_for(*preset)?;
+                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
+                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
+                            self.dispatch_lut(
+                                &mut encoder,
+                                current_buf,
+                                next_buf,
+                                &lut_buf,
+                                width,
+                                height,
+                                t,
+                                lut_size(),
+                            );
+                            active_is_1 = !active_is_1;
+                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
+                            if recipe.vignette.abs() > 0.001 {
+                                self.dispatch_vignette(
+                                    &mut encoder,
+                                    current_buf,
+                                    width,
+                                    height,
+                                    recipe.vignette * t,
+                                );
+                            }
+                            if recipe.structure.abs() > 0.001 {
+                                let sharpen_strength = (recipe.structure / 100.0) * 0.35 * t;
+                                let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
+                                self.dispatch_sharpen_pass(
+                                    &mut encoder,
+                                    current_buf,
+                                    next_buf,
+                                    width,
+                                    height,
+                                    sharpen_strength,
+                                );
+                                active_is_1 = !active_is_1;
+                            }
+                        }
+                        ImageFilter::LutPng { png_bytes, strength } => {
+                            let t = strength.clamp(0.0, 1.0);
+                            let (lut_buf, lut_size) = self.custom_lut_buffer_for(png_bytes)?;
+                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
+                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
+                            self.dispatch_lut(
+                                &mut encoder,
+                                current_buf,
+                                next_buf,
+                                &lut_buf,
+                                width,
+                                height,
+                                t,
+                                lut_size,
+                            );
+                            active_is_1 = !active_is_1;
                         }
                         _ => return Err("Unsupported filter in GPU pipeline".into()),
                     }
@@ -1369,11 +1547,26 @@ impl GpuEngine {
         buffer.width = width;
         buffer.height = height;
         buffer.pixels = unpack_pixels(&packed, len);
+
+        for op in ops {
+            if let crate::api::image::EditOp::Filter {
+                filter: ImageFilter::SwipeLook { preset, strength },
+            } = op
+            {
+                crate::filters::apply_swipe_look_extras_rgba(&mut buffer, *preset, *strength);
+            }
+        }
+
         Ok(buffer)
     }
 
     /// Upload pixels into the persistent pipeline cache (Sprint 11b.2).
     pub fn upload_pipeline_cache(&self, buffer: RgbaImageBuffer) -> Result<(), String> {
+        let _gpu = gpu_op_lock();
+        self.upload_pipeline_cache_inner(buffer)
+    }
+
+    fn upload_pipeline_cache_inner(&self, buffer: RgbaImageBuffer) -> Result<(), String> {
         let (width, height) = (buffer.width, buffer.height);
         let len = (width as usize) * (height as usize);
         let packed = pack_pixels(&buffer.pixels);
@@ -1417,6 +1610,7 @@ impl GpuEngine {
         ops: &[crate::api::image::EditOp],
         backend: crate::api::image::ProcessingBackend,
     ) -> Result<(), String> {
+        let _gpu = gpu_op_lock();
         if ops.is_empty() {
             return Ok(());
         }
@@ -1427,13 +1621,22 @@ impl GpuEngine {
                 .ok_or("GPU pipeline cache empty — upload first")?;
             (c.width, c.height)
         };
-        let base = self.readback_pipeline_cache(width, height)?;
+        let base = self.readback_pipeline_cache_inner(width, height)?;
         let result = crate::api::image::apply_edit_pipeline(base, ops.to_vec(), backend)?;
-        self.upload_pipeline_cache(result)
+        self.upload_pipeline_cache_inner(result)
     }
 
     /// Read back cached GPU pixels for export or platform texture upload.
     pub fn readback_pipeline_cache(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Result<RgbaImageBuffer, String> {
+        let _gpu = gpu_op_lock();
+        self.readback_pipeline_cache_inner(width, height)
+    }
+
+    fn readback_pipeline_cache_inner(
         &self,
         width: u32,
         height: u32,
@@ -1533,6 +1736,27 @@ impl GpuEngine {
         }))
     }
 
+    fn custom_lut_buffer_for(&self, png_bytes: &[u8]) -> Result<(wgpu::Buffer, u32), String> {
+        let mut cache = self.custom_lut_cache.lock();
+        if let Some((ref cached_bytes, ref buf, size)) = *cache {
+            if cached_bytes == png_bytes {
+                return Ok((buf.clone(), size));
+            }
+        }
+
+        let (lut_data, size) = crate::filters::lut_hald::parse_hald_clut(png_bytes)?;
+        let packed = crate::gpu::lut_bake::pack_lut_pixels(&lut_data);
+        let buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("custom_lut_png"),
+                contents: bytemuck::cast_slice(&packed),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+        *cache = Some((png_bytes.to_vec(), buf.clone(), size));
+        Ok((buf, size))
+    }
+
     fn lut_buffer_for(&self, preset: MoodFilterPreset) -> Result<wgpu::Buffer, String> {
         let mut cache = self.lut_buffers.lock();
         if let Some(buf) = cache.get(&preset) {
@@ -1550,6 +1774,23 @@ impl GpuEngine {
         Ok(buf)
     }
 
+    fn swipe_lut_buffer_for(&self, preset: SwipeLookPreset) -> Result<wgpu::Buffer, String> {
+        let mut cache = self.swipe_lut_buffers.lock();
+        if let Some(buf) = cache.get(&preset) {
+            return Ok(buf.clone());
+        }
+        let packed = pack_lut_pixels(&bake_swipe_look_lut(preset));
+        let buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("swipe_look_lut"),
+                contents: bytemuck::cast_slice(&packed),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+        cache.insert(preset, buf.clone());
+        Ok(buf)
+    }
+
     fn dispatch_lut(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -1559,12 +1800,13 @@ impl GpuEngine {
         width: u32,
         height: u32,
         strength: f32,
+        lut_size: u32,
     ) {
         let params = LutParams {
             width,
             height,
             strength,
-            lut_size: lut_size(),
+            lut_size,
         };
         let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("lut_params"),

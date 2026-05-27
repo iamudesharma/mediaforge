@@ -1,6 +1,6 @@
 import 'package:rust_image/src/rust/api/face.dart';
 
-/// Helpers for [BeautyParams] (Nexus B).
+/// Helpers for [BeautyParams] (Nexus B + swipe look warps).
 extension BeautyParamsX on BeautyParams {
   static const zero = BeautyParams(
     skinSmooth: 0,
@@ -11,6 +11,12 @@ extension BeautyParamsX on BeautyParams {
     blush: 0,
     underEye: 0,
     teethWhiten: 0,
+    skinPreserveDetail: 0,
+    eyeEnlarge: 0,
+    jawSlim: 0,
+    noseSlim: 0,
+    faceSlim: 0,
+    chinVshape: 0,
   );
 
   bool get hasEffect =>
@@ -20,7 +26,12 @@ extension BeautyParamsX on BeautyParams {
       lipPlump > 0.001 ||
       blush > 0.001 ||
       underEye > 0.001 ||
-      teethWhiten > 0.001;
+      teethWhiten > 0.001 ||
+      eyeEnlarge > 0.001 ||
+      jawSlim > 0.001 ||
+      noseSlim > 0.001 ||
+      faceSlim > 0.001 ||
+      chinVshape > 0.001;
 
   BeautyParams copyWith({
     double? skinSmooth,
@@ -31,6 +42,12 @@ extension BeautyParamsX on BeautyParams {
     double? blush,
     double? underEye,
     double? teethWhiten,
+    double? skinPreserveDetail,
+    double? eyeEnlarge,
+    double? jawSlim,
+    double? noseSlim,
+    double? faceSlim,
+    double? chinVshape,
   }) {
     return BeautyParams(
       skinSmooth: skinSmooth ?? this.skinSmooth,
@@ -41,6 +58,12 @@ extension BeautyParamsX on BeautyParams {
       blush: blush ?? this.blush,
       underEye: underEye ?? this.underEye,
       teethWhiten: teethWhiten ?? this.teethWhiten,
+      skinPreserveDetail: skinPreserveDetail ?? this.skinPreserveDetail,
+      eyeEnlarge: eyeEnlarge ?? this.eyeEnlarge,
+      jawSlim: jawSlim ?? this.jawSlim,
+      noseSlim: noseSlim ?? this.noseSlim,
+      faceSlim: faceSlim ?? this.faceSlim,
+      chinVshape: chinVshape ?? this.chinVshape,
     );
   }
 
@@ -54,6 +77,12 @@ extension BeautyParamsX on BeautyParams {
       blush: blush.clamp(0.0, 1.0),
       underEye: underEye.clamp(0.0, 1.0),
       teethWhiten: teethWhiten.clamp(0.0, 1.0),
+      skinPreserveDetail: skinPreserveDetail.clamp(0.0, 1.0),
+      eyeEnlarge: eyeEnlarge.clamp(0.0, 1.0),
+      jawSlim: jawSlim.clamp(0.0, 1.0),
+      noseSlim: noseSlim.clamp(0.0, 1.0),
+      faceSlim: faceSlim.clamp(0.0, 1.0),
+      chinVshape: chinVshape.clamp(0.0, 1.0),
     );
   }
 }

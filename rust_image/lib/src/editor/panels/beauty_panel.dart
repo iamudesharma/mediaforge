@@ -196,7 +196,7 @@ class _BeautyPanelState extends State<BeautyPanel> {
             onChanged: s.liveCameraActive || s.hasImage
                 ? (v) {
                     s.showDebugFaceLandmarks = v;
-                    s.notifyListeners();
+                    s.previewListenable.value++;
                   }
                 : null,
           ),

@@ -18,9 +18,11 @@ dependencies:
   file_selector: ^1.1.0
   image_picker: ^1.2.2
   camera: ^0.11.1
+  permission_handler: ^11.4.0
   gal: ^2.3.2
   path_provider: ^2.1.5
   squadron: ^7.4.3
+  flutter_riverpod: ^2.6.1
 dev_dependencies:
   squadron_builder: ^9.2.0
   ffi: ^2.2.0

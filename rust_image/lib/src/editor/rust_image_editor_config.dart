@@ -45,9 +45,9 @@ class RustImageEditorConfig {
     this.toolBarPlacement = EditorToolBarPlacement.auto,
     this.showMobileMetaOverlay = true,
     this.showCanvasFloatingChrome = true,
-    this.enableSwipeMoodFilters = true,
-    this.swipeMoodFilterStrength = 1.0,
-    this.enableSwipeBeautyLooks = true,
+    this.enableSwipeLooks = true,
+    this.swipeLookStrength = 1.0,
+    this.enableSwipeBeautyLooks = false,
     this.enableLiveCameraBeauty = true,
     this.showDebugFaceLandmarks = false,
     this.liveCameraMaxEdge = 720,
@@ -122,13 +122,19 @@ class RustImageEditorConfig {
   /// Flip + compact layers popover on the canvas (mobile); layers omitted from bottom nav.
   final bool showCanvasFloatingChrome;
 
-  /// Sprint 11 — swipe left/right on preview for mood filters (Rose, Clarendon, …).
-  final bool enableSwipeMoodFilters;
+  /// Sprint 15 — swipe left/right on preview for combo looks (Glass Skin, Soft Glam, …).
+  final bool enableSwipeLooks;
 
-  /// Strength for swipe mood filters (0–1, default full like Instagram).
-  final double swipeMoodFilterStrength;
+  /// Strength for combo swipe looks (0–1).
+  final double swipeLookStrength;
 
-  /// Nexus C — swipe left/right on preview for beauty looks (Beauty tool only).
+  @Deprecated('Use enableSwipeLooks')
+  bool get enableSwipeMoodFilters => enableSwipeLooks;
+
+  @Deprecated('Use swipeLookStrength')
+  double get swipeMoodFilterStrength => swipeLookStrength;
+
+  /// Beauty-tab-only look swipe (off by default; combo swipe covers preview).
   final bool enableSwipeBeautyLooks;
 
   /// Nexus A — front-camera live beauty preview (mobile).

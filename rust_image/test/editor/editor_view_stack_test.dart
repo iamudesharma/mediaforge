@@ -31,7 +31,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
-        home: RustImageEditorView(
+        home: RustImageEditorView.screen(
           config: const RustImageEditorConfig(
             title: 'Test',
             layoutMode: EditorLayoutMode.immersive,
@@ -77,7 +77,7 @@ void main() {
         theme: ThemeData.dark(),
         home: MediaQuery(
           data: const MediaQueryData(size: Size(390, 844)),
-          child: RustImageEditorView(
+          child: RustImageEditorView.screen(
             config: const RustImageEditorConfig(
               title: 'Test',
               layoutMode: EditorLayoutMode.immersive,
@@ -99,7 +99,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
-    expect(find.text('Original'), findsOneWidget);
+    expect(find.text('Original'), findsWidgets);
 
     await tester.tap(find.text('Filters'));
     await tester.pump();
@@ -127,7 +127,7 @@ void main() {
         theme: ThemeData.dark(),
         home: MediaQuery(
           data: const MediaQueryData(size: Size(1000, 640)),
-          child: RustImageEditorView(
+          child: RustImageEditorView.screen(
             config: const RustImageEditorConfig(
               title: 'Test',
               layoutMode: EditorLayoutMode.sidebar,

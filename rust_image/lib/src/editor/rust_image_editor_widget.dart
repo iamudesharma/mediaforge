@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../rust_image_editor.dart';
 import 'editor_screen.dart';
 import 'editor_session.dart';
 import 'rust_image_editor_config.dart';
 import 'services/image_source_picker.dart';
+import 'state/editor_providers.dart';
 import 'theme/app_theme.dart';
 
 /// Drop-in image editor powered by the Rust [RustImageEditor] core.
@@ -74,7 +76,8 @@ class _RustImageEditorWidgetState extends State<RustImageEditorWidget> {
       if (!mounted) return;
       setState(() => _ready = true);
     } catch (e, st) {
-      debugPrint('RustImageEditorWidget init failed: $e\n$st');
+      debugPrint('RustImageEditorWidget init failed: $e');
+      debugPrint('$st');
       if (!mounted) return;
       setState(() {
         _initError = e;
@@ -122,11 +125,16 @@ class _RustImageEditorWidgetState extends State<RustImageEditorWidget> {
       );
     }
 
-    return Theme(
-      data: theme,
-      child: RustImageEditorView(
-        config: widget.config,
-        session: _session,
+    return ProviderScope(
+      overrides: [
+        editorSessionProvider.overrideWithValue(_session),
+      ],
+      child: Theme(
+        data: theme,
+        child: RustImageEditorView(
+          config: widget.config,
+          session: _session,
+        ),
       ),
     );
   }

@@ -12,6 +12,7 @@ pub fn resolve_rgba_filter_path(filter: &ImageFilter, requested: ProcessingBacke
             ImageFilter::Sharpen => "gpu_sharpen",
             ImageFilter::Vignette { .. } => "gpu_vignette",
             ImageFilter::Mood { .. } => "gpu_mood",
+            ImageFilter::SwipeLook { .. } => "gpu_swipe_look",
             ImageFilter::Brightness { .. }
             | ImageFilter::Contrast { .. }
             | ImageFilter::Saturation { .. }
@@ -62,6 +63,7 @@ fn uses_gpu_filter(filter: &ImageFilter, requested: ProcessingBackend) -> bool {
                 | ImageFilter::Sharpen
                 | ImageFilter::Vignette { .. }
                 | ImageFilter::Mood { .. }
+                | ImageFilter::SwipeLook { .. }
         )
     }
     #[cfg(not(feature = "gpu"))]

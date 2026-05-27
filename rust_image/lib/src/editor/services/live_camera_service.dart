@@ -5,6 +5,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
+import 'camera_permission.dart';
+
+/// Called after [CameraController] is created but before [CameraController.initialize].
+/// Mount [CameraPreview] in this hook so CameraX can bind a preview surface (Android).
+typedef LiveCameraMountHook = Future<void> Function(CameraController controller);
+
 /// Front-camera stream for Nexus A live beauty preview.
 abstract final class LiveCameraService {
   static bool get isSupported =>
@@ -35,39 +41,70 @@ abstract final class LiveCameraService {
   static Future<void> start({
     required void Function(CameraImage image) onFrame,
     int maxWidth = 1280,
+    LiveCameraMountHook? beforeInitialize,
   }) {
     return _enqueue(() async {
       if (!isSupported) {
         throw UnsupportedError('Live camera is mobile-only');
       }
-      await warmup();
-      await _stopInternal();
-      _onFrame = onFrame;
-
-      final front = await _frontCamera();
-      final preset = maxWidth >= 1280
-          ? ResolutionPreset.high
-          : ResolutionPreset.medium;
-
-      final controller = CameraController(
-        front,
-        preset,
-        enableAudio: false,
-        imageFormatGroup: ImageFormatGroup.yuv420,
-      );
-      _controller = controller;
-      try {
-        await controller.initialize();
-        await controller.startImageStream(_handleFrame);
-        _streaming = true;
-      } catch (e) {
-        _controller = null;
-        _onFrame = null;
-        try {
-          await controller.dispose();
-        } catch (_) {}
-        rethrow;
+      if (!await CameraPermission.ensureGranted()) {
+        final blocked = await CameraPermission.isPermanentlyDenied;
+        throw StateError(
+          blocked
+              ? 'Camera permission denied. Enable Camera in system Settings.'
+              : 'Camera permission denied.',
+        );
       }
+
+      await _stopInternal();
+      if (Platform.isAndroid) {
+        _cachedCameras = null;
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+
+      _onFrame = onFrame;
+      final front = await _frontCamera();
+      final preset = _resolutionPreset(maxWidth);
+
+      Object? lastError;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          _cachedCameras = null;
+          if (Platform.isAndroid) {
+            await Future<void>.delayed(Duration(milliseconds: 500 * attempt));
+          }
+        }
+
+        final controller = CameraController(
+          front,
+          preset,
+          enableAudio: false,
+          imageFormatGroup: ImageFormatGroup.yuv420,
+        );
+        _controller = controller;
+
+        try {
+          if (beforeInitialize != null) {
+            await beforeInitialize(controller);
+          } else if (Platform.isAndroid) {
+            await _waitForUiFrame();
+            await _waitForUiFrame();
+          }
+          await controller.initialize();
+          await controller.startImageStream(_handleFrame);
+          _streaming = true;
+          return;
+        } catch (e) {
+          lastError = e;
+          _streaming = false;
+          _controller = null;
+          try {
+            await controller.dispose();
+          } catch (_) {}
+        }
+      }
+
+      throw StateError('Camera failed to open: $lastError');
     });
   }
 
@@ -107,6 +144,7 @@ abstract final class LiveCameraService {
     } catch (_) {}
 
     if (Platform.isAndroid) {
+      _cachedCameras = null;
       await Future<void>.delayed(const Duration(milliseconds: 300));
     }
   }
@@ -117,6 +155,13 @@ abstract final class LiveCameraService {
       if (!completer.isCompleted) completer.complete();
     });
     await completer.future;
+  }
+
+  static ResolutionPreset _resolutionPreset(int maxWidth) {
+    if (Platform.isAndroid) {
+      return maxWidth >= 960 ? ResolutionPreset.medium : ResolutionPreset.low;
+    }
+    return maxWidth >= 1280 ? ResolutionPreset.high : ResolutionPreset.medium;
   }
 
   static Future<CameraDescription> _frontCamera() async {

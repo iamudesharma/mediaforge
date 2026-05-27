@@ -30,9 +30,9 @@ A new Flutter FFI plugin project.
   s.dependency 'Flutter'
   s.platform = :ios, '15.0'
   s.dependency 'MediaPipeTasksVision', '0.10.14'
+  s.static_framework = true
 
   # Flutter.framework does not contain a i386 slice.
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
   s.swift_version = '5.0'
 
   s.script_phase = {
@@ -45,10 +45,19 @@ A new Flutter FFI plugin project.
     # created by this build step.
     :output_files => ["${PODS_CONFIGURATION_BUILD_DIR}/rust_image/librust_image_core.a"],
   }
+  rust_ldflags = '$(inherited) -force_load "$(PODS_CONFIGURATION_BUILD_DIR)/rust_image/librust_image_core.a" -Wl,-u,_frb_get_rust_content_hash -Wl,-u,_rust_image_link_rust_for_frb'
+
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     # Flutter.framework does not contain a i386 slice.
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS' => '-force_load ${PODS_CONFIGURATION_BUILD_DIR}/rust_image/librust_image_core.a',
+    # Link Rust into the plugin; keep FRB entry symbols for Release (not stripped).
+    'OTHER_LDFLAGS' => rust_ldflags,
+    'DEAD_CODE_STRIPPING' => 'NO',
+  }
+  # Propagate to Runner — FRB ExternalLibrary.process() resolves via dlsym(RTLD_DEFAULT).
+  s.user_target_xcconfig = {
+    'OTHER_LDFLAGS' => rust_ldflags,
+    'DEAD_CODE_STRIPPING' => 'NO',
   }
 end

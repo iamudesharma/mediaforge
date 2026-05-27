@@ -1,16 +1,22 @@
 import 'package:flutter/material.dart';
 
 import '../editor_session.dart';
-import '../models/layer_stack.dart';
 import '../models/overlay_layer.dart';
 import '../theme/lumina_tokens.dart';
 import '../widgets/control_widgets.dart';
 
 /// Instagram-style layer list: reorder, visibility, delete, selection.
 class LayersPanel extends StatelessWidget {
-  const LayersPanel({super.key, required this.session});
+  const LayersPanel({
+    super.key,
+    required this.session,
+    this.compact = false,
+  });
 
   final EditorSession session;
+
+  /// Tighter actions row for mobile sheet / canvas popover.
+  final bool compact;
 
   static IconData _iconFor(OverlayLayer layer) => switch (layer.kind) {
         OverlayLayerKind.emoji => Icons.emoji_emotions_outlined,
@@ -18,6 +24,7 @@ class LayersPanel extends StatelessWidget {
         OverlayLayerKind.text => Icons.text_fields,
         OverlayLayerKind.shape => Icons.interests_outlined,
         OverlayLayerKind.paintStroke => Icons.brush_outlined,
+        OverlayLayerKind.group => Icons.folder_outlined,
       };
 
   static String _labelFor(OverlayLayer layer) {
@@ -33,6 +40,8 @@ class LayersPanel extends StatelessWidget {
         return (layer as ShapeLayer).shapeKind.name;
       case OverlayLayerKind.paintStroke:
         return 'Paint stroke';
+      case OverlayLayerKind.group:
+        return 'Group (${(layer as GroupLayer).children.length})';
     }
   }
 
@@ -53,14 +62,38 @@ class LayersPanel extends StatelessWidget {
         }
 
         final ordered = List<OverlayLayer>.from(stack.layers.reversed);
+        final hasSelection = stack.selectedIds.isNotEmpty;
+        final canGroup = stack.selectedIds.length >= 2;
+        final canUngroup = stack.selectedId != null &&
+            stack.findById(stack.selectedId!) is GroupLayer;
 
         return Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SectionHeader(
+            SectionHeader(
               'Layers',
-              subtitle: 'Top of list = front. Drag to reorder.',
+              subtitle: compact ? null : 'Top of list = front. Drag to reorder.',
             ),
+            _LayerActionsBar(
+              compact: compact,
+              hasSelection: hasSelection,
+              canGroup: canGroup,
+              canUngroup: canUngroup,
+              onDuplicate: hasSelection ? () => s.duplicateSelection() : null,
+              onGroup: canGroup
+                  ? () {
+                      final err = s.groupSelection();
+                      if (err != null && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(err)),
+                        );
+                      }
+                    }
+                  : null,
+              onUngroup: canUngroup ? () => s.ungroupSelection() : null,
+            ),
+            SizedBox(height: compact ? 4 : LuminaTokens.padSm),
             ReorderableListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -80,7 +113,7 @@ class LayersPanel extends StatelessWidget {
               },
               itemBuilder: (context, index) {
                 final layer = ordered[index];
-                final selected = layer.id == stack.selectedId;
+                final selected = stack.isSelected(layer.id);
                 return _LayerRow(
                   key: ValueKey(layer.id),
                   listIndex: index,
@@ -89,7 +122,11 @@ class LayersPanel extends StatelessWidget {
                   icon: _iconFor(layer),
                   label: _labelFor(layer),
                   onSelect: () {
-                    stack.select(layer.id);
+                    stack.selectOnly(layer.id);
+                    s.notifyLayerChanged();
+                  },
+                  onToggleSelect: () {
+                    stack.toggleSelect(layer.id);
                     s.notifyLayerChanged();
                   },
                   onVisibility: () {
@@ -101,6 +138,10 @@ class LayersPanel extends StatelessWidget {
                     s.pushLayerUndo();
                     stack.remove(layer.id);
                     s.notifyLayerChanged();
+                  },
+                  onDuplicate: () {
+                    stack.selectOnly(layer.id);
+                    s.duplicateSelection();
                   },
                   onBringFront: () {
                     s.pushLayerUndo();
@@ -115,17 +156,89 @@ class LayersPanel extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: LuminaTokens.padMd),
-            const SectionHeader('Watermark', subtitle: 'Legacy second-image overlay'),
-            Text(
-              'Use the Overlay tool tab for watermark placement on the base image.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
+            if (!compact) ...[
+              const SizedBox(height: LuminaTokens.padMd),
+              const SectionHeader(
+                'Watermark',
+                subtitle: 'Legacy second-image overlay',
+              ),
+              Text(
+                'Use the Overlay tool tab for watermark placement on the base image.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
           ],
         );
       },
+    );
+  }
+}
+
+class _LayerActionsBar extends StatelessWidget {
+  const _LayerActionsBar({
+    required this.compact,
+    required this.hasSelection,
+    required this.canGroup,
+    required this.canUngroup,
+    required this.onDuplicate,
+    required this.onGroup,
+    required this.onUngroup,
+  });
+
+  final bool compact;
+  final bool hasSelection;
+  final bool canGroup;
+  final bool canUngroup;
+  final VoidCallback? onDuplicate;
+  final VoidCallback? onGroup;
+  final VoidCallback? onUngroup;
+
+  @override
+  Widget build(BuildContext context) {
+    if (compact) {
+      return Row(
+        children: [
+          IconButton(
+            tooltip: 'Duplicate',
+            onPressed: onDuplicate,
+            icon: const Icon(Icons.copy_outlined, size: 22),
+          ),
+          IconButton(
+            tooltip: 'Group',
+            onPressed: onGroup,
+            icon: const Icon(Icons.workspaces_outlined, size: 22),
+          ),
+          IconButton(
+            tooltip: 'Ungroup',
+            onPressed: onUngroup,
+            icon: const Icon(Icons.workspaces_filled, size: 22),
+          ),
+        ],
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        FilledButton.tonalIcon(
+          onPressed: onDuplicate,
+          icon: const Icon(Icons.copy_outlined, size: 18),
+          label: const Text('Duplicate'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: onGroup,
+          icon: const Icon(Icons.workspaces_outlined, size: 18),
+          label: const Text('Group'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: onUngroup,
+          icon: const Icon(Icons.workspaces_filled, size: 18),
+          label: const Text('Ungroup'),
+        ),
+      ],
     );
   }
 }
@@ -139,8 +252,10 @@ class _LayerRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onSelect,
+    required this.onToggleSelect,
     required this.onVisibility,
     required this.onDelete,
+    required this.onDuplicate,
     required this.onBringFront,
     required this.onSendBack,
   });
@@ -151,8 +266,10 @@ class _LayerRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onSelect;
+  final VoidCallback onToggleSelect;
   final VoidCallback onVisibility;
   final VoidCallback onDelete;
+  final VoidCallback onDuplicate;
   final VoidCallback onBringFront;
   final VoidCallback onSendBack;
 
@@ -179,6 +296,7 @@ class _LayerRow extends StatelessWidget {
         subtitle: layer.visible ? null : const Text('Hidden'),
         selected: selected,
         onTap: onSelect,
+        onLongPress: onToggleSelect,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -191,6 +309,8 @@ class _LayerRow extends StatelessWidget {
               icon: const Icon(Icons.more_vert),
               onSelected: (v) {
                 switch (v) {
+                  case 'duplicate':
+                    onDuplicate();
                   case 'front':
                     onBringFront();
                   case 'back':
@@ -200,6 +320,7 @@ class _LayerRow extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
                 const PopupMenuItem(value: 'front', child: Text('Bring to front')),
                 const PopupMenuItem(value: 'back', child: Text('Send to back')),
                 const PopupMenuItem(value: 'delete', child: Text('Delete')),

@@ -10,7 +10,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'image.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `apply_single_op_cpu`, `encode_after_edit_rgba`, `encode_after_edit`, `is_gpu_capable`, `process`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `hash`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `hash`, `hash`
 
 Uint8List resizeImage({
   required List<int> bytes,
@@ -234,6 +234,18 @@ Uint8List decodeBlurhash({
   format: format,
   quality: quality,
 );
+
+/// Regional beauty params for a combo swipe look.
+BeautyParams swipeLookBeautyParams({required SwipeLookPreset preset}) =>
+    RustLib.instance.api.crateApiImageSwipeLookBeautyParams(preset: preset);
+
+/// Post-grade extras (glow, grain, skin preserve) for a swipe look.
+SwipeLookExtrasDto swipeLookExtras({required SwipeLookPreset preset}) =>
+    RustLib.instance.api.crateApiImageSwipeLookExtras(preset: preset);
+
+/// User-facing label for swipe combo filter chip.
+String swipeLookDisplayName({required SwipeLookPreset preset}) =>
+    RustLib.instance.api.crateApiImageSwipeLookDisplayName(preset: preset);
 
 RgbaImageBuffer applyEditPipeline({
   required RgbaImageBuffer buffer,
@@ -481,6 +493,22 @@ sealed class ImageFilter with _$ImageFilter {
     required double strength,
   }) = ImageFilter_Mood;
 
+  /// Combo swipe look (global grade from [SwipeLookPreset] — beauty in separate slot).
+  const factory ImageFilter.swipeLook({
+    required SwipeLookPreset preset,
+
+    /// 0.0 = identity, 1.0 = full look grade.
+    required double strength,
+  }) = ImageFilter_SwipeLook;
+
+  /// Authentic 3D LUT PNG filter (Hald CLUT representation).
+  const factory ImageFilter.lutPng({
+    required Uint8List pngBytes,
+
+    /// 0.0 = identity, 1.0 = full grade.
+    required double strength,
+  }) = ImageFilter_LutPng;
+
   /// Regional skin smooth (mask applied separately in session / GPU pass).
   const factory ImageFilter.skinSmooth({
     /// 0.0 = none, 1.0 = full smooth.
@@ -603,6 +631,57 @@ class RgbaImageBuffer {
 }
 
 enum Rotation { rotate90, rotate180, rotate270, flipHorizontal, flipVertical }
+
+class SwipeLookExtrasDto {
+  final double glow;
+  final double grain;
+  final double sharpen;
+  final double skinPreserveDetail;
+  final double halation;
+  final double rgbSplit;
+
+  const SwipeLookExtrasDto({
+    required this.glow,
+    required this.grain,
+    required this.sharpen,
+    required this.skinPreserveDetail,
+    required this.halation,
+    required this.rgbSplit,
+  });
+
+  @override
+  int get hashCode =>
+      glow.hashCode ^
+      grain.hashCode ^
+      sharpen.hashCode ^
+      skinPreserveDetail.hashCode ^
+      halation.hashCode ^
+      rgbSplit.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SwipeLookExtrasDto &&
+          runtimeType == other.runtimeType &&
+          glow == other.glow &&
+          grain == other.grain &&
+          sharpen == other.sharpen &&
+          skinPreserveDetail == other.skinPreserveDetail &&
+          halation == other.halation &&
+          rgbSplit == other.rgbSplit;
+}
+
+/// TikTok / Instagram combo swipe looks (global grade + beauty slot).
+enum SwipeLookPreset {
+  cleanGirlGlow,
+  cloudSkin,
+  goldenAura,
+  softFocus,
+  fauxFilm,
+  boldGlamourLite,
+  neonNight,
+  animeAirbrush,
+}
 
 class TextOverlay {
   final String text;
