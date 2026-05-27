@@ -2,9 +2,9 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** Sprint 22 (Beauty GPU & texture residency)  
-**Status:** Sprint 22 Phases 1–4 done — full GPU beauty + Texture on Apple/Android  
-**Next (pre–pub.dev):** First pub.dev publish of split packages — see [P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) (P0.1–P0.6 done)
+**Current sprint:** Sprint V1 (Video media runtime & texture preview)  
+**Status:** Sprint 22 + P0 **done** — beauty GPU texture path; image/video package split documented  
+**Next:** V1.2 (frame queue) → V1.7 — [VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md) · V0 pub.dev — [V0_ACCEPTANCE.md](docs/V0_ACCEPTANCE.md)
 
 ---
 
@@ -515,14 +515,46 @@ Example recipes (face-only, not global grade):
 
 ---
 
+## Sprint V1 — Video media runtime & texture preview (planned)
+
+**Goal:** Stream-centric preview with explicit **MediaRuntime** ownership, **decoder-clock** playback, **texture lifecycle**, and a **bounded frame queue** — using FFmpeg + `rust_gpu_texture`, **not** a custom full video engine.
+
+**Design:** [`docs/VIDEO_MEDIA_RUNTIME.md`](docs/VIDEO_MEDIA_RUNTIME.md)
+
+**Principle:** Implement **one row below per PR**; do not batch V1.1–V1.7 in a single change.
+
+| Phase | Deliverable | Status | Notes |
+|-------|-------------|--------|-------|
+| **V1.1** | `MediaRuntime` + `VideoTexturePool` + `VideoPreviewSurface` | **Done** | FRB `decode_preview_frame_rgba`; `rust_gpu_texture` dep; studio scrub on texture |
+| **V1.2** | `FrameQueue` (depth 3) + scrub flush/coalesce | Planned | Remove `Image.file` scrub hot path in video studio example |
+| **V1.3** | `PlaybackClock` + decoder-driven play/pause | Planned | Video-only; 24–30 fps @ `previewMaxEdge`; no UI `Timer` as master clock |
+| **V1.4** | GPU residency — Apple CVPixelBuffer → texture | Planned | Extend `rust_gpu_texture`; VT HW preview decode in core |
+| **V1.5** | Overlay compositor shell (`Stack` + timeline metadata) | Planned | Stickers/text over texture; feeds Sprint 20 UI |
+| **V1.6** | Android zero-copy preview (MediaCodec → SurfaceTexture) | Planned | Gated on stability; RGBA upload fallback until then |
+| **V1.7** | Perf matrix I/J/K + leak checks on open/dispose | Planned | Example status timings |
+
+**Future (not V1):** Render graph (V2), HDR/color pipeline (V3), audio master clock + mixer (V2–V3) — see design doc §5–7.
+
+**Acceptance (cumulative):**
+
+- **I** — 720p scrub 5 s: frame visible &lt; 300 ms debounced; no JPEG disk on scrub path (after V1.2).
+- **J** — 720p play 10 s within trim: ≥ 24 fps at preview edge (after V1.3).
+- **K** — 10× open/dispose: no texture handle leaks (after V1.1).
+
+**Out of scope for V1:** Replacing compress pipeline, filmstrip disk cache, `rust_image_core` GPU beauty, full multi-track editor.
+
+---
+
 ## Sprint 20 — Video Clips & Audio Timeline Editors
 
 **Goal:** Implement multi-track video trimming, audio mixing, and timeline-aligned layer visibility.
 
+**Depends on:** Sprint **V1** (MediaRuntime, decoder clock, V1.5 overlay shell).
+
 | Item | Status | Notes |
 |------|--------|-------|
 | Video Clips Editor | Planned | Visual trimming, splitting, and merging of video tracks |
-| Audio Mixer Editor | Planned | Add background tracks, volume controls, and start offsets |
+| Audio Mixer Editor | Planned | Add background tracks, volume controls, and start offsets — see [VIDEO_MEDIA_RUNTIME.md §7](docs/VIDEO_MEDIA_RUNTIME.md#7-audio-sync-roadmap) |
 | Layer Timeline visibility | Planned | Set `startTime` and `endTime` for layers with transition animations |
 
 ---
@@ -613,6 +645,9 @@ Run in **rust_image Studio** after changes; record status-line timings.
 | F | 768×1024 portrait | Beauty look “Soft” commit | auto | < 600 ms still |
 | G | 768×1024 | Lip color live drag | auto | < 200 ms debounced |
 | H | 720p front camera | Skin smooth live | gpu | ≥ 24 fps sustained |
+| I | 720p video | Scrub playhead 5 s | texture | &lt; 300 ms debounced frame (Sprint V1) |
+| J | 720p video | Play 10 s trim range | decoder clock | ≥ 24 fps preview (Sprint V1) |
+| K | 720p video | Open/dispose ×10 | — | No texture leaks (Sprint V1) |
 
 ## References
 
@@ -622,8 +657,9 @@ Run in **rust_image Studio** after changes; record status-line timings.
 - Face / beauty design: [docs/PHASE3_MEDIAPIPE.md](docs/PHASE3_MEDIAPIPE.md)
 - Flutter state / rebuild rules: [docs/FLUTTER_STATE.md](docs/FLUTTER_STATE.md)
 - Beauty GPU plan: [docs/BEAUTY_GPU.md](docs/BEAUTY_GPU.md)
+- Video media runtime: [docs/VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md)
 - GPU notes: Metal via wgpu when `gpu` feature enabled
 
 ---
 
-*Last updated: Sprint 22 done; Sprint P0 (package split) documented*
+*Last updated: Sprint V1 (video media runtime) planned; Sprint 22 + P0 done*

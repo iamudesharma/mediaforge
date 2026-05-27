@@ -44,3 +44,15 @@ jobs:
 
       - name: Analyze rust_image shim
         run: dart run melos exec --scope=rust_image -- flutter analyze lib --no-fatal-infos --no-fatal-warnings
+
+      - name: Analyze video_processor_core
+        run: dart run melos exec --scope=video_processor_core -- flutter analyze --no-fatal-infos
+
+      - name: Test flutter_video_processor
+        run: dart run melos exec --scope=flutter_video_processor -- flutter test
+
+      - name: Test video_thumbnail_cache
+        run: dart run melos exec --scope=video_thumbnail_cache -- flutter test
+
+      - name: Rust video_processor_core
+        run: cd packages/video_processor_core && cargo test -p video_processor_core

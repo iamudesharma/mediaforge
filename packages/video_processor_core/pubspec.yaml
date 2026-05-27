@@ -1,0 +1,42 @@
+name: video_processor_core
+resolution: workspace
+description: >
+  Rust video processing engine for Flutter — FRB + FFmpeg native hook only.
+  No disk thumbnail cache or VideoProcessor facade.
+version: 0.2.0
+homepage: https://github.com/iamudesharma/rust_image
+repository: https://github.com/iamudesharma/rust_image
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_rust_bridge: 2.12.0
+  freezed_annotation: ^3.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.15
+  freezed: ^3.0.0
+  hooks: ^1.0.3
+  code_assets: ^1.0.0
+  path: ^1.9.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

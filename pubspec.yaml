@@ -1,6 +1,6 @@
 name: rust_image_workspace
 publish_to: none
-description: Monorepo for rust_image (gpu_texture, core, editor, camera_runtime).
+description: Monorepo for rust_image and flutter_video_processor packages.
 
 environment:
   sdk: ^3.12.0
@@ -14,6 +14,11 @@ workspace:
   - packages/rust_gpu_texture/example
   - packages/rust_camera_runtime
   - packages/rust_image_core/example
+  - packages/video_processor_core
+  - packages/video_processor_core/example
+  - packages/flutter_video_processor
+  - packages/flutter_video_processor/example
+  - packages/video_thumbnail_cache
 
 dev_dependencies:
   melos: ^7.8.0

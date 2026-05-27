@@ -14,8 +14,11 @@ The Flutter plugin lives in [`rust_image/`](rust_image/).
 | [`rust_image_core`](packages/rust_image_core/) | Rust engine + FRB |
 | [`rust_image_editor`](packages/rust_image_editor/) | Editor UI |
 | [`rust_camera_runtime`](packages/rust_camera_runtime/) | Live camera (mobile) |
+| [`video_processor_core`](packages/video_processor_core/) | Video Rust engine + FRB + FFmpeg |
+| [`flutter_video_processor`](packages/flutter_video_processor/) | Video compress / thumbnails SDK |
+| [`video_thumbnail_cache`](packages/video_thumbnail_cache/) | Optional disk thumbnail cache |
 
-[`rust_image/`](rust_image/) re-exports the editor. Split design: [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md) · checklist: [docs/P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) · platforms: [docs/PACKAGE_PLATFORM_MATRIX.md](docs/PACKAGE_PLATFORM_MATRIX.md).
+[`rust_image/`](rust_image/) re-exports the editor. Split design: [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md) · checklist: [docs/P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) · platforms: [docs/PACKAGE_PLATFORM_MATRIX.md](docs/PACKAGE_PLATFORM_MATRIX.md). Video: [docs/VIDEO_PACKAGE_SPLIT.md](docs/VIDEO_PACKAGE_SPLIT.md) · preview runtime (Sprint V1): [docs/VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md) · FFmpeg tooling in [`rust video/`](rust%20video/).
 
 ## Stack
 
