@@ -37,6 +37,7 @@ SegmentationMask buildSkinMaskFromLandmarks({
   height: height,
 );
 
+/// Builds an eye regional mask from face landmarks.
 SegmentationMask buildEyeMaskFromLandmarks({
   required List<Landmark2D> landmarks,
   required int faceContourCount,
@@ -51,6 +52,7 @@ SegmentationMask buildEyeMaskFromLandmarks({
   height: height,
 );
 
+/// Builds a lip regional mask from face landmarks.
 SegmentationMask buildLipMaskFromLandmarks({
   required List<Landmark2D> landmarks,
   required int faceContourCount,
@@ -65,6 +67,7 @@ SegmentationMask buildLipMaskFromLandmarks({
   height: height,
 );
 
+/// Builds a cheek blush regional mask from face landmarks.
 SegmentationMask buildBlushMaskFromLandmarks({
   required List<Landmark2D> landmarks,
   required int faceContourCount,
@@ -79,6 +82,7 @@ SegmentationMask buildBlushMaskFromLandmarks({
   height: height,
 );
 
+/// Builds an under-eye regional mask from face landmarks.
 SegmentationMask buildUnderEyeMaskFromLandmarks({
   required List<Landmark2D> landmarks,
   required int faceContourCount,
@@ -93,9 +97,11 @@ SegmentationMask buildUnderEyeMaskFromLandmarks({
   height: height,
 );
 
+/// Returns true if the FaceAnalysisResult is valid (sufficient confidence and landmark count).
 bool faceAnalysisIsValid({required FaceAnalysisResult analysis}) =>
     RustLib.instance.api.crateApiFaceFaceAnalysisIsValid(analysis: analysis);
 
+/// Returns the minimum number of landmarks required by the vision tracker.
 int visionMinLandmarkCount() =>
     RustLib.instance.api.crateApiFaceVisionMinLandmarkCount();
 
@@ -147,6 +153,8 @@ class BeautyParams {
 
   /// 0–1 eye luminance lift.
   final double eyeBrighten;
+
+  /// Selected lip tint preset.
   final LipTintPreset lipTint;
 
   /// 0–1 lip tint strength (when lip_tint != None).
@@ -202,6 +210,7 @@ class BeautyParams {
   static Future<BeautyParams> default_() =>
       RustLib.instance.api.crateApiFaceBeautyParamsDefault();
 
+  /// Checks if any beauty parameters are active.
   Future<bool> isActive() =>
       RustLib.instance.api.crateApiFaceBeautyParamsIsActive(that: this);
 
@@ -245,8 +254,13 @@ class BeautyParams {
 
 /// Output of native face pipeline (Vision or MediaPipe).
 class FaceAnalysisResult {
+  /// List of 2D landmark coordinates.
   final List<Landmark2D> landmarks;
+
+  /// Confidence score (0.0 to 1.0).
   final double confidence;
+
+  /// Optional face/selfie segmentation mask.
   final SegmentationMask? segmentation;
 
   /// Count of leading landmarks that belong to the face contour (Vision); 0 = legacy estimate.
@@ -288,8 +302,13 @@ class FaceAnalysisResult {
 
 /// Normalized 2D landmark (0–1 in image space).
 class Landmark2D {
+  /// Horizontal position normalized from 0.0 (left) to 1.0 (right).
   final double x;
+
+  /// Vertical position normalized from 0.0 (top) to 1.0 (bottom).
   final double y;
+
+  /// Depth position (Z coordinate), often 0.0 or estimated from MediaPipe.
   final double z;
 
   const Landmark2D({required this.x, required this.y, required this.z});
@@ -325,8 +344,13 @@ enum LipTintPreset {
 
 /// Selfie / face segmentation mask at edit resolution (row-major R8).
 class SegmentationMask {
+  /// Width of the mask in pixels.
   final int width;
+
+  /// Height of the mask in pixels.
   final int height;
+
+  /// Grayscale pixel values (0–255), representing feathering/opacity.
   final Uint8List pixels;
 
   const SegmentationMask({

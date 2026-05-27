@@ -10,6 +10,7 @@ use crate::gpu::{
 };
 
 /// Create a GPU-resident preview surface handle (Sprint 11b.2).
+/// Returns the surface ID.
 #[flutter_rust_bridge::frb(sync)]
 pub fn create_gpu_preview_surface(width: u32, height: u32) -> Result<i64, String> {
     #[cfg(feature = "gpu")]
@@ -23,6 +24,7 @@ pub fn create_gpu_preview_surface(width: u32, height: u32) -> Result<i64, String
     }
 }
 
+/// Destroys the GPU-resident preview surface and releases its textures/buffers.
 #[flutter_rust_bridge::frb(sync)]
 pub fn destroy_gpu_preview_surface(id: i64) {
     #[cfg(feature = "gpu")]
@@ -35,6 +37,7 @@ pub fn destroy_gpu_preview_surface(id: i64) {
     }
 }
 
+/// Uploads an RGBA buffer to the GPU texture associated with the surface ID.
 pub fn upload_gpu_preview_surface(id: i64, buffer: RgbaImageBuffer) -> Result<(), String> {
     #[cfg(feature = "gpu")]
     {
@@ -47,6 +50,7 @@ pub fn upload_gpu_preview_surface(id: i64, buffer: RgbaImageBuffer) -> Result<()
     }
 }
 
+/// Applies a list of edit operations directly on the GPU texture preview cache.
 pub fn apply_gpu_preview_ops(
     id: i64,
     ops: Vec<EditOp>,
@@ -63,6 +67,7 @@ pub fn apply_gpu_preview_ops(
     }
 }
 
+/// Reads the current GPU preview texture pixels back into a host RGBA buffer.
 pub fn readback_gpu_preview_surface(id: i64) -> Result<RgbaImageBuffer, String> {
     #[cfg(feature = "gpu")]
     {
@@ -75,7 +80,7 @@ pub fn readback_gpu_preview_surface(id: i64) -> Result<RgbaImageBuffer, String> 
     }
 }
 
-/// Regional skin smooth on GPU preview cache (Sprint 12 / Nexus D WGSL).
+/// Applies a GPU-accelerated regional skin smooth pass (Sprint 12 / Nexus D WGSL).
 pub fn apply_gpu_beauty_pass(id: i64, mask: SegmentationMask, strength: f32) -> Result<(), String> {
     #[cfg(feature = "gpu")]
     {
@@ -88,7 +93,7 @@ pub fn apply_gpu_beauty_pass(id: i64, mask: SegmentationMask, strength: f32) -> 
     }
 }
 
-/// Full regional beauty on GPU preview (Nexus D): skin/eye/lip/blush WGSL; lip plump CPU warp.
+/// Runs the full GPU beauty pipeline (skin/eye/lip/blush WGSL; lip plump CPU warp fallback).
 pub fn apply_gpu_beauty_pipeline(
     id: i64,
     analysis: FaceAnalysisResult,
@@ -113,7 +118,7 @@ pub fn apply_gpu_beauty_pipeline(
     }
 }
 
-/// GPU overlay composite on preview cache (Sprint 2 P2 — normal/multiply/screen).
+/// Composites an overlay RGBA buffer on the GPU texture using the specified blend mode.
 pub fn apply_gpu_overlay_blend(
     id: i64,
     overlay: RgbaImageBuffer,
@@ -131,7 +136,7 @@ pub fn apply_gpu_overlay_blend(
     }
 }
 
-/// Whether GPU texture preview is available on this build/device.
+/// Returns true if GPU texture preview is available on the current host.
 #[flutter_rust_bridge::frb(sync)]
 pub fn is_gpu_texture_preview_available() -> bool {
     #[cfg(feature = "gpu")]

@@ -88,44 +88,47 @@ class RustImageEditorConfig {
   /// Called when compare hold / hover ends.
   final VoidCallback? onCompareHoldEnd;
 
+  /// Whether to show the compare button (allowing users to hold down to see the original image).
   final bool showCompare;
 
-  /// Sprint 8 — show "Create blank canvas" on the Import tool.
+  /// Whether to show "Create blank canvas" option on the Import tool.
   final bool allowBlankCanvas;
+
+  /// Default processing backend (CPU, GPU, or Auto).
   final ProcessingBackend defaultBackend;
 
-  /// Max edge for live slider / preview filters (Phase 1).
+  /// Max edge for live slider / preview filters (reduces latency during adjustments).
   final int liveEditMaxEdge;
 
-  /// Max edge for JPEG preview shown in the canvas.
+  /// Max edge for the main JPEG preview shown in the canvas.
   final int previewMaxEdge;
 
-  /// Append filter path and stage timings to the status line (Phase 0).
+  /// Append filter path and stage timings to the status line (helpful for debugging).
   final bool showPerformanceInStatus;
 
-  /// Sprint 4 — show preview via [decodeImageFromPixels] (no per-frame JPEG).
+  /// Show preview using Dart's Rgba pixel buffer display (skipping per-frame JPEG encoding).
   final bool useRgbaPreview;
 
-  /// Sprint 11b.2 — Flutter [Texture] preview via GPU surface (macOS first).
+  /// Flutter [Texture] preview via GPU surface (supported on Apple devices).
   /// Falls back to [useRgbaPreview] when unavailable.
   final bool useGpuTexturePreview;
 
-  /// [EditorLayoutMode.auto]: sidebar ≥900px wide, immersive stack on phones.
+  /// The UI layout mode to adopt. Choose immersive stack for phone or sidebar on desktop.
   final EditorLayoutMode layoutMode;
 
-  /// Tool icon rail on immersive layout ([EditorToolBarPlacement.auto] = bottom).
+  /// Placement of the bottom tool bar (only applicable on mobile immersive layout).
   final EditorToolBarPlacement toolBarPlacement;
 
-  /// Small dimensions pill over the canvas on mobile (immersive layout).
+  /// Whether to display a small dimensions and performance pill over the canvas on mobile.
   final bool showMobileMetaOverlay;
 
-  /// Flip + compact layers popover on the canvas (mobile); layers omitted from bottom nav.
+  /// Whether to display flip + compact layers popover buttons directly on the canvas (mobile).
   final bool showCanvasFloatingChrome;
 
-  /// Sprint 15 — swipe left/right on preview for combo looks (Glass Skin, Soft Glam, …).
+  /// Swipe left/right on the canvas preview to apply combo grades (Glass Skin, Golden Hour, etc.).
   final bool enableSwipeLooks;
 
-  /// Strength for combo swipe looks (0–1).
+  /// Strength multiplier for the swipe combo looks (0.0 to 1.0).
   final double swipeLookStrength;
 
   @Deprecated('Use enableSwipeLooks')
@@ -134,25 +137,25 @@ class RustImageEditorConfig {
   @Deprecated('Use swipeLookStrength')
   double get swipeMoodFilterStrength => swipeLookStrength;
 
-  /// Beauty-tab-only look swipe (off by default; combo swipe covers preview).
+  /// Swipe left/right inside the beauty tab for tap looks.
   final bool enableSwipeBeautyLooks;
 
-  /// Nexus A — front-camera live beauty preview (mobile).
+  /// Front-camera live beauty filter preview.
   final bool enableLiveCameraBeauty;
 
-  /// Nexus A — draw landmark dots on preview (dev / debug).
+  /// Draw face landmark dots on preview (for developers and debug visibility).
   final bool showDebugFaceLandmarks;
 
-  /// Max long edge for live camera beauty processing.
+  /// Max long edge size for live camera frames before face analysis.
   final int liveCameraMaxEdge;
 
-  /// Run native face analysis every N camera frames (temporal smooth between).
+  /// Analyze face landmark updates every N frames (with EMA smoothing in between).
   final int liveCameraAnalyzeEveryNFrames;
 
-  /// Nexus D — offer optional MediaPipe model download in Beauty panel.
+  /// Prompts users to download optional MediaPipe models for higher precision face tracking.
   final bool enableMediaPipeDownloadPrompt;
 
-  /// Optional external session (you manage [EditorSession.dispose]).
+  /// Optional external session manager if you want to reuse or control [EditorSession] lifecycles.
   final EditorSession? session;
 }
 

@@ -8,15 +8,19 @@ import 'face.dart';
 import 'image.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+/// Probes an image file to extract dimensions, format, and EXIF orientation without decoding full pixels.
 ImageInfo probeImage({required List<int> bytes}) =>
     RustLib.instance.api.crateApiAdvancedProbeImage(bytes: bytes);
 
+/// Retrieves metadata about the active GPU device and compute API (Metal/Vulkan etc.).
 GpuComputeInfo gpuComputeInfo() =>
     RustLib.instance.api.crateApiAdvancedGpuComputeInfo();
 
+/// Returns true if GPU compute capability is supported on the current platform/device.
 bool isGpuComputeAvailable() =>
     RustLib.instance.api.crateApiAdvancedIsGpuComputeAvailable();
 
+/// Decodes an image file (JPEG, PNG, etc.) to raw 32-bit RGBA pixel buffers.
 RgbaImageBuffer decodeToRgbaBuffer({
   required List<int> bytes,
   required bool fixExif,
@@ -27,6 +31,7 @@ RgbaImageBuffer decodeToRgbaBuffer({
   maxEdge: maxEdge,
 );
 
+/// Encodes a raw RGBA buffer into compressed image bytes (such as JPEG/PNG).
 Uint8List encodeRgbaBuffer({
   required RgbaImageBuffer buffer,
   required OutputFormat format,
@@ -37,6 +42,7 @@ Uint8List encodeRgbaBuffer({
   quality: quality,
 );
 
+/// Resizes a raw RGBA buffer using the specified algorithm (with optional GPU acceleration).
 RgbaImageBuffer resizeRgbaBuffer({
   required RgbaImageBuffer buffer,
   required int width,
@@ -51,6 +57,7 @@ RgbaImageBuffer resizeRgbaBuffer({
   backend: backend,
 );
 
+/// Crops a rectangular region of a raw RGBA buffer.
 RgbaImageBuffer cropRgbaBuffer({
   required RgbaImageBuffer buffer,
   required int x,
@@ -65,7 +72,7 @@ RgbaImageBuffer cropRgbaBuffer({
   height: height,
 );
 
-/// Arbitrary straighten rotation (degrees), expanding canvas with transparency.
+/// Performs an arbitrary rotation (in degrees) on a raw RGBA buffer, expanding canvas size.
 RgbaImageBuffer rotateRgbaArbitrary({
   required RgbaImageBuffer buffer,
   required double degrees,
@@ -74,6 +81,7 @@ RgbaImageBuffer rotateRgbaArbitrary({
   degrees: degrees,
 );
 
+/// Applies a filter preset or adjustment (brightness/blur etc.) to a raw RGBA buffer.
 RgbaImageBuffer filterRgbaBuffer({
   required RgbaImageBuffer buffer,
   required ImageFilter filter,
@@ -84,6 +92,7 @@ RgbaImageBuffer filterRgbaBuffer({
   backend: backend,
 );
 
+/// Resizes a raw RGBA buffer so its longest side fits within `max_edge`.
 RgbaImageBuffer fitMaxEdgeRgbaBuffer({
   required RgbaImageBuffer buffer,
   required int maxEdge,
@@ -94,6 +103,7 @@ RgbaImageBuffer fitMaxEdgeRgbaBuffer({
   previewQuality: previewQuality,
 );
 
+/// Returns a string identifier for the filter execution path (e.g. "gpu_adjust" or "cpu_photon").
 String filterExecutionPathName({
   required ImageFilter filter,
   required ProcessingBackend backend,
@@ -102,6 +112,7 @@ String filterExecutionPathName({
   backend: backend,
 );
 
+/// Draws a vector line onto a raw RGBA buffer.
 RgbaImageBuffer drawLineRgbaBuffer({
   required RgbaImageBuffer buffer,
   required DrawLine line,
@@ -110,6 +121,7 @@ RgbaImageBuffer drawLineRgbaBuffer({
   line: line,
 );
 
+/// Draws a vector circle onto a raw RGBA buffer.
 RgbaImageBuffer drawCircleRgbaBuffer({
   required RgbaImageBuffer buffer,
   required DrawCircle circle,
@@ -118,6 +130,7 @@ RgbaImageBuffer drawCircleRgbaBuffer({
   circle: circle,
 );
 
+/// Draws text onto a raw RGBA buffer.
 RgbaImageBuffer drawTextRgbaBuffer({
   required RgbaImageBuffer buffer,
   required TextOverlay overlay,
@@ -126,6 +139,7 @@ RgbaImageBuffer drawTextRgbaBuffer({
   overlay: overlay,
 );
 
+/// Encodes an RGBA buffer to preview JPEG bytes, optimized for performance over visual quality.
 Uint8List encodeRgbaPreviewBuffer({
   required RgbaImageBuffer buffer,
   required int maxEdge,
@@ -138,6 +152,7 @@ Uint8List encodeRgbaPreviewBuffer({
   previewQuality: previewQuality,
 );
 
+/// Composites raw overlay pixels onto a base RGBA buffer at the specified position.
 RgbaImageBuffer overlayOnRgbaBuffer({
   required RgbaImageBuffer base,
   required List<int> overlayBytes,
@@ -156,6 +171,7 @@ RgbaImageBuffer overlayOnRgbaBuffer({
   overlayHeight: overlayHeight,
 );
 
+/// Performs progressive decoding of image bytes, yielding both a low-res preview and a full buffer.
 ProgressiveDecodeResult decodeProgressiveImage({
   required List<int> bytes,
   required int previewMaxEdge,
@@ -166,15 +182,19 @@ ProgressiveDecodeResult decodeProgressiveImage({
   fixExif: fixExif,
 );
 
+/// Releases a buffer (such as a rented `Vec<u8>`) back to the buffer pool (Phase 3).
 void bufferPoolRelease({required List<int> buf}) =>
     RustLib.instance.api.crateApiAdvancedBufferPoolRelease(buf: buf);
 
+/// Rents or acquires a `Vec<u8>` from the pool with at least `min_capacity` to prevent allocations (Phase 3).
 Uint8List bufferPoolAcquire({required int minCapacity}) => RustLib.instance.api
     .crateApiAdvancedBufferPoolAcquire(minCapacity: minCapacity);
 
+/// Returns the current statistics of the buffer pool `(count of buffers, total size in bytes)`.
 (BigInt, BigInt) bufferPoolStats() =>
     RustLib.instance.api.crateApiAdvancedBufferPoolStats();
 
+/// Returns a string representation of the active processing backend.
 String processingBackendName({required ProcessingBackend backend}) => RustLib
     .instance
     .api

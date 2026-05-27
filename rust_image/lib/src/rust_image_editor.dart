@@ -76,6 +76,11 @@ class RustImageEditor {
 
   // --- Phase 1: encode path ---
 
+  /// Resizes an image file bytes to the specified width and height.
+  ///
+  /// Choose an appropriate [ResizeAlgorithm] (default is `lanczos3`) and
+  /// [OutputFormat] (default is `jpeg`). [fixExif] will rotate the image
+  /// according to EXIF metadata before resizing, clearing the EXIF tag.
   static Uint8List resize({
     required Uint8List bytes,
     required int width,
@@ -98,6 +103,9 @@ class RustImageEditor {
     );
   }
 
+  /// Creates a thumbnail representation of the image bytes.
+  ///
+  /// Fits the image within a bounding box of size [maxEdge].
   static Uint8List thumbnail({
     required Uint8List bytes,
     required int maxEdge,
@@ -118,6 +126,7 @@ class RustImageEditor {
     );
   }
 
+  /// Crops a rectangular area of an image.
   static Uint8List crop({
     required Uint8List bytes,
     required int x,
@@ -140,6 +149,7 @@ class RustImageEditor {
     );
   }
 
+  /// Rotates or flips the image.
   static Uint8List rotate({
     required Uint8List bytes,
     required Rotation rotation,
@@ -156,6 +166,7 @@ class RustImageEditor {
     );
   }
 
+  /// Fixes the EXIF orientation by physically rotating/flipping pixels and clearing the tag.
   static Uint8List fixExif({
     required Uint8List bytes,
     OutputFormat format = OutputFormat.jpeg,
@@ -164,10 +175,12 @@ class RustImageEditor {
     return fixExifOrientation(bytes: bytes, format: format, quality: quality);
   }
 
+  /// Reads the raw EXIF orientation value from metadata (returns 1 to 8, or null if missing).
   static int? exifOrientation(Uint8List bytes) {
     return readExifOrientation(bytes: bytes);
   }
 
+  /// Compresses the image bytes to the specified format and quality.
   static Uint8List compress({
     required Uint8List bytes,
     OutputFormat format = OutputFormat.jpeg,
@@ -176,6 +189,7 @@ class RustImageEditor {
     return compressImage(bytes: bytes, format: format, quality: quality);
   }
 
+  /// Applies a specified filter preset or adjustment (brightness/blur etc.) to the image.
   static Uint8List filter({
     required Uint8List bytes,
     required ImageFilter filter,
@@ -192,6 +206,7 @@ class RustImageEditor {
     );
   }
 
+  /// Overlays a watermark image onto the base image at coordinates [x, y].
   static Uint8List watermark({
     required Uint8List baseBytes,
     required Uint8List overlayBytes,
@@ -210,6 +225,7 @@ class RustImageEditor {
     );
   }
 
+  /// Draws a text overlay directly on the image.
   static Uint8List text({
     required Uint8List bytes,
     required TextOverlay overlay,
@@ -226,6 +242,7 @@ class RustImageEditor {
     );
   }
 
+  /// Draws a vector line directly on the image.
   static Uint8List line({
     required Uint8List bytes,
     required DrawLine line,
@@ -242,6 +259,7 @@ class RustImageEditor {
     );
   }
 
+  /// Draws a vector circle directly on the image.
   static Uint8List circle({
     required Uint8List bytes,
     required DrawCircle circle,
@@ -258,6 +276,7 @@ class RustImageEditor {
     );
   }
 
+  /// Performs concurrent resize on a list of images (parallelized on CPU).
   static List<Uint8List> batchResize({
     required List<BatchResizeItem> items,
     ResizeAlgorithm algorithm = ResizeAlgorithm.lanczos3,
@@ -276,6 +295,7 @@ class RustImageEditor {
 
   // --- Phase 2: BlurHash, AVIF, overlays, presets ---
 
+  /// Encodes image bytes to a BlurHash representation.
   static String blurHashEncode(
     Uint8List bytes, {
     int componentsX = 4,
@@ -288,6 +308,7 @@ class RustImageEditor {
     );
   }
 
+  /// Decodes a BlurHash string back into compressed image bytes.
   static Uint8List blurHashDecode({
     required String hash,
     required int width,
@@ -330,8 +351,10 @@ class RustImageEditor {
   /// Metal / Vulkan / DX12 compute via wgpu (when the `gpu` feature is enabled).
   static GpuComputeInfo gpuInfo() => gpuComputeInfo();
 
+  /// Returns true if GPU acceleration is supported on the current device.
   static bool get isGpuAvailable => isGpuComputeAvailable();
 
+  /// Probes image format and orientation metadata without decoding full pixel arrays.
   static ImageInfo probe(Uint8List bytes) => probeImage(bytes: bytes);
 
   /// Decode once into RGBA for chained edits without re-decoding JPEG/PNG.
@@ -343,6 +366,7 @@ class RustImageEditor {
     return decodeToRgbaBuffer(bytes: bytes, fixExif: fixExif, maxEdge: maxEdge);
   }
 
+  /// Encodes a raw RGBA buffer into compressed image bytes (such as JPEG/PNG).
   static Uint8List encodeRgba(
     RgbaImageBuffer buffer, {
     OutputFormat format = OutputFormat.jpeg,
@@ -351,6 +375,7 @@ class RustImageEditor {
     return encodeRgbaBuffer(buffer: buffer, format: format, quality: quality);
   }
 
+  /// Resizes a raw RGBA buffer (GPU-accelerated when backend is `.gpu` or `.auto`).
   static RgbaImageBuffer resizeRgba(
     RgbaImageBuffer buffer, {
     required int width,
@@ -367,6 +392,7 @@ class RustImageEditor {
     );
   }
 
+  /// Crops a rectangular area of an RGBA buffer.
   static RgbaImageBuffer cropRgba(
     RgbaImageBuffer buffer, {
     required int x,
@@ -383,6 +409,7 @@ class RustImageEditor {
     );
   }
 
+  /// Applies a specified filter preset or adjustment (brightness/blur etc.) to an RGBA buffer.
   static RgbaImageBuffer filterRgba(
     RgbaImageBuffer buffer,
     ImageFilter filter, {
@@ -404,6 +431,7 @@ class RustImageEditor {
     return applyEditPipeline(buffer: buffer, ops: ops, backend: backend);
   }
 
+  /// Downscales an RGBA buffer so its longest side fits within [maxEdge].
   static RgbaImageBuffer fitMaxEdgeRgba(
     RgbaImageBuffer buffer, {
     required int maxEdge,
@@ -422,6 +450,7 @@ class RustImageEditor {
   ) =>
       filterExecutionPathName(filter: filter, backend: backend);
 
+  /// Composites raw overlay pixels onto a base RGBA buffer at the specified position.
   static RgbaImageBuffer overlayRgba(
     RgbaImageBuffer base,
     Uint8List overlayBytes, {
@@ -455,41 +484,49 @@ class RustImageEditor {
     );
   }
 
+  /// Releases a buffer (such as a rented `Vec<u8>`) back to the buffer pool (Phase 3).
   static void releaseBuffer(Uint8List buffer) => bufferPoolRelease(buf: buffer);
 
+  /// Rents or acquires a `Vec<u8>` from the pool with at least `minCapacity` to prevent allocations (Phase 3).
   static Uint8List acquireBuffer({int minCapacity = 0}) {
     return bufferPoolAcquire(minCapacity: minCapacity);
   }
 
+  /// Returns the current statistics of the buffer pool `(count of buffers, total size in bytes)`.
   static (int count, int bytes) poolStats() {
     final stats = bufferPoolStats();
     return (stats.$1.toInt(), stats.$2.toInt());
   }
 
+  /// Returns a string representation of the active processing backend.
   static String backendName(ProcessingBackend backend) {
     return processingBackendName(backend: backend);
   }
 
   // --- RGBA draw (fast interactive path) ---
 
+  /// Draws a vector line onto an RGBA buffer.
   static RgbaImageBuffer drawLineRgba(
     RgbaImageBuffer buffer, {
     required DrawLine line,
   }) =>
       drawLineRgbaBuffer(buffer: buffer, line: line);
 
+  /// Draws a vector circle onto an RGBA buffer.
   static RgbaImageBuffer drawCircleRgba(
     RgbaImageBuffer buffer, {
     required DrawCircle circle,
   }) =>
       drawCircleRgbaBuffer(buffer: buffer, circle: circle);
 
+  /// Draws text onto an RGBA buffer.
   static RgbaImageBuffer drawTextRgba(
     RgbaImageBuffer buffer, {
     required TextOverlay overlay,
   }) =>
       drawTextRgbaBuffer(buffer: buffer, overlay: overlay);
 
+  /// Encodes an RGBA buffer to preview JPEG bytes, optimized for performance over visual quality.
   static Uint8List encodeRgbaPreview(
     RgbaImageBuffer buffer, {
     int maxEdge = 1600,

@@ -9,6 +9,7 @@ import 'image.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Create a GPU-resident preview surface handle (Sprint 11b.2).
+/// Returns the surface ID.
 PlatformInt64 createGpuPreviewSurface({
   required int width,
   required int height,
@@ -17,9 +18,11 @@ PlatformInt64 createGpuPreviewSurface({
   height: height,
 );
 
+/// Destroys the GPU-resident preview surface and releases its textures/buffers.
 void destroyGpuPreviewSurface({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiTextureDestroyGpuPreviewSurface(id: id);
 
+/// Uploads an RGBA buffer to the GPU texture associated with the surface ID.
 Future<void> uploadGpuPreviewSurface({
   required PlatformInt64 id,
   required RgbaImageBuffer buffer,
@@ -28,6 +31,7 @@ Future<void> uploadGpuPreviewSurface({
   buffer: buffer,
 );
 
+/// Applies a list of edit operations directly on the GPU texture preview cache.
 Future<void> applyGpuPreviewOps({
   required PlatformInt64 id,
   required List<EditOp> ops,
@@ -38,11 +42,12 @@ Future<void> applyGpuPreviewOps({
   backend: backend,
 );
 
+/// Reads the current GPU preview texture pixels back into a host RGBA buffer.
 Future<RgbaImageBuffer> readbackGpuPreviewSurface({
   required PlatformInt64 id,
 }) => RustLib.instance.api.crateApiTextureReadbackGpuPreviewSurface(id: id);
 
-/// Regional skin smooth on GPU preview cache (Sprint 12 / Nexus D WGSL).
+/// Applies a GPU-accelerated regional skin smooth pass (Sprint 12 / Nexus D WGSL).
 Future<void> applyGpuBeautyPass({
   required PlatformInt64 id,
   required SegmentationMask mask,
@@ -53,7 +58,7 @@ Future<void> applyGpuBeautyPass({
   strength: strength,
 );
 
-/// Full regional beauty on GPU preview (Nexus D): skin/eye/lip/blush WGSL; lip plump CPU warp.
+/// Runs the full GPU beauty pipeline (skin/eye/lip/blush WGSL; lip plump CPU warp fallback).
 Future<void> applyGpuBeautyPipeline({
   required PlatformInt64 id,
   required FaceAnalysisResult analysis,
@@ -68,7 +73,7 @@ Future<void> applyGpuBeautyPipeline({
   excludeMask: excludeMask,
 );
 
-/// GPU overlay composite on preview cache (Sprint 2 P2 — normal/multiply/screen).
+/// Composites an overlay RGBA buffer on the GPU texture using the specified blend mode.
 Future<void> applyGpuOverlayBlend({
   required PlatformInt64 id,
   required RgbaImageBuffer overlay,
@@ -81,6 +86,6 @@ Future<void> applyGpuOverlayBlend({
   blendMode: blendMode,
 );
 
-/// Whether GPU texture preview is available on this build/device.
+/// Returns true if GPU texture preview is available on the current host.
 bool isGpuTexturePreviewAvailable() =>
     RustLib.instance.api.crateApiTextureIsGpuTexturePreviewAvailable();

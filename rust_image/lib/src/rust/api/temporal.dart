@@ -9,11 +9,13 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `smoothers`
 
-/// Create a temporal smoother (α ≈ 0.25 recommended for live camera).
+/// Create a temporal smoother registry entry (α ≈ 0.25 recommended for live camera).
+/// Returns a unique smoother ID.
 PlatformInt64 temporalSmootherCreate({required double alpha}) =>
     RustLib.instance.api.crateApiTemporalTemporalSmootherCreate(alpha: alpha);
 
-/// EMA-smooth landmarks + segmentation mask; resets layout on point-count change.
+/// Applies Exponential Moving Average (EMA) smoothing to landmarks and segmentation masks.
+/// Automatically resets state when the landmark point-count changes.
 FaceAnalysisResult temporalSmootherSmooth({
   required PlatformInt64 id,
   required FaceAnalysisResult raw,
@@ -22,8 +24,10 @@ FaceAnalysisResult temporalSmootherSmooth({
   raw: raw,
 );
 
+/// Resets the internal smoothing filters for the specified smoother ID.
 void temporalSmootherReset({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiTemporalTemporalSmootherReset(id: id);
 
+/// Destroys the temporal smoother and frees its resources from the registry.
 void temporalSmootherDestroy({required PlatformInt64 id}) =>
     RustLib.instance.api.crateApiTemporalTemporalSmootherDestroy(id: id);

@@ -9,6 +9,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `fmt`, `fmt`
 
+/// Bakes multiple raster overlay layers and vector paint strokes onto a base RGBA buffer.
 RgbaImageBuffer bakeLayersOnRgba({
   required RgbaImageBuffer buffer,
   required List<RasterLayerInput> rasterLayers,
@@ -19,20 +20,36 @@ RgbaImageBuffer bakeLayersOnRgba({
   paintStrokes: paintStrokes,
 );
 
+/// Input representation for a vector paint stroke.
 class PaintStrokeInput {
+  /// List of 2D points along the stroke path.
   final List<(double, double)> points;
+
+  /// Color red channel.
   final int colorR;
+
+  /// Color green channel.
   final int colorG;
+
+  /// Color blue channel.
   final int colorB;
+
+  /// Color alpha channel.
   final int colorA;
+
+  /// Stroke width/thickness in pixels.
   final double width;
+
+  /// Opacity factor (0.0 to 1.0) of the stroke.
   final double opacity;
 
   /// When true, clears painted pixels along the stroke (Sprint 9 eraser).
   final bool erase;
 
-  /// 0=pen, 1=marker, 2=highlighter, 3=eraser, 4=neon (Sprint 10).
+  /// Brush kind index (0=pen, 1=marker, 2=highlighter, 3=eraser, 4=neon).
   final int brushKind;
+
+  /// True if the shape/stroke is filled.
   final bool filled;
 
   const PaintStrokeInput({
@@ -78,14 +95,30 @@ class PaintStrokeInput {
           filled == other.filled;
 }
 
+/// Input representation for a raster overlay layer (e.g. sticker or image badge).
 class RasterLayerInput {
+  /// Decoded raw pixels of the overlay image.
   final Uint8List pixels;
+
+  /// Width of the overlay image in pixels.
   final int width;
+
+  /// Height of the overlay image in pixels.
   final int height;
+
+  /// Horizontal center position relative to base image width.
   final double centerX;
+
+  /// Vertical center position relative to base image height.
   final double centerY;
+
+  /// Scale factor of the overlay.
   final double scale;
+
+  /// Rotation angle of the overlay in radians.
   final double rotationRad;
+
+  /// Opacity factor (0.0 to 1.0) of the overlay.
   final double opacity;
 
   const RasterLayerInput({
