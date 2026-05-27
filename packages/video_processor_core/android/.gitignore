@@ -1,0 +1,11 @@
+*.iml
+.gradle
+/local.properties
+/.idea/workspace.xml
+/.idea/libraries
+.DS_Store
+/build
+/captures
+.cxx
+# Built by tools/release/package-android.sh (do not commit large binaries)
+/src/main/jniLibs/**/*.so
