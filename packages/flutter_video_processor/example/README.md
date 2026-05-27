@@ -9,10 +9,20 @@ Demo app for the [`flutter_video_processor`](../packages/flutter_video_processor
 From the **repository root** (USB device connected, `adb devices` shows it):
 
 ```bash
-./scripts/run-android.sh
+chmod +x scripts/run-android.sh
+./scripts/run-android.sh              # first connected device
+./scripts/run-android.sh M2007J17I    # or pass device id
 ```
 
-This builds `libvideo_processor_core.so` for **arm64-v8a**, copies it into the plugin `jniLibs/`, then runs the example.
+This runs **`scripts/package-video-android.sh`** (NDK + FFmpeg → `packages/video_processor_core/android/src/main/jniLibs`), clears the hook cache, `flutter clean`, then **`flutter run`** with `VFP_USE_PREBUILT_JNI=1`.
+
+If you see **content hash … Dart … different from Rust**, do **not** hot-reload — run this script again (rebuilds a fresh `.so`).
+
+Emulator / all ABIs: `./scripts/run-android.sh --all`
+
+### Preview perf matrix (V1.7)
+
+After loading a video, open the **Preview** tab and tap **Run perf matrix (I, J, K)**. Studio also shows live `scrub_p95` / `fps` in the status line while playing.
 
 Prerequisites: Android NDK (via Android Studio SDK Manager), Rust Android target, and FFmpeg for Android.
 
@@ -20,8 +30,10 @@ Prerequisites: Android NDK (via Android Studio SDK Manager), Rust Android target
 
 ```bash
 unset ANDROID_NDK_HOME   # if you copied the docs placeholder by mistake
-./tools/ffmpeg/android.sh   # once, ~30+ min — auto-detects ~/Library/Android/sdk/ndk/*
+cd "rust video" && ./tools/ffmpeg/android.sh   # once, ~30+ min (no OpenSSL — file/http only)
 ```
+
+The default Android FFmpeg build does **not** require OpenSSL on your Mac. To enable `https://` inputs, set `VFP_FFMPEG_OPENSSL=1` and place cross-compiled `libssl.a` / `libcrypto.a` under `rust video/tools/ffmpeg/dist/android/<abi>/openssl/` (optional; most demos use local files).
 
 Or explicitly (your machine has `28.2.13676358`):
 
@@ -30,7 +42,7 @@ export ANDROID_NDK_HOME="$HOME/Library/Android/sdk/ndk/28.2.13676358"
 ./tools/ffmpeg/android.sh
 ```
 
-Or only the device ABI via `package-android.sh` (default). All ABIs: `./tools/release/package-android.sh --all`
+Or only the device ABI: `./scripts/package-video-android.sh` (default). All ABIs: `./scripts/package-video-android.sh --all`
 
 ### iOS (rebuild native after Rust changes)
 

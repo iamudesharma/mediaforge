@@ -6,8 +6,8 @@ import 'package:path/path.dart' as p;
 
 /// Bundles `libvideo_processor_core` for the active Flutter build target.
 ///
-/// Pre-build for Android (recommended):
-///   ./scripts/run-android.sh
+/// Android: prefer jniLibs when `VFP_USE_PREBUILT_JNI=1` (see `scripts/run-android.sh`).
+/// Hook cargo-build needs NDK linkers; use `scripts/package-video-android.sh` for device runs.
 void main(List<String> args) async {
   await build(args, (input, output) async {
     if (!input.config.buildCodeAssets) {
@@ -63,8 +63,8 @@ void main(List<String> args) async {
     if (libPath == null) {
       stderr.writeln(
         'video_processor_core: no $libFileName for $triple — skipped.\n'
-        'Android: rust video/tools/release/package-android.sh\n'
-        'iOS: rust video/tools/release/package-ios-framework.sh',
+        'Android: scripts/package-video-android.sh (or run-android.sh)\n'
+        'iOS: ./scripts/run-ios.sh',
       );
       return;
     }
@@ -114,30 +114,29 @@ Future<String?> _findExistingLibrary({
   required String libFileName,
 }) async {
   final abi = _androidAbiFolder(arch);
+  final hookOut = p.join(
+    packageRoot.toFilePath(),
+    'rust',
+    'target',
+    'rust_hook',
+    triple,
+    'release',
+    libFileName,
+  );
+  // Do not use android/src/main/jniLibs here — stale copies cause FRB content-hash
+  // mismatches (Dart regenerated, .so not rebuilt). Prebuild with package-android.sh
+  // only when you intentionally refresh jniLibs; Flutter hook always cargo-builds.
   final candidates = <String>[
+    hookOut,
     if (os == OS.macOS)
       p.join(
         packageRoot.toFilePath(),
-        'target/release/libvideo_processor_core.dylib',
+        'rust/target/release/libvideo_processor_core.dylib',
       ),
     if (os == OS.iOS)
       p.join(
         packageRoot.toFilePath(),
         'ios/Frameworks/video_processor_core.framework/video_processor_core',
-      ),
-    if (abi != null)
-      p.join(
-        packageRoot.toFilePath(),
-        'android/src/main/jniLibs',
-        abi,
-        libFileName,
-      ),
-    if (abi != null)
-      p.join(
-        workspaceRoot.toFilePath(),
-        'platform-build/android/jniLibs',
-        abi,
-        libFileName,
       ),
     p.join(
       workspaceRoot.toFilePath(),
@@ -146,6 +145,13 @@ Future<String?> _findExistingLibrary({
       'release',
       libFileName,
     ),
+    if (abi != null && Platform.environment['VFP_USE_PREBUILT_JNI'] == '1')
+      p.join(
+        packageRoot.toFilePath(),
+        'android/src/main/jniLibs',
+        abi,
+        libFileName,
+      ),
   ];
 
   for (final path in candidates) {

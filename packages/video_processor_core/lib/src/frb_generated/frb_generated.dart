@@ -68,7 +68,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -651265318;
+  int get rustContentHash => -1463065212;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -94,6 +94,12 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiCleanupJob({required String jobId});
 
+  Future<PreviewFramePixelBuffer> crateApiDecodePreviewFramePixelBuffer({
+    required String inputPath,
+    required BigInt positionMs,
+    int? maxEdge,
+  });
+
   Future<PreviewFrameRgba> crateApiDecodePreviewFrameRgba({
     required String inputPath,
     required BigInt positionMs,
@@ -110,6 +116,8 @@ abstract class RustLibApi extends BaseApi {
     required String url,
     required String destDir,
   });
+
+  void crateApiReleasePreviewPixelBuffer({required BigInt pixelBufferPtr});
 
   Stream<ProgressEvent> crateApiStartCompress({
     required CompressOptions options,
@@ -290,7 +298,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "cleanup_job", argNames: ["jobId"]);
 
   @override
-  Future<PreviewFrameRgba> crateApiDecodePreviewFrameRgba({
+  Future<PreviewFramePixelBuffer> crateApiDecodePreviewFramePixelBuffer({
     required String inputPath,
     required BigInt positionMs,
     int? maxEdge,
@@ -306,6 +314,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             generalizedFrbRustBinding,
             serializer,
             funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_preview_frame_pixel_buffer,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiDecodePreviewFramePixelBufferConstMeta,
+        argValues: [inputPath, positionMs, maxEdge],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDecodePreviewFramePixelBufferConstMeta =>
+      const TaskConstMeta(
+        debugName: "decode_preview_frame_pixel_buffer",
+        argNames: ["inputPath", "positionMs", "maxEdge"],
+      );
+
+  @override
+  Future<PreviewFrameRgba> crateApiDecodePreviewFrameRgba({
+    required String inputPath,
+    required BigInt positionMs,
+    int? maxEdge,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(inputPath, serializer);
+          sse_encode_u_64(positionMs, serializer);
+          sse_encode_opt_box_autoadd_u_32(maxEdge, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
             port: port_,
           );
         },
@@ -336,7 +381,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -363,7 +408,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -390,7 +435,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
@@ -419,7 +464,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(url, serializer);
           sse_encode_String(destDir, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -439,6 +484,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  void crateApiReleasePreviewPixelBuffer({required BigInt pixelBufferPtr}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(pixelBufferPtr, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiReleasePreviewPixelBufferConstMeta,
+        argValues: [pixelBufferPtr],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiReleasePreviewPixelBufferConstMeta =>
+      const TaskConstMeta(
+        debugName: "release_preview_pixel_buffer",
+        argNames: ["pixelBufferPtr"],
+      );
+
+  @override
   Stream<ProgressEvent> crateApiStartCompress({
     required CompressOptions options,
   }) {
@@ -453,7 +524,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 11,
+              funcId: 13,
               port: port_,
             );
           },
@@ -485,7 +556,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 14,
             port: port_,
           );
         },
@@ -515,7 +586,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 15,
             port: port_,
           );
         },
@@ -545,7 +616,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 16,
             port: port_,
           );
         },
@@ -578,7 +649,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 17,
             port: port_,
           );
         },
@@ -609,7 +680,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 18,
             port: port_,
           );
         },
@@ -927,6 +998,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<String>? dco_decode_opt_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_String(raw);
+  }
+
+  @protected
+  PreviewFramePixelBuffer dco_decode_preview_frame_pixel_buffer(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return PreviewFramePixelBuffer(
+      ptsMs: dco_decode_u_64(arr[0]),
+      width: dco_decode_u_32(arr[1]),
+      height: dco_decode_u_32(arr[2]),
+      pixelBufferPtr: dco_decode_u_64(arr[3]),
+    );
   }
 
   @protected
@@ -1450,6 +1535,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PreviewFramePixelBuffer sse_decode_preview_frame_pixel_buffer(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ptsMs = sse_decode_u_64(deserializer);
+    var var_width = sse_decode_u_32(deserializer);
+    var var_height = sse_decode_u_32(deserializer);
+    var var_pixelBufferPtr = sse_decode_u_64(deserializer);
+    return PreviewFramePixelBuffer(
+      ptsMs: var_ptsMs,
+      width: var_width,
+      height: var_height,
+      pixelBufferPtr: var_pixelBufferPtr,
+    );
+  }
+
+  @protected
   PreviewFrameRgba sse_decode_preview_frame_rgba(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_ptsMs = sse_decode_u_64(deserializer);
@@ -1958,6 +2060,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_list_String(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_preview_frame_pixel_buffer(
+    PreviewFramePixelBuffer self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.ptsMs, serializer);
+    sse_encode_u_32(self.width, serializer);
+    sse_encode_u_32(self.height, serializer);
+    sse_encode_u_64(self.pixelBufferPtr, serializer);
   }
 
   @protected

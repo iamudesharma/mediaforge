@@ -7,7 +7,7 @@
 # as the binary inside it → linker error "can't link a dylib with itself".
 #
 # Before running the example: cargo build --release -p video_processor_core
-# (see rust video/scripts/run-macos.sh).
+# (see scripts/run-video-macos.sh).
 #
 Pod::Spec.new do |s|
   s.name             = 'video_processor_core'

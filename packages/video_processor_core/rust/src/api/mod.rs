@@ -157,6 +157,26 @@ pub async fn decode_preview_frame_rgba(
     .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
 }
 
+/// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
+#[frb]
+pub async fn decode_preview_frame_pixel_buffer(
+    input_path: String,
+    position_ms: u64,
+    max_edge: Option<u32>,
+) -> Result<PreviewFramePixelBuffer> {
+    tokio::task::spawn_blocking(move || {
+        pipeline::decode_preview_frame_pixel_buffer(&input_path, position_ms, max_edge)
+    })
+    .await
+    .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+}
+
+/// Release a native preview pixel buffer not adopted by [rust_gpu_texture].
+#[frb(sync)]
+pub fn release_preview_pixel_buffer(pixel_buffer_ptr: u64) {
+    pipeline::release_preview_pixel_buffer(pixel_buffer_ptr);
+}
+
 /// Returns the number of active jobs.
 #[frb]
 pub fn active_job_count() -> u32 {

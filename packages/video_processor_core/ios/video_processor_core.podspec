@@ -1,6 +1,11 @@
 #
 # CocoaPods spec for video_processor_core (iOS).
 #
+# Pre-build: ./scripts/run-ios.sh (packages Frameworks/video_processor_core.framework).
+# Do not set OTHER_LDFLAGS => -framework video_processor_core when using
+# vendored_frameworks — CocoaPods + use_frameworks! already links it; duplicate
+# -framework causes "Can't link a dylib with itself" (same install_name).
+#
 Pod::Spec.new do |s|
   s.name             = 'video_processor_core'
   s.version          = '0.1.0'
@@ -14,11 +19,11 @@ High-performance video compression, transcoding, and thumbnails powered by Rust 
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.platform = :ios, '13.0'
+  s.platform = :ios, '16.0'
+  s.static_framework = true
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'OTHER_LDFLAGS' => '-framework video_processor_core',
   }
   s.swift_version = '5.0'
 

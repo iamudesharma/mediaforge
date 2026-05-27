@@ -663,10 +663,18 @@ fn create_video_transcoder(
         }
     };
 
+    // MediaCodec encoders are configured on 16-aligned dimensions; scaler output must match.
+    let (out_w, out_h) = if encoder_name.contains("mediacodec") {
+        (align_even_16(out_w), align_even_16(out_h))
+    } else {
+        (out_w, out_h)
+    };
+
     let (enc_pixel, scale_needed) = if vt_link != VtLinkMode::None {
         (Pixel::VIDEOTOOLBOX, false)
     } else if encoder_name.contains("mediacodec") {
-        (Pixel::NV12, out_w != src_w || out_h != src_h || decoder.format() != Pixel::NV12)
+        // Always NV12 + swscale: many devices reject YUV420P for MediaCodec encode.
+        (Pixel::NV12, true)
     } else {
         let sw_pixel = hw_transfer
             .as_ref()

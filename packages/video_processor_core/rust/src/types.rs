@@ -178,6 +178,17 @@ pub struct PreviewFrameRgba {
     pub rgba: Vec<u8>,
 }
 
+/// Apple HW preview frame: BGRA `CVPixelBuffer` pointer for zero-copy texture present (V1.4).
+#[frb]
+#[derive(Clone, Debug)]
+pub struct PreviewFramePixelBuffer {
+    pub pts_ms: u64,
+    pub width: u32,
+    pub height: u32,
+    /// Native `CVPixelBuffer*` address; call [crate::api::release_preview_pixel_buffer] if not presented.
+    pub pixel_buffer_ptr: u64,
+}
+
 #[frb]
 #[derive(Clone, Debug)]
 pub enum JobResult {

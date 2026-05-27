@@ -8,14 +8,17 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.view.TextureRegistry
 
 /**
- * Flutter [Texture] bridge — RGBA upload via MethodChannel (Sprint P0.2).
+ * Flutter [Texture] bridge — RGBA upload and MediaCodec → Surface (Sprint P0.2 / V1.6).
+ *
+ * Uses [TextureRegistry.SurfaceProducer] + [TextureRegistry.SurfaceProducer.scheduleFrame]
+ * (Flutter 3.27+); legacy [SurfaceTextureEntry.markTextureFrameAvailable] was removed.
  */
 class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private var channel: MethodChannel? = null
     private var textureRegistry: TextureRegistry? = null
 
     private data class Entry(
-        val textureEntry: TextureRegistry.SurfaceTextureEntry,
+        val surfaceProducer: TextureRegistry.SurfaceProducer,
         var bitmap: Bitmap?,
     )
 
@@ -34,7 +37,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         textureRegistry = null
         textures.values.forEach { entry ->
             entry.bitmap?.recycle()
-            entry.textureEntry.release()
+            entry.surfaceProducer.release()
         }
         textures.clear()
     }
@@ -44,6 +47,8 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             "createTexture" -> createTexture(call, result)
             "updateTexture" -> updateTexture(call, result)
             "notifyFrameAvailable" -> notifyFrameAvailable(call, result)
+            "decodePreviewToSurface" -> decodePreviewToSurface(call, result)
+            "presentPixelBuffer" -> result.notImplemented()
             "disposeTexture" -> disposeTexture(call, result)
             else -> result.notImplemented()
         }
@@ -74,11 +79,11 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             result.error("bad_args", "width/height/handle required", null)
             return
         }
-        val entry = registry.createSurfaceTexture()
-        entry.surfaceTexture().setDefaultBufferSize(width, height)
+        val producer = registry.createSurfaceProducer()
+        producer.setSize(width, height)
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        textures[handle] = Entry(entry, bitmap)
-        result.success(entry.id())
+        textures[handle] = Entry(producer, bitmap)
+        result.success(producer.id())
     }
 
     private fun updateTexture(call: MethodCall, result: MethodChannel.Result) {
@@ -114,7 +119,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             si += 4
         }
         bitmap.setPixels(pixelsCopy, 0, w, 0, 0, w, h)
-        val surface = Surface(entry.textureEntry.surfaceTexture())
+        val surface = entry.surfaceProducer.surface
         try {
             val canvas = surface.lockCanvas(null)
             if (canvas != null) {
@@ -124,8 +129,44 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         } catch (_: Exception) {
             // Surface may not be ready on first frame.
         }
-        entry.textureEntry.markTextureFrameAvailable()
+        entry.surfaceProducer.scheduleFrame()
         result.success(null)
+    }
+
+    private fun decodePreviewToSurface(call: MethodCall, result: MethodChannel.Result) {
+        @Suppress("UNCHECKED_CAST")
+        val args = call.arguments as? Map<String, Any>
+        val handle = handleFromArgs(args)
+        val path = args?.get("path") as? String
+        val positionMs = (args?.get("positionMs") as? Number)?.toLong()
+        val maxEdge = (args?.get("maxEdge") as? Number)?.toInt() ?: 0
+        val entry = handle?.let { textures[it] }
+        if (handle == null || path.isNullOrBlank() || positionMs == null || entry == null) {
+            result.error("bad_args", "handle/path/positionMs required", null)
+            return
+        }
+        val surface = entry.surfaceProducer.surface
+        try {
+            val frame =
+                AndroidPreviewDecoder.decodeFrameToSurface(
+                    path = path,
+                    positionMs = positionMs,
+                    surface = surface,
+                    maxEdge = maxEdge,
+                )
+            entry.surfaceProducer.scheduleFrame()
+            result.success(
+                mapOf(
+                    "ptsMs" to frame.ptsMs,
+                    "width" to frame.width,
+                    "height" to frame.height,
+                ),
+            )
+        } catch (e: AndroidPreviewDecoder.DecodeException) {
+            result.error("decode_failed", e.message, null)
+        } catch (e: Exception) {
+            result.error("decode_failed", e.message ?: e.toString(), null)
+        }
     }
 
     private fun notifyFrameAvailable(call: MethodCall, result: MethodChannel.Result) {
@@ -133,9 +174,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val args = call.arguments as? Map<String, Any>
         val handle = handleFromArgs(args)
         val entry = handle?.let { textures[it] }
-        if (entry != null) {
-            entry.textureEntry.markTextureFrameAvailable()
-        }
+        entry?.surfaceProducer?.scheduleFrame()
         result.success(null)
     }
 
@@ -146,7 +185,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         if (handle != null) {
             val entry = textures.remove(handle)
             entry?.bitmap?.recycle()
-            entry?.textureEntry?.release()
+            entry?.surfaceProducer?.release()
         }
         result.success(null)
     }

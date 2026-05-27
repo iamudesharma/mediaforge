@@ -28,10 +28,11 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
 
   StreamSubscription<ProgressEvent>? _progressSub;
   MediaRuntime? _runtime;
-  Timer? _previewDebounce;
 
   List<String> _filmstripPaths = [];
+  List<VideoOverlayItem> _overlays = [];
   bool _loadingFilmstrip = false;
+  bool _showTitleOverlay = true;
 
   double _startSec = 0;
   double _endSec = 0;
@@ -44,10 +45,34 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
 
   @override
   void dispose() {
-    _previewDebounce?.cancel();
     _progressSub?.cancel();
-    _runtime?.dispose();
+    unawaited(_tearDownRuntime());
     super.dispose();
+  }
+
+  Future<void> _tearDownRuntime() async {
+    final runtime = _runtime;
+    if (runtime == null) return;
+    runtime.removeListener(_onRuntimeUpdated);
+    _runtime = null;
+    runtime.pause();
+    await runtime.close();
+    runtime.dispose();
+  }
+
+  void _onRuntimeUpdated() {
+    final runtime = _runtime;
+    if (runtime == null || !mounted) return;
+    final sec = runtime.ptsMs / 1000.0;
+    if ((sec - _playheadSec).abs() > 0.001 || runtime.isPlaying) {
+      setState(() {
+        _playheadSec = _safeClamp(sec, _startSec, _endSec);
+      });
+    }
+    if (runtime.isPlaying && runtime.metrics.playbackFramesPresented % 30 == 0) {
+      _s.status = runtime.metricsSnapshot.toStatusLine();
+      _s.touch();
+    }
   }
 
   int? _thumbCacheWidth(BuildContext context, int logicalWidth) {
@@ -61,8 +86,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
 
     OutputPaths.clearCache();
     _filmstripPaths = [];
-    _runtime?.dispose();
-    _runtime = null;
+    await _tearDownRuntime();
 
     if (!_s.initialized) {
       await _s.initialize();
@@ -76,30 +100,33 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   Future<void> _loadVideo(String path) async {
     _s.setBusy(status: 'Loading video…');
     try {
-      final info = _s.info ?? await VideoProcessor.getMediaInfo(path);
+      await _tearDownRuntime();
+      _runtime = MediaRuntime(previewMaxEdge: 720, targetPreviewFps: 30);
+      _runtime!.addListener(_onRuntimeUpdated);
+      await _runtime!.open(path);
+
+      // Authoritative duration for trim/filmstrip (fixes short fast-probe on phone MOV).
+      final info = _runtime!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
       _s.info = info;
       final dur = info.durationMs.toInt() / 1000.0;
       _startSec = 0;
       _endSec = dur > 0 ? dur : 1;
       _playheadSec = _startSec;
 
-      _runtime?.dispose();
-      _runtime = MediaRuntime(previewMaxEdge: 720);
-      await _runtime!.open(path);
       _runtime!.setTrimRange(
         startMs: (_startSec * 1000).round(),
         endMs: (_endSec * 1000).round(),
       );
       await _runtime!.seekTo(
         Duration(milliseconds: (_playheadSec * 1000).round()),
-        coalesce: false,
       );
 
       await _buildFilmstrip();
-      final previewPath = MediaRuntime.isTexturePreviewAvailable ? 'texture' : 'rgba';
+      _rebuildDemoOverlays(_endSec - _startSec);
+      final metrics = _runtime!.metricsSnapshot.toStatusLine();
       _s.setIdle(
         status:
-            'Ready · ${info.width}×${info.height} · ${info.videoCodec} · preview:$previewPath',
+            'Ready · ${info.width}×${info.height} · ${info.videoCodec} · overlays:${_overlays.length}\n$metrics',
       );
     } catch (e) {
       _s.setIdle(status: 'Load failed: $e');
@@ -138,14 +165,10 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   }
 
   void _schedulePreviewSync(double seconds) {
-    final runtime = _runtime;
-    if (runtime == null) return;
-    _previewDebounce?.cancel();
-    _previewDebounce = Timer(const Duration(milliseconds: 280), () {
-      unawaited(
-        runtime.seekTo(Duration(milliseconds: (seconds * 1000).round())),
-      );
-    });
+    if (_runtime?.isPlaying ?? false) return;
+    _runtime?.scheduleScrub(
+      Duration(milliseconds: (seconds * 1000).round()),
+    );
   }
 
   static double _safeClamp(double value, double lower, double upper) {
@@ -166,6 +189,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
       _startSec = s;
       _endSec = e;
       _playheadSec = _safeClamp(_playheadSec, s, e);
+      _rebuildDemoOverlays(_endSec - _startSec);
     });
     _runtime?.setTrimRange(
       startMs: (_startSec * 1000).round(),
@@ -174,14 +198,42 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
     _schedulePreviewSync(_playheadSec);
   }
 
-  Future<void> _togglePlayback() async {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Decoder-clock playback ships in Sprint V1.3'),
-        duration: Duration(seconds: 2),
+  void _rebuildDemoOverlays(double trimDurationSec) {
+    final durMs = (trimDurationSec * 1000).round().clamp(1, 1 << 30);
+    final midStart = (durMs * 0.25).round();
+    final midEnd = (durMs * 0.75).round();
+    _overlays = [
+      if (_showTitleOverlay)
+        VideoOverlayItem.text(
+          id: 'title',
+          startMs: 0,
+          endMs: durMs,
+          anchor: const Offset(0.12, 0.88),
+          label: 'Video Studio',
+        ),
+      VideoOverlayItem.emoji(
+        id: 'mid',
+        startMs: midStart,
+        endMs: midEnd,
+        anchor: const Offset(0.82, 0.18),
+        emoji: '✨',
       ),
-    );
+    ];
+  }
+
+  Future<void> _togglePlayback() async {
+    final runtime = _runtime;
+    if (runtime == null || !runtime.isOpen || _s.busy) return;
+    if (runtime.isPlaying) {
+      runtime.pause();
+    } else {
+      runtime.setTrimRange(
+        startMs: (_startSec * 1000).round(),
+        endMs: (_endSec * 1000).round(),
+      );
+      await runtime.play();
+    }
+    if (mounted) setState(() {});
   }
 
   Future<void> _exportCompress() async {
@@ -306,8 +358,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
                         ? null
                         : () {
                             final previous = _s.selectedInput;
-                            _runtime?.dispose();
-                            _runtime = null;
+                            unawaited(_tearDownRuntime());
                             _s.selectedInput = null;
                             _s.selectedName = null;
                             _s.info = null;
@@ -340,10 +391,28 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
             Expanded(child: _buildPreview(context)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                selectionLabel,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-                textAlign: TextAlign.center,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      selectionLabel,
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  FilterChip(
+                    label: const Text('Title', style: TextStyle(fontSize: 11)),
+                    selected: _showTitleOverlay,
+                    onSelected: _s.busy
+                        ? null
+                        : (v) {
+                            setState(() {
+                              _showTitleOverlay = v;
+                              _rebuildDemoOverlays(_endSec - _startSec);
+                            });
+                          },
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 8),
@@ -373,6 +442,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
                     onChanged: _s.busy
                         ? null
                         : (v) {
+                            _runtime?.pause();
                             setState(() => _playheadSec = v);
                             _schedulePreviewSync(v);
                           },
@@ -382,22 +452,31 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton.filled(
-                    onPressed: _s.busy ? null : _togglePlayback,
-                    tooltip: 'Playback (V1.3)',
-                    icon: const Icon(Icons.play_arrow, size: 36),
-                  ),
-                  const SizedBox(width: 12),
-                  IconButton.outlined(
-                    onPressed: _s.busy || _loadingFilmstrip ? null : _buildFilmstrip,
-                    icon: const Icon(Icons.refresh),
-                    color: Colors.white,
-                    tooltip: 'Regenerate filmstrip',
-                  ),
-                ],
+              child: ListenableBuilder(
+                listenable: _runtime ?? Listenable.merge(const []),
+                builder: (context, _) {
+                  final playing = _runtime?.isPlaying ?? false;
+                  return Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton.filled(
+                        onPressed: _s.busy ? null : _togglePlayback,
+                        tooltip: playing ? 'Pause' : 'Play',
+                        icon: Icon(
+                          playing ? Icons.pause : Icons.play_arrow,
+                          size: 36,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton.outlined(
+                        onPressed: _s.busy || _loadingFilmstrip ? null : _buildFilmstrip,
+                        icon: const Icon(Icons.refresh),
+                        color: Colors.white,
+                        tooltip: 'Regenerate filmstrip',
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             _buildExportPanel(context),
@@ -424,7 +503,10 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   Widget _buildPreview(BuildContext context) {
     final runtime = _runtime;
     if (runtime != null && runtime.isOpen) {
-      return VideoPreviewSurface(runtime: runtime);
+      return VideoCompositorCanvas(
+        runtime: runtime,
+        overlays: _overlays,
+      );
     }
     return const Center(
       child: Icon(Icons.videocam_outlined, size: 64, color: Colors.white24),

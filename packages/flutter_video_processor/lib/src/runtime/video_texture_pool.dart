@@ -46,6 +46,30 @@ final class VideoTexturePool {
     await GpuTextureRegistry.updateTexture(handle: handle, pixels: rgba);
   }
 
+  /// MediaCodec → SurfaceTexture (Android V1.6). Texture must exist.
+  Future<PreviewSurfaceFrame?> decodePreviewToSurface({
+    required String path,
+    required int positionMs,
+    required int maxEdge,
+  }) async {
+    if (_textureId == null) return null;
+    return GpuTextureRegistry.decodePreviewToSurface(
+      handle: handle,
+      path: path,
+      positionMs: positionMs,
+      maxEdge: maxEdge,
+    );
+  }
+
+  /// Adopts a BGRA `CVPixelBuffer*` from VideoToolbox preview decode (Apple).
+  Future<void> presentPixelBuffer(int pixelBufferPtr) async {
+    if (_textureId == null || pixelBufferPtr == 0) return;
+    await GpuTextureRegistry.presentPixelBuffer(
+      handle: handle,
+      pixelBufferPtr: pixelBufferPtr,
+    );
+  }
+
   Future<void> release() async {
     if (_textureId != null) {
       await GpuTextureRegistry.disposeTexture(handle);

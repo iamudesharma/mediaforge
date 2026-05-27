@@ -1,11 +1,22 @@
-//! Single-frame preview decode for texture display (Sprint V1.1).
+//! Single-frame preview decode for texture display (Sprint V1.1+).
 //!
-//! Reuses thumbnail seek/decode; outputs RGBA8888 for [GpuTextureRegistry] upload.
+//! V1.1: RGBA via thumbnail CPU path. V1.4: Apple VideoToolbox → BGRA `CVPixelBuffer`.
 
 use crate::error::{Result, VideoProcessorError};
 use crate::jobs::registry::CancellationToken;
 use crate::pipeline::thumbnail;
-use crate::types::PreviewFrameRgba;
+use crate::types::{PreviewFramePixelBuffer, PreviewFrameRgba};
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+use super::preview_hw;
+
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub use preview_hw::hw_preview_enabled;
+
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
+pub fn hw_preview_enabled() -> bool {
+    false
+}
 
 /// Decode one preview frame at [position_ms], scaled so the longest edge is at most [max_edge].
 pub fn decode_preview_frame_rgba(
@@ -30,6 +41,39 @@ pub fn decode_preview_frame_rgba(
         rgba,
     })
 }
+
+/// Apple HW path: VideoToolbox decode → BGRA `CVPixelBuffer` (hand off via [pixel_buffer_ptr]).
+pub fn decode_preview_frame_pixel_buffer(
+    input_path: &str,
+    position_ms: u64,
+    max_edge: Option<u32>,
+) -> Result<PreviewFramePixelBuffer> {
+    #[cfg(any(target_os = "ios", target_os = "macos"))]
+    {
+        return preview_hw::decode_preview_pixel_buffer(input_path, position_ms, max_edge);
+    }
+    #[cfg(not(any(target_os = "ios", target_os = "macos")))]
+    {
+        let _ = (input_path, position_ms, max_edge);
+        Err(VideoProcessorError::Internal(
+            "HW preview decode is only available on Apple platforms".into(),
+        ))
+    }
+}
+
+/// Release a preview buffer when not presented to the texture plugin.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub fn release_preview_pixel_buffer(ptr: u64) {
+    if ptr == 0 {
+        return;
+    }
+    unsafe {
+        crate::ffmpeg::vt_pipeline::release_pixel_buffer(ptr as *mut std::ffi::c_void);
+    }
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "macos")))]
+pub fn release_preview_pixel_buffer(_ptr: u64) {}
 
 fn rgb24_to_rgba8888(rgb: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
     let w = width as usize;

@@ -8,7 +8,7 @@ Flutter GPU **Texture** runtime — register a platform texture, upload RGBA fra
 
 | Platform | Support | Notes |
 |----------|---------|--------|
-| Android | Yes | API **21+**, `SurfaceTexture` |
+| Android | Yes | API **21+**, `SurfaceTexture`; V1.6 `decodePreviewToSurface` (MediaCodec zero-copy) |
 | iOS | Yes | **12+**, CVPixelBuffer |
 | macOS | Yes | **12+**, CVPixelBuffer |
 | Linux / Windows / Web | No | Use RGBA widget fallback in your app |

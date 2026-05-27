@@ -301,6 +301,40 @@ class MediaInfo {
           fileSize == other.fileSize;
 }
 
+/// Apple HW preview frame: BGRA `CVPixelBuffer` pointer for zero-copy texture present (V1.4).
+class PreviewFramePixelBuffer {
+  final BigInt ptsMs;
+  final int width;
+  final int height;
+
+  /// Native `CVPixelBuffer*` address; call [crate::api::release_preview_pixel_buffer] if not presented.
+  final BigInt pixelBufferPtr;
+
+  const PreviewFramePixelBuffer({
+    required this.ptsMs,
+    required this.width,
+    required this.height,
+    required this.pixelBufferPtr,
+  });
+
+  @override
+  int get hashCode =>
+      ptsMs.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      pixelBufferPtr.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PreviewFramePixelBuffer &&
+          runtimeType == other.runtimeType &&
+          ptsMs == other.ptsMs &&
+          width == other.width &&
+          height == other.height &&
+          pixelBufferPtr == other.pixelBufferPtr;
+}
+
 /// Single decoded preview frame (RGBA8888) for texture upload — Sprint V1.1.
 class PreviewFrameRgba {
   final BigInt ptsMs;
