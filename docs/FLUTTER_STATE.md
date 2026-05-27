@@ -86,7 +86,7 @@ RustImageEditorWidget(
 ## References
 
 - Roadmap: [ROADMAP.md](../ROADMAP.md) — Sprint 14
-- Providers: [`rust_image/lib/src/editor/state/editor_providers.dart`](../rust_image/lib/src/editor/state/editor_providers.dart)
+- Providers: [`packages/rust_image_editor/lib/src/editor/state/editor_providers.dart`](../packages/rust_image_editor/lib/src/editor/state/editor_providers.dart)
 - Plugin README: [rust_image/README.md](../rust_image/README.md)
 
 *Last updated: Sprint 14.0–14.4*

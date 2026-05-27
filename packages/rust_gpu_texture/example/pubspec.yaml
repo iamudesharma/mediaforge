@@ -1,0 +1,21 @@
+name: rust_gpu_texture_example
+resolution: workspace
+description: Demo — animated RGBA frames in GpuTextureView without rust_image_core.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  rust_gpu_texture:
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

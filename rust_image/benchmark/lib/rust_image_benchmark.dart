@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:rust_image/rust_image.dart';
+import 'package:rust_image_editor/rust_image_editor.dart';
 import 'package:rust_image_benchmark_runner/benchmark_frb_init.dart';
 
 /// Cold-run benchmark of public [RustImageEditor] APIs (Dart + FRB).

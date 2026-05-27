@@ -2,8 +2,9 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** Sprint 14 (Flutter state — Riverpod)  
-**Status:** Sprint 13 + Nexus shipped; Sprint 14 in progress — internal Riverpod, split preview/chrome rebuilds, DevTools baseline
+**Current sprint:** Sprint 22 (Beauty GPU & texture residency)  
+**Status:** Sprint 22 Phases 1–4 done — full GPU beauty + Texture on Apple/Android  
+**Next (pre–pub.dev):** First pub.dev publish of split packages — see [P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) (P0.1–P0.6 done)
 
 ---
 
@@ -470,6 +471,26 @@ Example recipes (face-only, not global grade):
 
 ---
 
+## Sprint 22 — Beauty GPU & texture residency (in progress)
+
+**Goal:** Beauty sliders and live preview run on **wgpu** (`GpuEditSurface`) with minimal readback; status shows `gpu_beauty` not stale `cpu_photon`. Android gets GPU compute before Texture plugin lands.
+
+**Design:** [`docs/BEAUTY_GPU.md`](docs/BEAUTY_GPU.md)
+
+| Phase | Deliverable | Status | Notes |
+|-------|-------------|--------|-------|
+| **22.0** | Metrics + `lastBeautyPath` in status | Done | `gpu_beauty` / `cpu_beauty` on beauty ops |
+| **22.1** | Decouple GPU compute from Texture | Done | `_gpuBeautyComputeAvailable()` vs `_gpuBeautyDisplayViaTexture()` |
+| **22.2** | Texture-resident still preview | Done | `previewRgba = null` when Texture active; `LivePreview` prefers `GpuTexturePreview` |
+| **22.3** | WGSL plump / under-eye / face warp | Done | `under_eye.wgsl`, `lip_plump.wgsl`, `face_warp.wgsl` — no CPU readback in beauty pipeline |
+| **22.4** | Android Texture plugin | Done | `RustImageTexturePlugin.kt` + `GpuTextureRegistry` on Android |
+| **22.5** | Pipeline cache + fewer uploads | Planned | Skip re-upload when only `BeautyParams` change |
+| **22.6** | Benchmarks + perf matrix G/H | Planned | `--only beauty_full_pipeline_*` |
+
+**Acceptance:** Scenario **G** — lip drag shows `gpu_beauty` on Android with `useRgbaPreview: true`; **H** — live camera ≥ 24 fps on Apple texture path; export/compare unchanged.
+
+---
+
 ## Sprint 18 — Smart Snapping, Guides & Haptics
 
 **Goal:** Assist layer alignment with center snapping, rotation increments, layer-to-layer alignments, and feedback.
@@ -515,6 +536,34 @@ Example recipes (face-only, not global grade):
 | Dynamic background swap | Planned | Implement `updateBackgroundImage` to change background image mid-session |
 | AI Prompt Command Assistant | Planned | Interpret natural language text inputs to execute editor operations |
 | AI Background Removal hook | Planned | Hook for ONNX background removal/replacement models |
+
+---
+
+## Sprint P0 — pub.dev package split (planned, pre-publish)
+
+**Goal:** Break the monolithic `rust_image` plugin into independently versioned packages **before** the first stable pub.dev release. Fixes and features ship on the layer that owns them (texture vs engine vs UI vs camera).
+
+**Design:** [`docs/PUB_PACKAGE_SPLIT.md`](docs/PUB_PACKAGE_SPLIT.md)
+
+| Package | Role | Status |
+|---------|------|--------|
+| **`rust_gpu_texture`** | TextureRegistry, Flutter `Texture`, CVPixelBuffer / SurfaceTexture — **no** editor/filters/beauty | **Done** (Flutter + native; wgpu surface still in core `rust/`) |
+| **`rust_image_core`** | Edit graph, filters, resize, GPU shaders, overlays, beauty, paint, layers — Rust + FRB only (**no** Flutter widgets) | **Done** — [`packages/rust_image_core/`](packages/rust_image_core/); `rust_image` path-dep |
+| **`rust_image_editor`** | Instagram UI, crop, panels, gestures, Riverpod shell — app-facing | **Done** — [`packages/rust_image_editor/`](packages/rust_image_editor/) |
+| **`rust_camera_runtime`** | Live camera: YUV stream, permissions, temporal smoothing | **Done** — [`packages/rust_camera_runtime/`](packages/rust_camera_runtime/) |
+
+| Phase | Deliverable | Status |
+|-------|-------------|--------|
+| P0.1 | Monorepo `packages/*` + CI per crate | **Done** — `melos.yaml`, `.github/workflows/ci.yml` |
+| P0.2 | Extract `rust_gpu_texture` | **Done** — [`packages/rust_gpu_texture/`](packages/rust_gpu_texture/); `rust_image` path dep |
+| P0.3 | Standalone `rust_image_core` (crates.io + FRB); depends on gpu texture crate | **Done** (monorepo package; crates.io later) |
+| P0.4 | `rust_image_editor` + optional `rust_image` re-export shim | **Done** |
+| P0.5 | `rust_camera_runtime` (editor dep; camera isolate still in editor) | **Done** |
+| P0.6 | Per-package README, examples, acceptance checklist | **Done** — [P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) |
+
+**Why camera is last:** Live Nexus pipeline is already SDK-sized; embedding it in the editor package complicates permissions, platform matrix, and release cadence ([PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md#package-4--rust_camera_runtime-later)).
+
+**Acceptance:** `rust_gpu_texture` demo runs without `rust_image_core`; editor `pubspec` has no `camera` unless camera package enabled; semver majors are per-package.
 
 ---
 
@@ -569,10 +618,12 @@ Run in **rust_image Studio** after changes; record status-line timings.
 
 - Root README: [README.md](README.md)
 - Plugin README: [rust_image/README.md](rust_image/README.md)
+- **pub.dev package split:** [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md)
 - Face / beauty design: [docs/PHASE3_MEDIAPIPE.md](docs/PHASE3_MEDIAPIPE.md)
 - Flutter state / rebuild rules: [docs/FLUTTER_STATE.md](docs/FLUTTER_STATE.md)
+- Beauty GPU plan: [docs/BEAUTY_GPU.md](docs/BEAUTY_GPU.md)
 - GPU notes: Metal via wgpu when `gpu` feature enabled
 
 ---
 
-*Last updated: Sprints 16–21 added based on pro_image_editor analysis*
+*Last updated: Sprint 22 done; Sprint P0 (package split) documented*

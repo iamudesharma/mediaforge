@@ -1,0 +1,34 @@
+name: rust_image_workspace
+publish_to: none
+description: Monorepo for rust_image (gpu_texture, core, editor, camera_runtime).
+
+environment:
+  sdk: ^3.12.0
+
+workspace:
+  - rust_image
+  - rust_image/example
+  - packages/rust_image_editor
+  - packages/rust_image_core
+  - packages/rust_gpu_texture
+  - packages/rust_gpu_texture/example
+  - packages/rust_camera_runtime
+  - packages/rust_image_core/example
+
+dev_dependencies:
+  melos: ^7.8.0
+
+melos:
+  scripts:
+    analyze:
+      run: flutter analyze --no-fatal-infos
+      exec:
+        concurrency: 2
+      packageFilters:
+        dirExists: lib
+    test:
+      run: flutter test
+      exec:
+        concurrency: 1
+      packageFilters:
+        dirExists: test

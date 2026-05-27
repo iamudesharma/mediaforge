@@ -6,6 +6,17 @@ Flutter image editor plugin with a **Rust** processing core and **flutter_rust_b
 
 The Flutter plugin lives in [`rust_image/`](rust_image/).
 
+**Pre–pub.dev:** Four-package monorepo (P0.1–P0.6 done):
+
+| Package | Role |
+|---------|------|
+| [`rust_gpu_texture`](packages/rust_gpu_texture/) | GPU `Texture` bridge only |
+| [`rust_image_core`](packages/rust_image_core/) | Rust engine + FRB |
+| [`rust_image_editor`](packages/rust_image_editor/) | Editor UI |
+| [`rust_camera_runtime`](packages/rust_camera_runtime/) | Live camera (mobile) |
+
+[`rust_image/`](rust_image/) re-exports the editor. Split design: [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md) · checklist: [docs/P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) · platforms: [docs/PACKAGE_PLATFORM_MATRIX.md](docs/PACKAGE_PLATFORM_MATRIX.md).
+
 ## Stack
 
 | Purpose | Crate |

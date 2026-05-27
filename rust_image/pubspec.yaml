@@ -1,7 +1,8 @@
 name: rust_image
+resolution: workspace
 description: >
-  Flutter image editor plugin powered by Rust — fast resize, crop, filters,
-  EXIF correction, compression (mozjpeg/oxipng), drawing, and text overlays.
+  Flutter image editor plugin powered by Rust — re-exports rust_image_editor
+  for backward compatibility. Prefer depending on rust_image_editor directly.
 version: 0.1.0
 homepage: https://github.com/iamudesharma/rust_image
 repository: https://github.com/iamudesharma/rust_image
@@ -13,88 +14,14 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_rust_bridge: 2.12.0
-  freezed_annotation: 3.1.0
-  plugin_platform_interface: ^2.1.8
-  file_selector: ^1.1.0
-  image_picker: ^1.2.2
-  camera: ^0.11.1
-  permission_handler: ^11.4.0
-  gal: ^2.3.2
-  path_provider: ^2.1.5
-  squadron: ^7.4.3
-  flutter_riverpod: ^2.6.1
+  rust_image_editor:
+
 dev_dependencies:
-  squadron_builder: ^9.2.0
-  ffi: ^2.2.0
-  ffigen: ^20.1.1
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
   integration_test:
     sdk: flutter
-  freezed: 3.2.5
-  build_runner: ^2.15.0
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
-  # This section identifies this Flutter project as a plugin project.
-  # The 'pluginClass' specifies the class (in Java, Kotlin, Swift, Objective-C, etc.)
-  # which should be registered in the plugin registry. This is required for
-  # using method channels.
-  # The Android 'package' specifies package in which the registered class is.
-  # This is required for using method channels on Android.
-  # The 'ffiPlugin' specifies that native code should be built and bundled.
-  # This is required for using `dart:ffi`.
-  # All these are used by the tooling to maintain consistency when
-  # adding or updating assets for this project.
-  #
-  # Please refer to README.md for a detailed explanation.
-  plugin:
-    platforms:
-      android:
-        ffiPlugin: true
-        package: com.flutter_rust_bridge.rust_image
-        pluginClass: RustImagePlugin
-      ios:
-        ffiPlugin: true
-        pluginClass: RustImagePlugin
-      linux:
-        ffiPlugin: true
-      macos:
-        ffiPlugin: true
-        pluginClass: RustImagePlugin
-      windows:
-        ffiPlugin: true
-
-  assets:
-    - assets/stickers/
-  #
-  # For details regarding assets in packages, see
-  # https://flutter.dev/to/asset-from-package
-  #
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
-
-  # To add custom fonts to your plugin package, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts in packages, see
-  # https://flutter.dev/to/font-from-package
+  # Assets and editor UI live in rust_image_editor (P0.4).

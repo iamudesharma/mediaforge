@@ -1,0 +1,7 @@
+targets:
+  $default:
+    sources:
+      include:
+        - $package$
+        - lib/**
+        - test/**
