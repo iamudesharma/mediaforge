@@ -9,6 +9,104 @@ dependencies:
   rust_image: ^0.1.0
 ```
 
+## Supported Platforms & Setup Requirements
+
+Since `rust_image` compiles a native Rust core using CargoKit, you must have the Rust toolchain installed on your development machine.
+
+### General Prerequisites
+
+Install Rust via [rustup](https://rustup.rs):
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+Make sure you use the official toolchain installer (do not use Homebrew `rustc` on macOS, as it lacks support for cross-compiling target architectures).
+
+---
+
+### 🤖 Android Setup
+
+1. **Rust Targets**: Install the Android targets for cross-compiling:
+   ```bash
+   rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android
+   ```
+2. **Android NDK**: Ensure you have the Android NDK installed. The build system will automatically look up the NDK path specified in your project's `local.properties` or `ANDROID_NDK_HOME` environment variable.
+3. **Minimum SDK**: This plugin requires a minimum Android SDK version of **21** or higher. Ensure your app's `android/app/build.gradle` has:
+   ```groovy
+   defaultConfig {
+       minSdkVersion 21
+   }
+   ```
+
+---
+
+### 🍏 iOS Setup
+
+1. **Minimum OS**: This plugin requires iOS **15.0** or higher. Ensure your `ios/Podfile` specifies:
+   ```ruby
+   platform :ios, '15.0'
+   ```
+2. **Release/Archive Entitlements**: Debug builds work out of the box, but Xcode's linker might strip native Rust symbols in Release or Archive modes, leading to `Failed to lookup symbol 'frb_get_rust_content_hash'`. To resolve this:
+   - Open `ios/Runner.xcworkspace` in Xcode.
+   - Go to **Runner** target → **Build Settings** (Release configuration).
+   - Set **Strip Style** to `Non-Global Symbols` (do not use "All Symbols").
+   - Set **Strip Linked Product** to `No` (or **Deployment Postprocessing** to `No`).
+   - Alternatively, add this helper script to your `ios/Podfile`:
+     ```ruby
+     post_install do |installer|
+       installer.pods_project.targets.each do |target|
+         flutter_additional_ios_build_settings(target)
+         target.build_configurations.each do |config|
+           if target.name == 'Runner' || target.name == 'rust_image'
+             config.build_settings['STRIP_STYLE'] = 'non-global'
+             config.build_settings['DEAD_CODE_STRIPPING'] = 'NO'
+           end
+         end
+       end
+     end
+     ```
+
+---
+
+### 💻 macOS Setup
+
+1. **Minimum OS**: This plugin requires macOS **12.0** or higher. Ensure your `macos/Podfile` specifies:
+   ```ruby
+   platform :osx, '12.0'
+   ```
+2. **App Sandbox Entitlements**: If your app is sandboxed (default for new macOS projects), you must allow user-selected file read/write access to let users pick and save images:
+   - Open your project's macOS entitlements files (`macos/Runner/DebugProfile.entitlements` and `macos/Runner/Release.entitlements`).
+   - Enable the following key:
+     ```xml
+     <key>com.apple.security.files.user-selected.read-write</key>
+     <true/>
+     ```
+
+---
+
+### 🪟 Windows Setup
+
+1. **Build Tools**: Install Visual Studio with the "Desktop development with C++" workload (which includes MSVC, CMake 3.14+, and Windows SDK).
+2. **Rust Target**: Install the MSVC toolchain target:
+   ```bash
+   rustup target add x86_64-pc-windows-msvc
+   ```
+
+---
+
+### 🐧 Linux Setup
+
+1. **System Dependencies**: Ensure standard C/C++ compilers, CMake, and GTK+ 3 development headers are installed:
+   - On Ubuntu/Debian:
+     ```bash
+     sudo apt-get install build-essential cmake pkg-config libgtk-3-dev clang
+     ```
+2. **Rust Target**: Install the GNU toolchain target:
+   ```bash
+   rustup target add x86_64-unknown-linux-gnu
+   ```
+
+---
+
 ## Drop-in editor widget
 
 ```dart

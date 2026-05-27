@@ -86,7 +86,11 @@ class _MobileToolSheetState extends State<MobileToolSheet> {
             ),
           ),
           if (hasStrip) ...[
-            widget.contextStrip!,
+            Flexible(
+              child: SingleChildScrollView(
+                child: widget.contextStrip!,
+              ),
+            ),
             const Divider(
               height: 1,
               thickness: 1,

@@ -1,11 +1,13 @@
 use crate::api::image::ProcessingBackend;
 
+/// Represents the resolved physical execution engine (CPU vs GPU).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectiveBackend {
     Cpu,
     Gpu,
 }
 
+/// Resolves a requested processing backend (`Auto`/`Gpu`/`Cpu`) to an actual executable backend.
 pub fn resolve(requested: ProcessingBackend) -> Result<EffectiveBackend, String> {
     match requested {
         ProcessingBackend::Cpu => Ok(EffectiveBackend::Cpu),

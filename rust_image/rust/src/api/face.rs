@@ -8,16 +8,22 @@ use crate::face::{
 /// Normalized 2D landmark (0–1 in image space).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Landmark2D {
+    /// Horizontal position normalized from 0.0 (left) to 1.0 (right).
     pub x: f32,
+    /// Vertical position normalized from 0.0 (top) to 1.0 (bottom).
     pub y: f32,
+    /// Depth position (Z coordinate), often 0.0 or estimated from MediaPipe.
     pub z: f32,
 }
 
 /// Selfie / face segmentation mask at edit resolution (row-major R8).
 #[derive(Debug, Clone)]
 pub struct SegmentationMask {
+    /// Width of the mask in pixels.
     pub width: u32,
+    /// Height of the mask in pixels.
     pub height: u32,
+    /// Grayscale pixel values (0–255), representing feathering/opacity.
     pub pixels: Vec<u8>,
 }
 
@@ -52,6 +58,7 @@ pub struct BeautyParams {
     pub skin_smooth: f32,
     /// 0–1 eye luminance lift.
     pub eye_brighten: f32,
+    /// Selected lip tint preset.
     pub lip_tint: LipTintPreset,
     /// 0–1 lip tint strength (when lip_tint != None).
     pub lip_tint_strength: f32,
@@ -78,6 +85,7 @@ pub struct BeautyParams {
 }
 
 impl BeautyParams {
+    /// Checks if any beauty parameters are active.
     pub fn is_active(&self) -> bool {
         self.skin_smooth > 0.001
             || self.eye_brighten > 0.001
@@ -97,8 +105,11 @@ impl BeautyParams {
 /// Output of native face pipeline (Vision or MediaPipe).
 #[derive(Debug, Clone, Default)]
 pub struct FaceAnalysisResult {
+    /// List of 2D landmark coordinates.
     pub landmarks: Vec<Landmark2D>,
+    /// Confidence score (0.0 to 1.0).
     pub confidence: f32,
+    /// Optional face/selfie segmentation mask.
     pub segmentation: Option<SegmentationMask>,
     /// Count of leading landmarks that belong to the face contour (Vision); 0 = legacy estimate.
     pub face_contour_count: u32,
@@ -136,6 +147,7 @@ pub fn build_skin_mask_from_landmarks(
     build_skin_mask(&analysis, width, height)
 }
 
+/// Builds an eye regional mask from face landmarks.
 #[flutter_rust_bridge::frb(sync)]
 pub fn build_eye_mask_from_landmarks(
     landmarks: Vec<Landmark2D>,
@@ -154,6 +166,7 @@ pub fn build_eye_mask_from_landmarks(
     build_eye_mask(&analysis, width, height)
 }
 
+/// Builds a lip regional mask from face landmarks.
 #[flutter_rust_bridge::frb(sync)]
 pub fn build_lip_mask_from_landmarks(
     landmarks: Vec<Landmark2D>,
@@ -172,6 +185,7 @@ pub fn build_lip_mask_from_landmarks(
     build_lip_mask(&analysis, width, height)
 }
 
+/// Builds a cheek blush regional mask from face landmarks.
 #[flutter_rust_bridge::frb(sync)]
 pub fn build_blush_mask_from_landmarks(
     landmarks: Vec<Landmark2D>,
@@ -190,6 +204,7 @@ pub fn build_blush_mask_from_landmarks(
     build_blush_mask(&analysis, width, height)
 }
 
+/// Builds an under-eye regional mask from face landmarks.
 #[flutter_rust_bridge::frb(sync)]
 pub fn build_under_eye_mask_from_landmarks(
     landmarks: Vec<Landmark2D>,
@@ -208,6 +223,7 @@ pub fn build_under_eye_mask_from_landmarks(
     build_under_eye_mask(&analysis, width, height)
 }
 
+/// Returns true if the FaceAnalysisResult is valid (sufficient confidence and landmark count).
 #[flutter_rust_bridge::frb(sync)]
 pub fn face_analysis_is_valid(analysis: FaceAnalysisResult) -> bool {
     analysis.confidence > 0.5
@@ -215,6 +231,7 @@ pub fn face_analysis_is_valid(analysis: FaceAnalysisResult) -> bool {
         && analysis.segmentation.is_some()
 }
 
+/// Returns the minimum number of landmarks required by the vision tracker.
 #[flutter_rust_bridge::frb(sync)]
 pub fn vision_min_landmark_count() -> u32 {
     VISION_MIN_LANDMARKS as u32

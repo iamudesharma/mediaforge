@@ -11,21 +11,33 @@ pub fn init_app() {
     flutter_rust_bridge::setup_default_user_utils();
 }
 
+/// The image format for output compression.
 #[derive(Debug, Clone, Copy)]
 pub enum OutputFormat {
+    /// JPEG compression (optimized using MozJPEG if enabled).
     Jpeg,
+    /// Lossless or lossy PNG compression (optimized using oxipng if enabled).
     Png,
+    /// WebP image format.
     WebP,
+    /// AVIF image format (supports high compression efficiency).
     Avif,
 }
 
+/// Image resizing algorithms, ranging from fast/nearest-neighbor to high-quality Lanczos.
 #[derive(Debug, Clone, Copy)]
 pub enum ResizeAlgorithm {
+    /// Nearest-neighbor interpolation (fastest, pixelated).
     Nearest,
+    /// Box filter.
     Box,
+    /// Hamming filter.
     Hamming,
+    /// Catmull-Rom cubic filter.
     CatmullRom,
+    /// Mitchell-Netravali cubic filter.
     Mitchell,
+    /// Lanczos3 windowed sinc filter (highest quality, slowest).
     Lanczos3,
 }
 
@@ -42,27 +54,45 @@ impl From<ResizeAlgorithm> for ResizeAlg {
     }
 }
 
+/// Rotations and mirror/flip transformations.
 #[derive(Debug, Clone, Copy)]
 pub enum Rotation {
+    /// Rotate 90 degrees clockwise.
     Rotate90,
+    /// Rotate 180 degrees.
     Rotate180,
+    /// Rotate 270 degrees clockwise.
     Rotate270,
+    /// Mirror horizontally.
     FlipHorizontal,
+    /// Mirror vertically.
     FlipVertical,
 }
 
+/// Dynamic filters and adjustments applied to the image.
 #[derive(Debug, Clone)]
 pub enum ImageFilter {
+    /// Gaussian or box blur.
     Blur { radius: u32 },
+    /// High-pass sharpening.
     Sharpen,
+    /// Adjust brightness (range: -255 to 255).
     Brightness { amount: i16 },
+    /// Adjust contrast (range: 0.0 to 10.0, 1.0 is identity).
     Contrast { amount: f32 },
+    /// Adjust color saturation (range: 0.0 to 10.0, 1.0 is identity).
     Saturation { amount: f32 },
+    /// Rotate hue in degrees (range: 0.0 to 360.0).
     HueRotate { degrees: f32 },
+    /// Artistic oil painting effect.
     Oil { radius: u32, intensity: f64 },
+    /// Frosted glass blurring effect.
     FrostedGlass,
+    /// Pixelation effect with custom cell size.
     Pixelize { size: u32 },
+    /// Invert colors based on threshold/solarization.
     Solarize,
+    /// Classic presets (Neue, Lofi, Firenze, etc.) with custom strength (0.0 to 1.0).
     Preset {
         preset: FilterPreset,
         /// 0.0 = identity, 1.0 = full preset (Instagram-style filter strength).
@@ -109,6 +139,7 @@ pub enum ImageFilter {
     },
 }
 
+/// Filter presets applied globally to color grade the image.
 #[derive(Debug, Clone, Copy)]
 pub enum FilterPreset {
     Neue,
@@ -161,6 +192,7 @@ pub enum SwipeLookPreset {
     AnimeAirbrush,
 }
 
+/// Post-grade extras applied during combo looks (such as overlay glow or grain).
 #[derive(Debug, Clone, Copy)]
 pub struct SwipeLookExtrasDto {
     pub glow: f32,
@@ -171,6 +203,7 @@ pub struct SwipeLookExtrasDto {
     pub rgb_split: f32,
 }
 
+/// Composite blend modes.
 #[derive(Debug, Clone, Copy)]
 pub enum BlendMode {
     Normal,
@@ -183,60 +216,91 @@ pub enum BlendMode {
 /// Processing backend: CPU (SIMD) or GPU (Metal/Vulkan via wgpu).
 #[derive(Debug, Clone, Copy)]
 pub enum ProcessingBackend {
+    /// Use SIMD CPU algorithms.
     Cpu,
+    /// Use GPU shaders (Metal on Apple, Vulkan on Android/Linux, DX12 on Windows).
     Gpu,
+    /// Automatically select the fastest available backend (GPU if compatible, CPU fallback).
     Auto,
 }
 
 /// Quality vs Speed choice for interactive previews.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewQuality {
+    /// Prioritize rendering speed (e.g. for sliders).
     Fast,
+    /// Prioritize visual quality (e.g. for final inspection).
     Quality,
 }
 
+/// Diagnostics metadata about the active GPU device.
 #[derive(Debug, Clone)]
 pub struct GpuComputeInfo {
+    /// True if GPU execution is supported and active.
     pub available: bool,
+    /// Name of the graphics API (e.g. "Metal", "Vulkan").
     pub api: String,
+    /// Name of the GPU hardware device.
     pub device: String,
 }
 
+/// High-level format and EXIF info for a queried image.
 #[derive(Debug, Clone)]
 pub struct ImageInfo {
+    /// Width of the image in pixels.
     pub width: u32,
+    /// Height of the image in pixels.
     pub height: u32,
+    /// Mimetype or format representation (e.g., "jpeg", "png").
     pub format: Option<String>,
+    /// EXIF orientation value (1 to 8).
     pub exif_orientation: Option<u16>,
 }
 
 /// Raw RGBA buffer for chained edits without re-decoding (Phase 3).
 #[derive(Debug, Clone)]
 pub struct RgbaImageBuffer {
+    /// Width of the buffer.
     pub width: u32,
+    /// Height of the buffer.
     pub height: u32,
+    /// Packed row-major 32-bit RGBA pixel bytes.
     pub pixels: Vec<u8>,
 }
 
+/// Progressive decoding results containing a fast preview and the full image buffer.
 #[derive(Debug, Clone)]
 pub struct ProgressiveDecodeResult {
+    /// Parsed image size and metadata.
     pub info: ImageInfo,
+    /// Low-resolution preview RGBA buffer for instant display.
     pub preview_rgba: RgbaImageBuffer,
+    /// Full-resolution RGBA buffer.
     pub buffer: RgbaImageBuffer,
 }
 
+/// Text overlay drawing settings.
 #[derive(Debug, Clone)]
 pub struct TextOverlay {
+    /// Text characters to draw.
     pub text: String,
+    /// Horizontal pixel offset from left.
     pub x: u32,
+    /// Vertical pixel offset from top.
     pub y: u32,
+    /// Font size (pixels).
     pub font_size: f32,
+    /// Color red channel.
     pub color_r: u8,
+    /// Color green channel.
     pub color_g: u8,
+    /// Color blue channel.
     pub color_b: u8,
+    /// Color alpha/opacity channel.
     pub color_a: u8,
 }
 
+/// Vector line coordinates and styles.
 #[derive(Debug, Clone, Copy)]
 pub struct DrawLine {
     pub x0: u32,
@@ -249,6 +313,7 @@ pub struct DrawLine {
     pub color_a: u8,
 }
 
+/// Vector circle coordinates and styles.
 #[derive(Debug, Clone, Copy)]
 pub struct DrawCircle {
     pub center_x: u32,
@@ -260,10 +325,14 @@ pub struct DrawCircle {
     pub color_a: u8,
 }
 
+/// Batch resize input payload.
 #[derive(Debug, Clone)]
 pub struct BatchResizeItem {
+    /// Raw input file bytes.
     pub bytes: Vec<u8>,
+    /// Target width.
     pub width: u32,
+    /// Target height.
     pub height: u32,
 }
 
@@ -276,6 +345,7 @@ fn process(bytes: &[u8], fix_exif: bool) -> Result<image::DynamicImage, String> 
     }
 }
 
+/// Resizes an image file and encodes the result in the specified format and quality.
 #[flutter_rust_bridge::frb(sync)]
 pub fn resize_image(
     bytes: Vec<u8>,
@@ -292,6 +362,7 @@ pub fn resize_image(
     utils::encode(&resized, format, quality)
 }
 
+/// Creates a fast thumbnail for an image. Fits the image within `max_edge` bounding box.
 #[flutter_rust_bridge::frb(sync)]
 pub fn create_thumbnail(
     bytes: Vec<u8>,
@@ -311,6 +382,7 @@ pub fn create_thumbnail(
     thumbnail::thumbnail(&bytes, max_edge, format, quality, algorithm, backend)
 }
 
+/// Crops a rectangular area of an image file.
 #[flutter_rust_bridge::frb(sync)]
 pub fn crop_image(
     bytes: Vec<u8>,
@@ -327,6 +399,7 @@ pub fn crop_image(
     utils::encode(&cropped, format, quality)
 }
 
+/// Rotates or flips an image file.
 #[flutter_rust_bridge::frb(sync)]
 pub fn rotate_image(
     bytes: Vec<u8>,
@@ -340,23 +413,27 @@ pub fn rotate_image(
     utils::encode(&rotated, format, quality)
 }
 
+/// Rewrites the image file so that pixels match the physical EXIF orientation, clearing the EXIF tag.
 #[flutter_rust_bridge::frb(sync)]
 pub fn fix_exif_orientation(bytes: Vec<u8>, format: OutputFormat, quality: u8) -> Result<Vec<u8>, String> {
     let img = process(&bytes, true)?;
     utils::encode(&img, format, quality)
 }
 
+/// Reads the raw EXIF orientation value from the image metadata.
 #[flutter_rust_bridge::frb(sync)]
 pub fn read_exif_orientation(bytes: Vec<u8>) -> Option<u16> {
     exif::orientation_value(&bytes)
 }
 
+/// Re-compresses an image file with a specified quality and output format.
 #[flutter_rust_bridge::frb(sync)]
 pub fn compress_image(bytes: Vec<u8>, format: OutputFormat, quality: u8) -> Result<Vec<u8>, String> {
     let img = utils::decode(&bytes)?;
     utils::encode(&img, format, quality)
 }
 
+/// Applies a filter preset or adjustment (brightness/blur etc.) to an image file.
 #[flutter_rust_bridge::frb(sync)]
 pub fn apply_filter(
     bytes: Vec<u8>,
@@ -371,6 +448,7 @@ pub fn apply_filter(
     buffer::encode_from_rgba(filtered, format, quality)
 }
 
+/// Overlays a watermark image onto a base image at the specified pixel coordinates.
 #[flutter_rust_bridge::frb(sync)]
 pub fn add_watermark(
     base_bytes: Vec<u8>,
@@ -384,6 +462,7 @@ pub fn add_watermark(
     utils::encode(&img, format, quality)
 }
 
+/// Renders a single line of text directly onto the image.
 #[flutter_rust_bridge::frb(sync)]
 pub fn draw_text_on_image(
     bytes: Vec<u8>,
@@ -399,6 +478,7 @@ pub fn draw_text_on_image(
     encode_after_edit(&drawn_dyn, format, quality)
 }
 
+/// Draws a vector line directly onto the image.
 #[flutter_rust_bridge::frb(sync)]
 pub fn draw_line_on_image(
     bytes: Vec<u8>,
@@ -414,6 +494,7 @@ pub fn draw_line_on_image(
     encode_after_edit(&drawn_dyn, format, quality)
 }
 
+/// Draws a vector circle directly onto the image.
 #[flutter_rust_bridge::frb(sync)]
 pub fn draw_circle_on_image(
     bytes: Vec<u8>,
@@ -441,6 +522,7 @@ fn encode_after_edit(
     }
 }
 
+/// Resizes multiple images concurrently in parallel (using rayon).
 #[flutter_rust_bridge::frb(sync)]
 pub fn batch_resize_images(
     items: Vec<BatchResizeItem>,
@@ -459,6 +541,7 @@ pub fn batch_resize_images(
         .collect()
 }
 
+/// Composites an overlay image onto a base image using standard blend modes.
 #[flutter_rust_bridge::frb(sync)]
 pub fn overlay_image(
     base_bytes: Vec<u8>,
@@ -483,6 +566,7 @@ fn encode_after_edit_rgba(
     encode_after_edit(&img, format, quality)
 }
 
+/// Computes a BlurHash string from raw image bytes.
 #[cfg(feature = "blurhash")]
 #[flutter_rust_bridge::frb(sync)]
 pub fn encode_blurhash(bytes: Vec<u8>, components_x: u32, components_y: u32) -> Result<String, String> {
@@ -490,6 +574,7 @@ pub fn encode_blurhash(bytes: Vec<u8>, components_x: u32, components_y: u32) -> 
     crate::blurhash::encode(&img, components_x, components_y)
 }
 
+/// Decodes a BlurHash string back into compressed image bytes.
 #[cfg(feature = "blurhash")]
 #[flutter_rust_bridge::frb(sync)]
 pub fn decode_blurhash(
@@ -503,6 +588,7 @@ pub fn decode_blurhash(
     utils::encode(&img, format, quality)
 }
 
+/// Placeholder if BlurHash is disabled.
 #[cfg(not(feature = "blurhash"))]
 #[flutter_rust_bridge::frb(sync)]
 pub fn encode_blurhash(
@@ -513,6 +599,7 @@ pub fn encode_blurhash(
     Err("BlurHash disabled. Build with default features or `blurhash`.".into())
 }
 
+/// Placeholder if BlurHash is disabled.
 #[cfg(not(feature = "blurhash"))]
 #[flutter_rust_bridge::frb(sync)]
 pub fn decode_blurhash(
@@ -525,22 +612,27 @@ pub fn decode_blurhash(
     Err("BlurHash disabled. Build with default features or `blurhash`.".into())
 }
 
+/// Representation of a non-destructive edit operation.
 #[derive(Debug, Clone)]
 pub enum EditOp {
+    /// Apply an image filter.
     Filter {
         filter: ImageFilter,
     },
+    /// Resize operation.
     Resize {
         width: u32,
         height: u32,
         algorithm: ResizeAlgorithm,
     },
+    /// Crop operation.
     Crop {
         x: u32,
         y: u32,
         width: u32,
         height: u32,
     },
+    /// Rotate/flip operation.
     Rotate {
         rotation: Rotation,
     },

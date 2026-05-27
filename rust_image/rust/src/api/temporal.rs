@@ -14,7 +14,8 @@ fn smoothers() -> &'static Mutex<HashMap<i64, TemporalSmoother>> {
     SMOOTHERS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Create a temporal smoother (α ≈ 0.25 recommended for live camera).
+/// Create a temporal smoother registry entry (α ≈ 0.25 recommended for live camera).
+/// Returns a unique smoother ID.
 #[flutter_rust_bridge::frb(sync)]
 pub fn temporal_smoother_create(alpha: f32) -> i64 {
     let id = NEXT_SMOOTHER_ID.fetch_add(1, Ordering::Relaxed);
@@ -25,7 +26,8 @@ pub fn temporal_smoother_create(alpha: f32) -> i64 {
     id
 }
 
-/// EMA-smooth landmarks + segmentation mask; resets layout on point-count change.
+/// Applies Exponential Moving Average (EMA) smoothing to landmarks and segmentation masks.
+/// Automatically resets state when the landmark point-count changes.
 #[flutter_rust_bridge::frb(sync)]
 pub fn temporal_smoother_smooth(id: i64, raw: FaceAnalysisResult) -> FaceAnalysisResult {
     let mut guard = smoothers()
@@ -37,6 +39,7 @@ pub fn temporal_smoother_smooth(id: i64, raw: FaceAnalysisResult) -> FaceAnalysi
     }
 }
 
+/// Resets the internal smoothing filters for the specified smoother ID.
 #[flutter_rust_bridge::frb(sync)]
 pub fn temporal_smoother_reset(id: i64) {
     if let Some(s) = smoothers()
@@ -48,6 +51,7 @@ pub fn temporal_smoother_reset(id: i64) {
     }
 }
 
+/// Destroys the temporal smoother and frees its resources from the registry.
 #[flutter_rust_bridge::frb(sync)]
 pub fn temporal_smoother_destroy(id: i64) {
     smoothers()

@@ -1,3 +1,18 @@
+//! # rust_image_core
+//!
+//! A high-performance image processing library written in Rust.
+//! It serves as the native backend for the `rust_image` Flutter plugin.
+//!
+//! ## Key Modules
+//! - `api`: Defines the FFI boundaries and bridges exported via `flutter_rust_bridge`.
+//! - `backend`: Handles target execution routing (CPU vs GPU capabilities).
+//! - `buffer`: Manages raw RGBA pixel arrays and conversions.
+//! - `compress`: Direct wrappers around MozJPEG and oxipng.
+//! - `face`: Real-time face parsing, landmarks tracking, and beauty shaders.
+//! - `gpu`: Compute pipeline integration (WGSL shaders via wgpu).
+//! - `layers`: Multi-layer sticker and vector drawing compositor.
+//! - `filters`: Core color matrices, vignettes, warmth shifts, and 3D LUT lookups.
+
 pub mod api;
 pub mod benchmark;
 mod frb_generated;

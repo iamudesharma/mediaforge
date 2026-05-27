@@ -12,6 +12,7 @@ part 'image.freezed.dart';
 // These functions are ignored because they are not marked as `pub`: `apply_single_op_cpu`, `encode_after_edit_rgba`, `encode_after_edit`, `is_gpu_capable`, `process`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `hash`, `hash`
 
+/// Resizes an image file and encodes the result in the specified format and quality.
 Uint8List resizeImage({
   required List<int> bytes,
   required int width,
@@ -32,6 +33,7 @@ Uint8List resizeImage({
   backend: backend,
 );
 
+/// Creates a fast thumbnail for an image. Fits the image within `max_edge` bounding box.
 Uint8List createThumbnail({
   required List<int> bytes,
   required int maxEdge,
@@ -50,6 +52,7 @@ Uint8List createThumbnail({
   backend: backend,
 );
 
+/// Crops a rectangular area of an image file.
 Uint8List cropImage({
   required List<int> bytes,
   required int x,
@@ -70,6 +73,7 @@ Uint8List cropImage({
   fixExif: fixExif,
 );
 
+/// Rotates or flips an image file.
 Uint8List rotateImage({
   required List<int> bytes,
   required Rotation rotation,
@@ -84,6 +88,7 @@ Uint8List rotateImage({
   fixExif: fixExif,
 );
 
+/// Rewrites the image file so that pixels match the physical EXIF orientation, clearing the EXIF tag.
 Uint8List fixExifOrientation({
   required List<int> bytes,
   required OutputFormat format,
@@ -94,9 +99,11 @@ Uint8List fixExifOrientation({
   quality: quality,
 );
 
+/// Reads the raw EXIF orientation value from the image metadata.
 int? readExifOrientation({required List<int> bytes}) =>
     RustLib.instance.api.crateApiImageReadExifOrientation(bytes: bytes);
 
+/// Re-compresses an image file with a specified quality and output format.
 Uint8List compressImage({
   required List<int> bytes,
   required OutputFormat format,
@@ -107,6 +114,7 @@ Uint8List compressImage({
   quality: quality,
 );
 
+/// Applies a filter preset or adjustment (brightness/blur etc.) to an image file.
 Uint8List applyFilter({
   required List<int> bytes,
   required ImageFilter filter,
@@ -121,6 +129,7 @@ Uint8List applyFilter({
   fixExif: fixExif,
 );
 
+/// Overlays a watermark image onto a base image at the specified pixel coordinates.
 Uint8List addWatermark({
   required List<int> baseBytes,
   required List<int> overlayBytes,
@@ -137,6 +146,7 @@ Uint8List addWatermark({
   quality: quality,
 );
 
+/// Renders a single line of text directly onto the image.
 Uint8List drawTextOnImage({
   required List<int> bytes,
   required TextOverlay overlay,
@@ -151,6 +161,7 @@ Uint8List drawTextOnImage({
   fixExif: fixExif,
 );
 
+/// Draws a vector line directly onto the image.
 Uint8List drawLineOnImage({
   required List<int> bytes,
   required DrawLine line,
@@ -165,6 +176,7 @@ Uint8List drawLineOnImage({
   fixExif: fixExif,
 );
 
+/// Draws a vector circle directly onto the image.
 Uint8List drawCircleOnImage({
   required List<int> bytes,
   required DrawCircle circle,
@@ -179,6 +191,7 @@ Uint8List drawCircleOnImage({
   fixExif: fixExif,
 );
 
+/// Resizes multiple images concurrently in parallel (using rayon).
 List<Uint8List> batchResizeImages({
   required List<BatchResizeItem> items,
   required ResizeAlgorithm algorithm,
@@ -193,6 +206,7 @@ List<Uint8List> batchResizeImages({
   backend: backend,
 );
 
+/// Composites an overlay image onto a base image using standard blend modes.
 Uint8List overlayImage({
   required List<int> baseBytes,
   required List<int> overlayBytes,
@@ -211,6 +225,7 @@ Uint8List overlayImage({
   quality: quality,
 );
 
+/// Computes a BlurHash string from raw image bytes.
 String encodeBlurhash({
   required List<int> bytes,
   required int componentsX,
@@ -221,6 +236,7 @@ String encodeBlurhash({
   componentsY: componentsY,
 );
 
+/// Decodes a BlurHash string back into compressed image bytes.
 Uint8List decodeBlurhash({
   required String hash,
   required int width,
@@ -257,9 +273,15 @@ RgbaImageBuffer applyEditPipeline({
   backend: backend,
 );
 
+/// Batch resize input payload.
 class BatchResizeItem {
+  /// Raw input file bytes.
   final Uint8List bytes;
+
+  /// Target width.
   final int width;
+
+  /// Target height.
   final int height;
 
   const BatchResizeItem({
@@ -281,8 +303,10 @@ class BatchResizeItem {
           height == other.height;
 }
 
+/// Composite blend modes.
 enum BlendMode { normal, multiply, screen, overlay, add }
 
+/// Vector circle coordinates and styles.
 class DrawCircle {
   final int centerX;
   final int centerY;
@@ -326,6 +350,7 @@ class DrawCircle {
           colorA == other.colorA;
 }
 
+/// Vector line coordinates and styles.
 class DrawLine {
   final int x0;
   final int y0;
@@ -377,21 +402,29 @@ class DrawLine {
 sealed class EditOp with _$EditOp {
   const EditOp._();
 
+  /// Apply an image filter.
   const factory EditOp.filter({required ImageFilter filter}) = EditOp_Filter;
+
+  /// Resize operation.
   const factory EditOp.resize({
     required int width,
     required int height,
     required ResizeAlgorithm algorithm,
   }) = EditOp_Resize;
+
+  /// Crop operation.
   const factory EditOp.crop({
     required int x,
     required int y,
     required int width,
     required int height,
   }) = EditOp_Crop;
+
+  /// Rotate/flip operation.
   const factory EditOp.rotate({required Rotation rotation}) = EditOp_Rotate;
 }
 
+/// Filter presets applied globally to color grade the image.
 enum FilterPreset {
   neue,
   lix,
@@ -409,9 +442,15 @@ enum FilterPreset {
   duotoneOchre,
 }
 
+/// Diagnostics metadata about the active GPU device.
 class GpuComputeInfo {
+  /// True if GPU execution is supported and active.
   final bool available;
+
+  /// Name of the graphics API (e.g. "Metal", "Vulkan").
   final String api;
+
+  /// Name of the GPU hardware device.
   final String device;
 
   const GpuComputeInfo({
@@ -437,24 +476,45 @@ class GpuComputeInfo {
 sealed class ImageFilter with _$ImageFilter {
   const ImageFilter._();
 
+  /// Gaussian or box blur.
   const factory ImageFilter.blur({required int radius}) = ImageFilter_Blur;
+
+  /// High-pass sharpening.
   const factory ImageFilter.sharpen() = ImageFilter_Sharpen;
+
+  /// Adjust brightness (range: -255 to 255).
   const factory ImageFilter.brightness({required int amount}) =
       ImageFilter_Brightness;
+
+  /// Adjust contrast (range: 0.0 to 10.0, 1.0 is identity).
   const factory ImageFilter.contrast({required double amount}) =
       ImageFilter_Contrast;
+
+  /// Adjust color saturation (range: 0.0 to 10.0, 1.0 is identity).
   const factory ImageFilter.saturation({required double amount}) =
       ImageFilter_Saturation;
+
+  /// Rotate hue in degrees (range: 0.0 to 360.0).
   const factory ImageFilter.hueRotate({required double degrees}) =
       ImageFilter_HueRotate;
+
+  /// Artistic oil painting effect.
   const factory ImageFilter.oil({
     required int radius,
     required double intensity,
   }) = ImageFilter_Oil;
+
+  /// Frosted glass blurring effect.
   const factory ImageFilter.frostedGlass() = ImageFilter_FrostedGlass;
+
+  /// Pixelation effect with custom cell size.
   const factory ImageFilter.pixelize({required int size}) =
       ImageFilter_Pixelize;
+
+  /// Invert colors based on threshold/solarization.
   const factory ImageFilter.solarize() = ImageFilter_Solarize;
+
+  /// Classic presets (Neue, Lofi, Firenze, etc.) with custom strength (0.0 to 1.0).
   const factory ImageFilter.preset({
     required FilterPreset preset,
 
@@ -520,10 +580,18 @@ sealed class ImageFilter with _$ImageFilter {
       ImageFilter_Beauty;
 }
 
+/// High-level format and EXIF info for a queried image.
 class ImageInfo {
+  /// Width of the image in pixels.
   final int width;
+
+  /// Height of the image in pixels.
   final int height;
+
+  /// Mimetype or format representation (e.g., "jpeg", "png").
   final String? format;
+
+  /// EXIF orientation value (1 to 8).
   final int? exifOrientation;
 
   const ImageInfo({
@@ -571,17 +639,51 @@ enum MoodFilterPreset {
   inkwell,
 }
 
-enum OutputFormat { jpeg, png, webP, avif }
+/// The image format for output compression.
+enum OutputFormat {
+  /// JPEG compression (optimized using MozJPEG if enabled).
+  jpeg,
+
+  /// Lossless or lossy PNG compression (optimized using oxipng if enabled).
+  png,
+
+  /// WebP image format.
+  webP,
+
+  /// AVIF image format (supports high compression efficiency).
+  avif,
+}
 
 /// Quality vs Speed choice for interactive previews.
-enum PreviewQuality { fast, quality }
+enum PreviewQuality {
+  /// Prioritize rendering speed (e.g. for sliders).
+  fast,
+
+  /// Prioritize visual quality (e.g. for final inspection).
+  quality,
+}
 
 /// Processing backend: CPU (SIMD) or GPU (Metal/Vulkan via wgpu).
-enum ProcessingBackend { cpu, gpu, auto }
+enum ProcessingBackend {
+  /// Use SIMD CPU algorithms.
+  cpu,
 
+  /// Use GPU shaders (Metal on Apple, Vulkan on Android/Linux, DX12 on Windows).
+  gpu,
+
+  /// Automatically select the fastest available backend (GPU if compatible, CPU fallback).
+  auto,
+}
+
+/// Progressive decoding results containing a fast preview and the full image buffer.
 class ProgressiveDecodeResult {
+  /// Parsed image size and metadata.
   final ImageInfo info;
+
+  /// Low-resolution preview RGBA buffer for instant display.
   final RgbaImageBuffer previewRgba;
+
+  /// Full-resolution RGBA buffer.
   final RgbaImageBuffer buffer;
 
   const ProgressiveDecodeResult({
@@ -603,12 +705,36 @@ class ProgressiveDecodeResult {
           buffer == other.buffer;
 }
 
-enum ResizeAlgorithm { nearest, box, hamming, catmullRom, mitchell, lanczos3 }
+/// Image resizing algorithms, ranging from fast/nearest-neighbor to high-quality Lanczos.
+enum ResizeAlgorithm {
+  /// Nearest-neighbor interpolation (fastest, pixelated).
+  nearest,
+
+  /// Box filter.
+  box,
+
+  /// Hamming filter.
+  hamming,
+
+  /// Catmull-Rom cubic filter.
+  catmullRom,
+
+  /// Mitchell-Netravali cubic filter.
+  mitchell,
+
+  /// Lanczos3 windowed sinc filter (highest quality, slowest).
+  lanczos3,
+}
 
 /// Raw RGBA buffer for chained edits without re-decoding (Phase 3).
 class RgbaImageBuffer {
+  /// Width of the buffer.
   final int width;
+
+  /// Height of the buffer.
   final int height;
+
+  /// Packed row-major 32-bit RGBA pixel bytes.
   final Uint8List pixels;
 
   const RgbaImageBuffer({
@@ -630,8 +756,25 @@ class RgbaImageBuffer {
           pixels == other.pixels;
 }
 
-enum Rotation { rotate90, rotate180, rotate270, flipHorizontal, flipVertical }
+/// Rotations and mirror/flip transformations.
+enum Rotation {
+  /// Rotate 90 degrees clockwise.
+  rotate90,
 
+  /// Rotate 180 degrees.
+  rotate180,
+
+  /// Rotate 270 degrees clockwise.
+  rotate270,
+
+  /// Mirror horizontally.
+  flipHorizontal,
+
+  /// Mirror vertically.
+  flipVertical,
+}
+
+/// Post-grade extras applied during combo looks (such as overlay glow or grain).
 class SwipeLookExtrasDto {
   final double glow;
   final double grain;
@@ -683,14 +826,30 @@ enum SwipeLookPreset {
   animeAirbrush,
 }
 
+/// Text overlay drawing settings.
 class TextOverlay {
+  /// Text characters to draw.
   final String text;
+
+  /// Horizontal pixel offset from left.
   final int x;
+
+  /// Vertical pixel offset from top.
   final int y;
+
+  /// Font size (pixels).
   final double fontSize;
+
+  /// Color red channel.
   final int colorR;
+
+  /// Color green channel.
   final int colorG;
+
+  /// Color blue channel.
   final int colorB;
+
+  /// Color alpha/opacity channel.
   final int colorA;
 
   const TextOverlay({

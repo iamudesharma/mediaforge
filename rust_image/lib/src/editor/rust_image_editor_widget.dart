@@ -9,13 +9,21 @@ import 'services/image_source_picker.dart';
 import 'state/editor_providers.dart';
 import 'theme/app_theme.dart';
 
-/// Drop-in image editor powered by the Rust [RustImageEditor] core.
+/// A drop-in, full-featured image editor widget powered by the high-performance
+/// Rust [RustImageEditor] core and FFI bridge.
 ///
+/// It supports cropping, rotating, applying color presets and mood swipes,
+/// face beauty touch-ups, drawing strokes, and compositing layers.
+///
+/// Example usage:
 /// ```dart
 /// RustImageEditorWidget(
 ///   config: RustImageEditorConfig(
-///     title: 'Edit photo',
-///     onExport: (bytes, info) => saveToGallery(bytes),
+///     title: 'Lumina Studio',
+///     initialImageBytes: imageBytes,
+///     onExport: (bytes, info) {
+///       // Handle exported JPEG/PNG bytes here
+///     },
 ///   ),
 /// )
 /// ```
@@ -25,6 +33,7 @@ class RustImageEditorWidget extends StatefulWidget {
     required this.config,
   });
 
+  /// The configuration settings for customizing the editor's behavior and layout.
   final RustImageEditorConfig config;
 
   @override
@@ -32,9 +41,16 @@ class RustImageEditorWidget extends StatefulWidget {
 }
 
 class _RustImageEditorWidgetState extends State<RustImageEditorWidget> {
+  /// The active [EditorSession] holding the image pipelines and graph.
   late final EditorSession _session;
+  
+  /// True if this widget instance created and manages the lifecycle of [_session].
   late final bool _ownsSession;
+  
+  /// True when the native Rust libraries and GPU features are fully bootstrapped.
   bool _ready = false;
+  
+  /// Contains the bootstrapping error if native initialization failed.
   Object? _initError;
 
   @override
