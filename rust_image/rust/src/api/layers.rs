@@ -26,6 +26,7 @@ pub struct PaintStrokeInput {
     pub erase: bool,
     /// 0=pen, 1=marker, 2=highlighter, 3=eraser, 4=neon (Sprint 10).
     pub brush_kind: u8,
+    pub filled: bool,
 }
 
 #[flutter_rust_bridge::frb(sync)]
@@ -60,6 +61,7 @@ pub fn bake_layers_on_rgba(
             opacity: s.opacity,
             erase: s.erase,
             brush_kind: s.brush_kind,
+            filled: s.filled,
         })
         .collect();
 

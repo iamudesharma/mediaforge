@@ -10,6 +10,7 @@ use super::regions::{
     build_under_eye_mask,
 };
 use super::warp::{apply_lip_plump_rgba, lip_center_from_landmarks};
+use super::warp_mesh::apply_face_warp_rgba;
 use super::{FaceAnalysisResult, Landmark2D, LandmarkRegions, SegmentationMask};
 
 fn lip_center_from_analysis(landmarks: &[Landmark2D], regions: LandmarkRegions) -> (f32, f32) {
@@ -62,6 +63,7 @@ pub fn apply_skin_smooth_rgba(
     buffer: &RgbaImageBuffer,
     mask: &SegmentationMask,
     strength: f32,
+    preserve_detail: f32,
 ) -> RgbaImageBuffer {
     let strength = strength.clamp(0.0, 1.0);
     if strength <= 0.001 {
@@ -87,7 +89,9 @@ pub fn apply_skin_smooth_rgba(
             }
             let s = m * strength;
             let tone = (s * MAX_TONE_SMOOTH).min(MAX_TONE_SMOOTH);
-            let detail_keep = 1.0 - (s * MAX_DETAIL_REDUCTION).min(MAX_DETAIL_REDUCTION);
+            let preserve = preserve_detail.clamp(0.0, 1.0);
+            let detail_reduction = MAX_DETAIL_REDUCTION * (1.0 - preserve * 0.85);
+            let detail_keep = 1.0 - (s * detail_reduction).min(detail_reduction);
 
             let idx = mi * 4;
             for c in 0..3 {
@@ -125,6 +129,8 @@ pub fn apply_beauty_rgba(
 
     let mut out = buffer.clone();
 
+    out = apply_face_warp_rgba(out, analysis, params);
+
     if params.lip_plump > 0.001 {
         let lip_mask = apply_exclude_mask(&build_lip_mask(analysis, w, h), exclude_mask);
         let center = LandmarkRegions::from_analysis(analysis)
@@ -135,7 +141,12 @@ pub fn apply_beauty_rgba(
 
     if params.skin_smooth > 0.001 {
         let skin = apply_exclude_mask(skin_mask, exclude_mask);
-        out = apply_skin_smooth_rgba(&out, &skin, params.skin_smooth);
+        out = apply_skin_smooth_rgba(
+            &out,
+            &skin,
+            params.skin_smooth,
+            params.skin_preserve_detail,
+        );
     }
 
     if params.eye_brighten > 0.001 {
@@ -248,7 +259,7 @@ mod tests {
             height: 4,
             pixels: vec![255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         };
-        let out = apply_skin_smooth_rgba(&buffer, &mask, 1.0);
+        let out = apply_skin_smooth_rgba(&buffer, &mask, 1.0, 0.0);
         assert_ne!(out.pixels[0], buffer.pixels[0]);
         assert_eq!(out.pixels[4 * 4 - 4], buffer.pixels[4 * 4 - 4]);
     }
@@ -276,7 +287,7 @@ mod tests {
             height: 5,
             pixels: vec![255; 25],
         };
-        let out = apply_skin_smooth_rgba(&buffer, &mask, 1.0);
+        let out = apply_skin_smooth_rgba(&buffer, &mask, 1.0, 0.0);
         let center = 2 * 5 + 2;
         let orig = buffer.pixels[center * 4];
         let smoothed = out.pixels[center * 4];
@@ -297,7 +308,7 @@ mod tests {
             height: 2,
             pixels: vec![255; 4],
         };
-        let out = apply_skin_smooth_rgba(&buffer, &mask, 0.0);
+        let out = apply_skin_smooth_rgba(&buffer, &mask, 0.0, 0.0);
         assert_eq!(out.pixels, buffer.pixels);
     }
 }

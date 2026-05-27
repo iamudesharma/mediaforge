@@ -24,10 +24,10 @@ public class RustImageTexturePlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "rust_image/texture",
-      binaryMessenger: registrar.messenger
+      binaryMessenger: registrar.messenger()
     )
     let instance = RustImageTexturePlugin()
-    instance.textureRegistry = registrar.textures
+    instance.textureRegistry = registrar.textures()
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
 

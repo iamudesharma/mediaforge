@@ -3,6 +3,7 @@ struct Params {
     height: u32,
     radius: u32,
     strength: f32,
+    preserve_detail: f32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -60,9 +61,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     }
     let blurred = sum / n;
     let orig = unpack_rgba(input_rgba[out_idx]);
-    // Match CPU beauty.rs: cap blend so 100% slider does not mush eyes/lips.
     let max_blend = 0.48;
-    let blend_cap = params.strength * max_blend;
+    let preserve = clamp(params.preserve_detail, 0.0, 1.0);
+    let blend_cap = params.strength * max_blend * (1.0 - preserve * 0.35);
     let blend = clamp(m * blend_cap, 0.0, max_blend);
     output_rgba[out_idx] = pack_rgba(mix(orig, blurred, blend));
 }

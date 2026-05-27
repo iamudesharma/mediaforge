@@ -88,18 +88,25 @@ enum RustImageMediaPipeAnalyzer {
   private static let FACE_OVAL_COUNT = 36
 
   #if canImport(MediaPipeTasksVision)
+  private static func makeMPImage(cgImage: CGImage) throws -> MPImage {
+    #if canImport(UIKit)
+    return try MPImage(uiImage: UIImage(cgImage: cgImage))
+    #elseif canImport(AppKit)
+    let size = NSSize(width: cgImage.width, height: cgImage.height)
+    return try MPImage(uiImage: NSImage(cgImage: cgImage, size: size))
+    #else
+    throw NSError(domain: "rust_image", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unsupported platform for MPImage"])
+    #endif
+  }
+
   private static func detectLandmarks(
     cgImage: CGImage,
     modelPath: String,
     width: Int,
     height: Int
   ) throws -> [(x: Float, y: Float, z: Float)] {
-    var options = FaceLandmarkerOptions()
-    options.baseOptions.modelAssetPath = modelPath
-    options.runningMode = .image
-    options.numFaces = 1
-    let landmarker = try FaceLandmarker(options: options)
-    let mpImage = try MPImage(cgImage: cgImage)
+    let landmarker = try FaceLandmarker(modelPath: modelPath)
+    let mpImage = try makeMPImage(cgImage: cgImage)
     let result = try landmarker.detect(image: mpImage)
     guard let face = result.faceLandmarks.first else { return [] }
 
@@ -118,12 +125,14 @@ enum RustImageMediaPipeAnalyzer {
     width: Int,
     height: Int
   ) throws -> Data {
-    var options = ImageSegmenterOptions()
-    options.baseOptions.modelAssetPath = modelPath
-    options.runningMode = .image
-    options.outputCategoryMask = true
-    let segmenter = try ImageSegmenter(options: options)
-    let mpImage = try MPImage(cgImage: cgImage)
+    let segmenterOptions = ImageSegmenterOptions()
+    segmenterOptions.baseOptions = BaseOptions()
+    segmenterOptions.baseOptions.modelAssetPath = modelPath
+    segmenterOptions.runningMode = .image
+    segmenterOptions.shouldOutputCategoryMask = true
+    segmenterOptions.shouldOutputConfidenceMasks = false
+    let segmenter = try ImageSegmenter(options: segmenterOptions)
+    let mpImage = try makeMPImage(cgImage: cgImage)
     let result = try segmenter.segment(image: mpImage)
     guard let mask = result.categoryMask else {
       return Data(repeating: 0, count: width * height)

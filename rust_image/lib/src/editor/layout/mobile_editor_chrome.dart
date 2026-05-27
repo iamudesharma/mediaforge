@@ -182,6 +182,10 @@ class _MobileEditorLayoutState extends State<MobileEditorLayout> {
       onCompareHoldStart: widget.onCompareHoldStart,
       onCompareHoldEnd: widget.onCompareHoldEnd,
       onExport: widget.onExport,
+      showApplyLayers: widget.session.hasUncommittedLayers,
+      onApplyLayers: widget.session.hasUncommittedLayers
+          ? () => widget.session.commitLayersToCanvas()
+          : null,
       showCropDone: widget.selectedTool == EditorTool.transform &&
           widget.cropController != null,
       onCropDone: widget.cropController != null
@@ -418,10 +422,17 @@ class _MobileDraggableToolPanelState extends State<_MobileDraggableToolPanel> {
     });
   }
 
+  void _emitExtent(double extent) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onExtentChanged(extent);
+    });
+  }
+
   void _seedExtent() {
     final box = context.findRenderObject() as RenderBox?;
     if (box != null) {
-      widget.onExtentChanged(widget.initialChildSize * box.size.height);
+      _emitExtent(widget.initialChildSize * box.size.height);
     }
   }
 
@@ -437,7 +448,7 @@ class _MobileDraggableToolPanelState extends State<_MobileDraggableToolPanel> {
     if (!_controller.isAttached || !mounted) return;
     final box = context.findRenderObject() as RenderBox?;
     if (box == null) return;
-    widget.onExtentChanged(_controller.size * box.size.height);
+    _emitExtent(_controller.size * box.size.height);
   }
 
   Future<void> _animateToTarget() async {
@@ -463,7 +474,7 @@ class _MobileDraggableToolPanelState extends State<_MobileDraggableToolPanel> {
       onNotification: (n) {
         final parent = context.findRenderObject() as RenderBox?;
         if (parent != null) {
-          widget.onExtentChanged(n.extent * parent.size.height);
+          _emitExtent(n.extent * parent.size.height);
         }
         return false;
       },
@@ -505,6 +516,8 @@ class _LuminaTopBar extends StatelessWidget {
     required this.onCompareHoldEnd,
     this.onExport,
     this.onAddImageSticker,
+    this.showApplyLayers = false,
+    this.onApplyLayers,
     this.showCropDone = false,
     this.onCropDone,
   });
@@ -517,6 +530,8 @@ class _LuminaTopBar extends StatelessWidget {
   final VoidCallback onCompareHoldEnd;
   final Future<void> Function()? onExport;
   final VoidCallback? onAddImageSticker;
+  final bool showApplyLayers;
+  final Future<void> Function()? onApplyLayers;
   final bool showCropDone;
   final VoidCallback? onCropDone;
 
@@ -552,6 +567,21 @@ class _LuminaTopBar extends StatelessWidget {
                   ? () => unawaited(session.redo())
                   : null,
             ),
+            if (showApplyLayers && onApplyLayers != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: FilledButton.tonal(
+                  onPressed: session.busy ? null : () => unawaited(onApplyLayers!()),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(72, 36),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  child: const Text('Apply'),
+                ),
+              ),
             if (showCropDone && onCropDone != null)
               Padding(
                 padding: const EdgeInsets.only(right: 4),

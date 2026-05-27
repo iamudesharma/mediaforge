@@ -164,6 +164,24 @@ class BeautyParams {
   /// 0–1 teeth whitening (Nexus E).
   final double teethWhiten;
 
+  /// 0–1 high-pass skin texture preserve (Glass Skin / Clean Beauty).
+  final double skinPreserveDetail;
+
+  /// 0–1 eye enlarge warp.
+  final double eyeEnlarge;
+
+  /// 0–1 jaw slim warp.
+  final double jawSlim;
+
+  /// 0–1 nose slim warp.
+  final double noseSlim;
+
+  /// 0–1 overall face slim.
+  final double faceSlim;
+
+  /// 0–1 chin V-shape warp.
+  final double chinVshape;
+
   const BeautyParams({
     required this.skinSmooth,
     required this.eyeBrighten,
@@ -173,6 +191,12 @@ class BeautyParams {
     required this.blush,
     required this.underEye,
     required this.teethWhiten,
+    required this.skinPreserveDetail,
+    required this.eyeEnlarge,
+    required this.jawSlim,
+    required this.noseSlim,
+    required this.faceSlim,
+    required this.chinVshape,
   });
 
   static Future<BeautyParams> default_() =>
@@ -190,7 +214,13 @@ class BeautyParams {
       lipPlump.hashCode ^
       blush.hashCode ^
       underEye.hashCode ^
-      teethWhiten.hashCode;
+      teethWhiten.hashCode ^
+      skinPreserveDetail.hashCode ^
+      eyeEnlarge.hashCode ^
+      jawSlim.hashCode ^
+      noseSlim.hashCode ^
+      faceSlim.hashCode ^
+      chinVshape.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -204,7 +234,13 @@ class BeautyParams {
           lipPlump == other.lipPlump &&
           blush == other.blush &&
           underEye == other.underEye &&
-          teethWhiten == other.teethWhiten;
+          teethWhiten == other.teethWhiten &&
+          skinPreserveDetail == other.skinPreserveDetail &&
+          eyeEnlarge == other.eyeEnlarge &&
+          jawSlim == other.jawSlim &&
+          noseSlim == other.noseSlim &&
+          faceSlim == other.faceSlim &&
+          chinVshape == other.chinVshape;
 }
 
 /// Output of native face pipeline (Vision or MediaPipe).

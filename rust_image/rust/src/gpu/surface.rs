@@ -6,7 +6,7 @@ use crate::api::face::{BeautyParams, SegmentationMask};
 use crate::api::image::{EditOp, ProcessingBackend, RgbaImageBuffer};
 use crate::face::{
     apply_beauty_rgba, build_blush_mask, build_eye_mask, build_lip_mask, build_teeth_mask,
-    FaceAnalysisResult,
+    apply_face_warp_rgba, FaceAnalysisResult,
 };
 
 use super::engine;
@@ -156,6 +156,17 @@ pub fn apply_surface_beauty_pipeline(
         let mut gpu_params = *params;
         gpu_params.lip_plump = 0.0;
         gpu_params.under_eye = 0.0;
+
+        let needs_warp = params.eye_enlarge > 0.001
+            || params.nose_slim > 0.001
+            || params.jaw_slim > 0.001
+            || params.face_slim > 0.001
+            || params.chin_vshape > 0.001;
+        if needs_warp {
+            let mut buf = gpu.readback_pipeline_cache(w, h)?;
+            buf = apply_face_warp_rgba(buf, analysis, params);
+            gpu.upload_pipeline_cache(buf)?;
+        }
 
         gpu.apply_beauty_on_cache(
             gpu.beauty_pipelines(),

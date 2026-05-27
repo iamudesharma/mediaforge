@@ -6,10 +6,22 @@ use photon_rs::{
 };
 
 mod mood_presets;
+mod swipe_looks;
+mod swipe_extras;
+pub(crate) mod filmic;
+pub(crate) mod lut_hald;
 
-use crate::api::image::{FilterPreset, ImageFilter, MoodFilterPreset, RgbaImageBuffer};
+use crate::api::image::{FilterPreset, ImageFilter, MoodFilterPreset, RgbaImageBuffer, SwipeLookPreset};
 
-pub use mood_presets::{apply_mood_filter_rgba, apply_mood_color_rgba, recipe_for};
+pub use mood_presets::{apply_mood_filter_rgba, apply_mood_color_rgba, recipe_for, MoodRecipe};
+pub use swipe_looks::{
+    apply_swipe_look_extras_rgba, apply_swipe_look_grade_rgba,
+    display_name as swipe_look_display_name, recipe_for as swipe_look_recipe_for,
+};
+pub use swipe_extras::{
+    apply_dewy_highlight_rgba, apply_glow_rgba, apply_grain_rgba, apply_halation_rgba,
+    apply_rgb_split_rgba,
+};
 
 pub fn apply(bytes: &[u8], filter: ImageFilter) -> Result<DynamicImage, String> {
     let mut photon = open_image_from_bytes(bytes).map_err(|e| e.to_string())?;
@@ -63,6 +75,15 @@ pub fn apply_rgba(mut buffer: RgbaImageBuffer, filter: ImageFilter) -> Result<Rg
         ImageFilter::Mood { preset, strength } => Ok(mood_presets::apply_mood_filter_rgba(
             buffer, preset, strength,
         )),
+        ImageFilter::SwipeLook { preset, strength } => Ok(swipe_looks::apply_swipe_look_grade_rgba(
+            buffer, preset, strength,
+        )),
+        ImageFilter::LutPng { png_bytes, strength } => {
+            if let Ok((lut_data, lut_size)) = lut_hald::parse_hald_clut(&png_bytes) {
+                lut_hald::apply_lut_3d_with_strength_rgba(&mut buffer, &lut_data, lut_size, strength);
+            }
+            Ok(buffer)
+        }
         ImageFilter::SkinSmooth { strength: _ } => Ok(buffer),
         ImageFilter::Beauty { .. } => Ok(buffer),
         other_filter => {
@@ -114,6 +135,30 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
                 pixels: photon.get_raw_pixels().to_vec(),
             };
             buf = mood_presets::apply_mood_filter_rgba(buf, preset, strength);
+            *photon = PhotonImage::new(buf.pixels, w, h);
+        }
+        ImageFilter::SwipeLook { preset, strength } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut buf = RgbaImageBuffer {
+                width: w,
+                height: h,
+                pixels: photon.get_raw_pixels().to_vec(),
+            };
+            buf = swipe_looks::apply_swipe_look_grade_rgba(buf, preset, strength);
+            *photon = PhotonImage::new(buf.pixels, w, h);
+        }
+        ImageFilter::LutPng { png_bytes, strength } => {
+            let w = photon.get_width();
+            let h = photon.get_height();
+            let mut buf = RgbaImageBuffer {
+                width: w,
+                height: h,
+                pixels: photon.get_raw_pixels().to_vec(),
+            };
+            if let Ok((lut_data, lut_size)) = lut_hald::parse_hald_clut(&png_bytes) {
+                lut_hald::apply_lut_3d_with_strength_rgba(&mut buf, &lut_data, lut_size, strength);
+            }
             *photon = PhotonImage::new(buf.pixels, w, h);
         }
         ImageFilter::Warmth { amount } => {

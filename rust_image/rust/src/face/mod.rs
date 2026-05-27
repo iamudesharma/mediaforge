@@ -9,8 +9,10 @@ mod makeup;
 mod regions;
 mod smoothing;
 mod warp;
+mod warp_mesh;
 
 pub use beauty::{apply_beauty_rgba, apply_skin_smooth_rgba};
+pub use warp_mesh::apply_face_warp_rgba;
 pub use landmark::{LandmarkRegions, MEDIAPIPE_LANDMARK_COUNT, VISION_MIN_LANDMARKS};
 pub use looks::{params_for_look, recipe_for, BeautyRecipe};
 pub use regions::{

@@ -231,6 +231,7 @@ fn filter_rgba_with_backend_inner(
                     | ImageFilter::Sharpen
                     | ImageFilter::Vignette { .. }
                     | ImageFilter::Mood { .. }
+                    | ImageFilter::SwipeLook { .. }
             ) {
                 return crate::gpu::filter_rgba(buffer, filter);
             }

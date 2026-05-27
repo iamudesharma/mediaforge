@@ -18,7 +18,7 @@ void main() {
     test('enables every tool by default', () {
       const config = RustImageEditorConfig();
 
-      expect(config.enabledTools, hasLength(11));
+      expect(config.enabledTools, hasLength(EditorTool.values.length));
       expect(config.enabledTools, contains(EditorTool.layers));
       expect(config.enabledTools.toSet(), EditorTool.values.toSet());
     });

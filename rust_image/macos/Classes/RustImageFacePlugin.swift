@@ -24,7 +24,7 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
       name: "rust_image/face",
-      binaryMessenger: registrar.messenger()
+      binaryMessenger: registrar.messenger
     )
     let instance = RustImageFacePlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)

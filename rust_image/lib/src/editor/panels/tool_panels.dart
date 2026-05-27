@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../models/overlay_layer.dart';
 import '../overlay_placement.dart';
 import '../rust_image_editor_config.dart';
 import '../services/filter_descriptor.dart';
+import '../services/mood_filter_names.dart';
 import '../services/image_source_picker.dart';
 import '../services/rust_worker.dart';
 import '../theme/lumina_tokens.dart';
@@ -197,7 +199,7 @@ class ToolPanelHost extends StatelessWidget {
             session: session,
             placement: drawPlacement!,
           ),
-        EditorTool.layers => LayersPanel(session: session),
+        EditorTool.layers => LayersPanel(session: session, compact: compact),
         EditorTool.overlay => OverlayPanel(
             session: session,
             placement: overlayPlacement!,
@@ -674,8 +676,11 @@ class FiltersPanel extends StatefulWidget {
 
 class _FiltersPanelState extends State<FiltersPanel> {
   static const _presets = FilterPreset.values;
+  static const _moods = MoodFilterPreset.values;
   int _selectedPreset = 0;
   double _presetStrength = 100;
+  int _selectedMood = 0;
+  double _moodStrength = 100;
 
   EditorSession get session => widget.session;
 
@@ -685,6 +690,11 @@ class _FiltersPanelState extends State<FiltersPanel> {
       _presets[_selectedPreset - 1],
       strength: _presetStrength / 100,
     );
+  }
+
+  MoodFilterPreset? get _activeMoodPreset {
+    if (_selectedMood <= 0) return null;
+    return _moods[_selectedMood - 1];
   }
 
   @override
@@ -743,6 +753,64 @@ class _FiltersPanelState extends State<FiltersPanel> {
                         descriptor: d,
                         saveUndo: true,
                         fromBase: true,
+                      );
+                    }
+                  : null,
+            ),
+          ],
+          const SizedBox(height: LuminaTokens.padMd),
+          const SectionHeader('Mood grades'),
+          LuminaFilterStrip(
+            labels: [
+              'Original',
+              ..._moods.map(moodFilterDisplayName),
+            ],
+            selectedIndex: _selectedMood,
+            enabled: session.hasImage && !session.busy,
+            onSelected: (i) {
+              setState(() => _selectedMood = i);
+              unawaited(
+                session.setMoodFilter(
+                  preset: i == 0 ? null : _moods[i - 1],
+                  strength: _moodStrength / 100,
+                  commit: true,
+                ),
+              );
+            },
+          ),
+          if (_selectedMood > 0) ...[
+            const SizedBox(height: LuminaTokens.padMd),
+            LabeledSlider(
+              label: 'Mood intensity',
+              value: _moodStrength,
+              min: 0,
+              max: 100,
+              divisions: 20,
+              display: '${_moodStrength.round()}%',
+              onChanged: session.hasImage && !session.busy
+                  ? (v) {
+                      setState(() => _moodStrength = v);
+                      final p = _activeMoodPreset;
+                      if (p == null) return;
+                      unawaited(
+                        session.setMoodFilter(
+                          preset: p,
+                          strength: _moodStrength / 100,
+                          livePreview: true,
+                        ),
+                      );
+                    }
+                  : null,
+              onChangeEnd: session.hasImage && !session.busy
+                  ? (_) {
+                      final p = _activeMoodPreset;
+                      if (p == null) return;
+                      unawaited(
+                        session.setMoodFilter(
+                          preset: p,
+                          strength: _moodStrength / 100,
+                          commit: true,
+                        ),
                       );
                     }
                   : null,
@@ -1331,7 +1399,7 @@ class _ExportPanelState extends State<ExportPanel> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.session,
+      listenable: widget.session.editorChromeListenable,
       builder: (context, _) {
         final s = widget.session;
         return Column(

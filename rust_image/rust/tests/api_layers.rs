@@ -28,6 +28,24 @@ fn solid_rgba(w: u32, h: u32, r: u8, g: u8, b: u8, a: u8) -> RgbaImageBuffer {
     }
 }
 
+/// Checkerboard so blur/pixelate change measured pixels (uniform fills are invariant).
+fn checker_rgba(w: u32, h: u32) -> RgbaImageBuffer {
+    let mut pixels = vec![0u8; (w * h * 4) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let idx = ((y * w + x) * 4) as usize;
+            let on = ((x / 6) + (y / 6)) % 2 == 0;
+            let (r, g, b) = if on { (255, 0, 0) } else { (0, 0, 255) };
+            pixels[idx..idx + 4].copy_from_slice(&[r, g, b, 255]);
+        }
+    }
+    RgbaImageBuffer {
+        width: w,
+        height: h,
+        pixels,
+    }
+}
+
 #[test]
 fn bake_layers_with_only_raster_blends_at_center() {
     let base = solid_rgba(100, 100, 0, 0, 0, 255);
@@ -68,6 +86,7 @@ fn bake_layers_with_only_paint_stroke_shifts_endpoint_pixel() {
         opacity: 1.0,
         erase: false,
         brush_kind: 0,
+        filled: false,
     };
     let out = bake_layers_on_rgba(base, vec![], vec![stroke]).expect("bake ok");
     assert_eq!((out.width, out.height), (80, 80));
@@ -101,6 +120,7 @@ fn bake_layers_combined_raster_and_stroke() {
         opacity: 1.0,
         erase: false,
         brush_kind: 0,
+        filled: false,
     };
     let out = bake_layers_on_rgba(base, vec![layer], vec![stroke]).expect("bake ok");
     assert_eq!((out.width, out.height), (80, 80));
@@ -170,7 +190,81 @@ fn bake_layers_short_stroke_is_skipped() {
         opacity: 1.0,
         erase: false,
         brush_kind: 0,
+        filled: false,
     };
     let out = bake_layers_on_rgba(base.clone(), vec![], vec![stroke]).expect("bake ok");
     assert_eq!(out.pixels, base.pixels);
+}
+
+#[test]
+fn bake_layers_local_blur_softens_interior() {
+    let base = checker_rgba(40, 40);
+    let sharp = pixel(&base, 15, 15);
+    let stroke = PaintStrokeInput {
+        points: vec![(5.0, 5.0), (25.0, 25.0)],
+        color_r: 0,
+        color_g: 0,
+        color_b: 0,
+        color_a: 255,
+        width: 2.0,
+        opacity: 1.0,
+        erase: false,
+        brush_kind: 14,
+        filled: false,
+    };
+    let out = bake_layers_on_rgba(base, vec![], vec![stroke]).expect("bake ok");
+    let blurred = pixel(&out, 15, 15);
+    assert_ne!(
+        blurred, sharp,
+        "blurred center {:?} should differ from sharp {:?}",
+        blurred,
+        sharp
+    );
+}
+
+#[test]
+fn bake_layers_local_pixelate_averages_blocks() {
+    let base = checker_rgba(60, 60);
+    let sharp_a = pixel(&base, 12, 12);
+    let sharp_b = pixel(&base, 12, 18);
+    let stroke = PaintStrokeInput {
+        points: vec![(10.0, 10.0), (40.0, 40.0)],
+        color_r: 0,
+        color_g: 0,
+        color_b: 0,
+        color_a: 255,
+        width: 2.0,
+        opacity: 1.0,
+        erase: false,
+        brush_kind: 15,
+        filled: false,
+    };
+    let out = bake_layers_on_rgba(base, vec![], vec![stroke]).expect("bake ok");
+    let a = pixel(&out, 12, 12);
+    let b = pixel(&out, 13, 13);
+    assert_eq!(a, b, "pixelate block should be flat within a cell");
+    assert_ne!(
+        sharp_a, sharp_b,
+        "checker source should differ at test coords"
+    );
+}
+
+#[test]
+fn bake_layers_filled_rect_paints_interior() {
+    let base = solid_rgba(50, 50, 0, 0, 0, 255);
+    let stroke = PaintStrokeInput {
+        points: vec![(10.0, 10.0), (30.0, 30.0)],
+        color_r: 0,
+        color_g: 255,
+        color_b: 0,
+        color_a: 255,
+        width: 2.0,
+        opacity: 1.0,
+        erase: false,
+        brush_kind: 8,
+        filled: true,
+    };
+    let out = bake_layers_on_rgba(base, vec![], vec![stroke]).expect("bake ok");
+    let inside = pixel(&out, 20, 20);
+    assert!(inside[1] > 200, "filled rect interior green = {}", inside[1]);
 }

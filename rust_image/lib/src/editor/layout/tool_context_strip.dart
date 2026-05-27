@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
@@ -5,6 +7,7 @@ import '../crop_controller.dart';
 import '../editor_session.dart';
 import '../panels/tool_panels.dart';
 import '../services/filter_descriptor.dart';
+import '../services/mood_filter_names.dart';
 import '../services/rust_worker.dart';
 import '../theme/lumina_tokens.dart';
 import '../widgets/control_widgets.dart';
@@ -62,8 +65,11 @@ class _FiltersStrip extends StatefulWidget {
 
 class _FiltersStripState extends State<_FiltersStrip> {
   static const _presets = FilterPreset.values;
+  static const _moods = MoodFilterPreset.values;
   int _selectedPreset = 0;
   double _presetStrength = 100;
+  int _selectedMood = 0;
+  double _moodStrength = 100;
 
   EditorSession get session => widget.session;
 
@@ -75,6 +81,11 @@ class _FiltersStripState extends State<_FiltersStrip> {
     );
   }
 
+  MoodFilterPreset? get _activeMoodPreset {
+    if (_selectedMood <= 0) return null;
+    return _moods[_selectedMood - 1];
+  }
+
   static String _presetName(FilterPreset p) {
     final n = p.name;
     return n[0].toUpperCase() + n.substring(1);
@@ -83,24 +94,56 @@ class _FiltersStripState extends State<_FiltersStrip> {
   @override
   Widget build(BuildContext context) {
     final presetLabels = ['Original', ..._presets.map(_presetName)];
+    final moodLabels = ['Original', ..._moods.map(moodFilterDisplayName)];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: LuminaFilterStrip(
-        labels: presetLabels,
-        selectedIndex: _selectedPreset,
-        enabled: session.hasImage && !session.busy,
-        onSelected: (i) {
-          setState(() => _selectedPreset = i);
-          if (i == 0) return;
-          session.applyFilter(
-            label: 'Preset',
-            descriptor: FilterDescriptor.preset(
-              _presets[i - 1],
-              strength: _presetStrength / 100,
-            ),
-          );
-        },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Presets',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 4),
+          LuminaFilterStrip(
+            labels: presetLabels,
+            selectedIndex: _selectedPreset,
+            enabled: session.hasImage && !session.busy,
+            onSelected: (i) {
+              setState(() => _selectedPreset = i);
+              if (i == 0) return;
+              session.applyFilter(
+                label: 'Preset',
+                descriptor: FilterDescriptor.preset(
+                  _presets[i - 1],
+                  strength: _presetStrength / 100,
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Mood grades',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+          const SizedBox(height: 4),
+          LuminaFilterStrip(
+            labels: moodLabels,
+            selectedIndex: _selectedMood,
+            enabled: session.hasImage && !session.busy,
+            onSelected: (i) {
+              setState(() => _selectedMood = i);
+              unawaited(
+                session.setMoodFilter(
+                  preset: i == 0 ? null : _moods[i - 1],
+                  strength: _moodStrength / 100,
+                  commit: true,
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

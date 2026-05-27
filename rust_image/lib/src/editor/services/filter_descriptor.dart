@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:rust_image/src/rust/api/face.dart';
 import 'package:rust_image/src/rust_image_editor.dart';
 
@@ -6,7 +7,7 @@ class FilterDescriptor {
   const FilterDescriptor(this.kind, this.params);
 
   final String kind;
-  final Map<String, num> params;
+  final Map<String, dynamic> params;
 
   factory FilterDescriptor.preset(
     FilterPreset p, {
@@ -26,8 +27,20 @@ class FilterDescriptor {
         'strength': strength,
       });
 
+  factory FilterDescriptor.swipeLook(
+    SwipeLookPreset p, {
+    double strength = 1.0,
+  }) =>
+      FilterDescriptor('swipeLook', {
+        'preset': p.index,
+        'strength': strength,
+      });
+
   /// True for swipe mood filters (not Filters-tab presets).
   bool get isMood => kind == 'mood';
+
+  /// True for combo swipe looks (global grade from [SwipeLookPreset]).
+  bool get isSwipeLook => kind == 'swipeLook';
 
   factory FilterDescriptor.blur({required int radius}) =>
       FilterDescriptor('blur', {'radius': radius});
@@ -79,6 +92,12 @@ class FilterDescriptor {
         'blush': params.blush,
         'underEye': params.underEye,
         'teethWhiten': params.teethWhiten,
+        'skinPreserveDetail': params.skinPreserveDetail,
+        'eyeEnlarge': params.eyeEnlarge,
+        'jawSlim': params.jawSlim,
+        'noseSlim': params.noseSlim,
+        'faceSlim': params.faceSlim,
+        'chinVshape': params.chinVshape,
       });
 
   factory FilterDescriptor.oil({required int radius, required double intensity}) =>
@@ -91,6 +110,15 @@ class FilterDescriptor {
       FilterDescriptor('pixelize', {'size': size});
 
   factory FilterDescriptor.solarize() => const FilterDescriptor('solarize', {});
+
+  factory FilterDescriptor.lutPng({
+    required Uint8List pngBytes,
+    required double strength,
+  }) =>
+      FilterDescriptor('lutPng', {
+        'pngBytes': pngBytes,
+        'strength': strength,
+      });
 
   double get presetStrength =>
       (params['strength'] ?? 1.0).toDouble().clamp(0.0, 1.0);
@@ -127,6 +155,10 @@ class FilterDescriptor {
         FilterDescriptor.preset(preset, strength: strength),
       ImageFilter_Mood(:final preset, :final strength) =>
         FilterDescriptor.mood(preset, strength: strength),
+      ImageFilter_SwipeLook(:final preset, :final strength) =>
+        FilterDescriptor.swipeLook(preset, strength: strength),
+      ImageFilter_LutPng(:final pngBytes, :final strength) =>
+        FilterDescriptor.lutPng(pngBytes: pngBytes, strength: strength),
       ImageFilter_SkinSmooth(:final strength) =>
         FilterDescriptor.skinSmooth(strength: strength),
       ImageFilter_Beauty(:final params) =>
@@ -144,6 +176,11 @@ class FilterDescriptor {
       case 'mood':
         return ImageFilter.mood(
           preset: MoodFilterPreset.values[params['preset']!.toInt()],
+          strength: presetStrength,
+        );
+      case 'swipeLook':
+        return ImageFilter.swipeLook(
+          preset: SwipeLookPreset.values[params['preset']!.toInt()],
           strength: presetStrength,
         );
       case 'blur':
@@ -181,6 +218,11 @@ class FilterDescriptor {
         return ImageFilter.pixelize(size: params['size']!.toInt());
       case 'solarize':
         return const ImageFilter.solarize();
+      case 'lutPng':
+        return ImageFilter.lutPng(
+          pngBytes: params['pngBytes'] as Uint8List,
+          strength: (params['strength'] ?? 1.0).toDouble(),
+        );
       case 'skinSmooth':
         return ImageFilter.skinSmooth(
           strength: (params['strength'] ?? 0).toDouble().clamp(0.0, 1.0),
@@ -196,6 +238,12 @@ class FilterDescriptor {
             blush: (params['blush'] ?? 0).toDouble(),
             underEye: (params['underEye'] ?? 0).toDouble(),
             teethWhiten: (params['teethWhiten'] ?? 0).toDouble(),
+            skinPreserveDetail: (params['skinPreserveDetail'] ?? 0).toDouble(),
+            eyeEnlarge: (params['eyeEnlarge'] ?? 0).toDouble(),
+            jawSlim: (params['jawSlim'] ?? 0).toDouble(),
+            noseSlim: (params['noseSlim'] ?? 0).toDouble(),
+            faceSlim: (params['faceSlim'] ?? 0).toDouble(),
+            chinVshape: (params['chinVshape'] ?? 0).toDouble(),
           ),
         );
       default:

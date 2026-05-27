@@ -20,6 +20,12 @@ void main() {
       _expectRoundTrip(FilterDescriptor.mood(MoodFilterPreset.clarendon, strength: 0.5));
     });
 
+    test('swipeLook', () {
+      _expectRoundTrip(
+        FilterDescriptor.swipeLook(SwipeLookPreset.cleanGirlGlow, strength: 1.0),
+      );
+    });
+
     test('warmth fade vignette', () {
       _expectRoundTrip(FilterDescriptor.warmth(amount: 25));
       _expectRoundTrip(FilterDescriptor.fade(amount: 0.4));

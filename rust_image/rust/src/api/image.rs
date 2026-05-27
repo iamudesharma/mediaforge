@@ -86,6 +86,18 @@ pub enum ImageFilter {
         /// 0.0 = identity, 1.0 = full mood grade.
         strength: f32,
     },
+    /// Combo swipe look (global grade from [SwipeLookPreset] — beauty in separate slot).
+    SwipeLook {
+        preset: SwipeLookPreset,
+        /// 0.0 = identity, 1.0 = full look grade.
+        strength: f32,
+    },
+    /// Authentic 3D LUT PNG filter (Hald CLUT representation).
+    LutPng {
+        png_bytes: Vec<u8>,
+        /// 0.0 = identity, 1.0 = full grade.
+        strength: f32,
+    },
     /// Regional skin smooth (mask applied separately in session / GPU pass).
     SkinSmooth {
         /// 0.0 = none, 1.0 = full smooth.
@@ -134,6 +146,29 @@ pub enum MoodFilterPreset {
     Sierra,
     Willow,
     Inkwell,
+}
+
+/// TikTok / Instagram combo swipe looks (global grade + beauty slot).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SwipeLookPreset {
+    CleanGirlGlow,
+    CloudSkin,
+    GoldenAura,
+    SoftFocus,
+    FauxFilm,
+    BoldGlamourLite,
+    NeonNight,
+    AnimeAirbrush,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SwipeLookExtrasDto {
+    pub glow: f32,
+    pub grain: f32,
+    pub sharpen: f32,
+    pub skin_preserve_detail: f32,
+    pub halation: f32,
+    pub rgb_split: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -511,6 +546,32 @@ pub enum EditOp {
     },
 }
 
+/// Regional beauty params for a combo swipe look.
+#[flutter_rust_bridge::frb(sync)]
+pub fn swipe_look_beauty_params(preset: SwipeLookPreset) -> crate::api::face::BeautyParams {
+    crate::filters::swipe_look_recipe_for(preset).beauty
+}
+
+/// Post-grade extras (glow, grain, skin preserve) for a swipe look.
+#[flutter_rust_bridge::frb(sync)]
+pub fn swipe_look_extras(preset: SwipeLookPreset) -> SwipeLookExtrasDto {
+    let e = crate::filters::swipe_look_recipe_for(preset).extras;
+    SwipeLookExtrasDto {
+        glow: e.glow,
+        grain: e.grain,
+        sharpen: e.sharpen,
+        skin_preserve_detail: e.skin_preserve_detail,
+        halation: e.halation,
+        rgb_split: e.rgb_split,
+    }
+}
+
+/// User-facing label for swipe combo filter chip.
+#[flutter_rust_bridge::frb(sync)]
+pub fn swipe_look_display_name(preset: SwipeLookPreset) -> String {
+    crate::filters::swipe_look_display_name(preset).to_string()
+}
+
 #[flutter_rust_bridge::frb(sync)]
 pub fn apply_edit_pipeline(
     buffer: RgbaImageBuffer,
@@ -563,6 +624,8 @@ fn is_gpu_capable(op: &EditOp) -> bool {
                     | ImageFilter::Sharpen
                     | ImageFilter::Vignette { .. }
                     | ImageFilter::Mood { .. }
+                    | ImageFilter::SwipeLook { .. }
+                    | ImageFilter::LutPng { .. }
             )
         }
         EditOp::Resize { .. } => true,

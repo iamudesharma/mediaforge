@@ -25,6 +25,7 @@ pub fn composite_overlay_on_cache(
     opacity: f32,
     blend_mode: u32,
 ) -> Result<(), String> {
+    let _gpu = super::engine::gpu_op_lock();
     let (width, height, storage_buf1, storage_buf2, active_is_1) = {
         let cache = gpu.cached_buffers.lock();
         let c = cache

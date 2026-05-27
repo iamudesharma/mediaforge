@@ -35,7 +35,6 @@ pub fn destroy_gpu_preview_surface(id: i64) {
     }
 }
 
-#[flutter_rust_bridge::frb(sync)]
 pub fn upload_gpu_preview_surface(id: i64, buffer: RgbaImageBuffer) -> Result<(), String> {
     #[cfg(feature = "gpu")]
     {
@@ -48,7 +47,6 @@ pub fn upload_gpu_preview_surface(id: i64, buffer: RgbaImageBuffer) -> Result<()
     }
 }
 
-#[flutter_rust_bridge::frb(sync)]
 pub fn apply_gpu_preview_ops(
     id: i64,
     ops: Vec<EditOp>,
@@ -65,7 +63,6 @@ pub fn apply_gpu_preview_ops(
     }
 }
 
-#[flutter_rust_bridge::frb(sync)]
 pub fn readback_gpu_preview_surface(id: i64) -> Result<RgbaImageBuffer, String> {
     #[cfg(feature = "gpu")]
     {
@@ -79,7 +76,6 @@ pub fn readback_gpu_preview_surface(id: i64) -> Result<RgbaImageBuffer, String> 
 }
 
 /// Regional skin smooth on GPU preview cache (Sprint 12 / Nexus D WGSL).
-#[flutter_rust_bridge::frb(sync)]
 pub fn apply_gpu_beauty_pass(id: i64, mask: SegmentationMask, strength: f32) -> Result<(), String> {
     #[cfg(feature = "gpu")]
     {
@@ -93,7 +89,6 @@ pub fn apply_gpu_beauty_pass(id: i64, mask: SegmentationMask, strength: f32) -> 
 }
 
 /// Full regional beauty on GPU preview (Nexus D): skin/eye/lip/blush WGSL; lip plump CPU warp.
-#[flutter_rust_bridge::frb(sync)]
 pub fn apply_gpu_beauty_pipeline(
     id: i64,
     analysis: FaceAnalysisResult,
@@ -119,7 +114,6 @@ pub fn apply_gpu_beauty_pipeline(
 }
 
 /// GPU overlay composite on preview cache (Sprint 2 P2 — normal/multiply/screen).
-#[flutter_rust_bridge::frb(sync)]
 pub fn apply_gpu_overlay_blend(
     id: i64,
     overlay: RgbaImageBuffer,

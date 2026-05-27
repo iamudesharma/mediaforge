@@ -86,10 +86,14 @@ class _CropOverlayState extends State<CropOverlay> {
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.translucent,
-                    onPanStart: (d) {
-                      final px = _pixel(d.localPosition);
+                    onScaleStart: (d) {
+                      if (d.pointerCount >= 2) {
+                        _straightenAtScaleStart = c.straightenDegrees;
+                        return;
+                      }
+                      final px = _pixel(d.focalPoint);
                       if (px == null) return;
-                      _mode = _hitTest(d.localPosition);
+                      _mode = _hitTest(d.focalPoint);
                       if (_mode == null) return;
                       _startPixel = px;
                       _startCropX = c.cropX;
@@ -97,9 +101,20 @@ class _CropOverlayState extends State<CropOverlay> {
                       _startCropW = c.cropW;
                       _startCropH = c.cropH;
                     },
-                    onPanUpdate: (d) {
-                      final px = _pixel(d.localPosition);
-                      if (px == null || _mode == null || _startPixel == null) return;
+                    onScaleUpdate: (d) {
+                      if (d.pointerCount >= 2 &&
+                          _straightenAtScaleStart != null &&
+                          d.rotation.abs() > 0.0005) {
+                        final deg = _straightenAtScaleStart! +
+                            d.rotation * 180 / math.pi;
+                        c.setStraightenDegrees(deg);
+                        return;
+                      }
+                      if (d.pointerCount != 1) return;
+                      final px = _pixel(d.focalPoint);
+                      if (px == null || _mode == null || _startPixel == null) {
+                        return;
+                      }
                       final dx = (px.dx - _startPixel!.dx).round();
                       final dy = (px.dy - _startPixel!.dy).round();
                       switch (_mode!) {
@@ -148,25 +163,11 @@ class _CropOverlayState extends State<CropOverlay> {
                           );
                       }
                     },
-                    onPanEnd: (_) {
+                    onScaleEnd: (_) {
                       _mode = null;
                       _startPixel = null;
+                      _straightenAtScaleStart = null;
                     },
-                    onScaleStart: (d) {
-                      if (d.pointerCount >= 2) {
-                        _straightenAtScaleStart = c.straightenDegrees;
-                      }
-                    },
-                    onScaleUpdate: (d) {
-                      if (d.pointerCount >= 2 &&
-                          _straightenAtScaleStart != null &&
-                          d.rotation.abs() > 0.0005) {
-                        final deg = _straightenAtScaleStart! +
-                            d.rotation * 180 / math.pi;
-                        c.setStraightenDegrees(deg);
-                      }
-                    },
-                    onScaleEnd: (_) => _straightenAtScaleStart = null,
                     child: CustomPaint(
                       painter: _CropOverlayPainter(
                         crop: c,

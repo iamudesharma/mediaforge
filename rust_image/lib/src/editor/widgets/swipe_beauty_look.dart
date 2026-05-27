@@ -81,8 +81,13 @@ class _SwipeBeautyLookLayerState extends State<SwipeBeautyLookLayer> {
 
   @override
   Widget build(BuildContext context) {
+    final session = widget.session;
     return ListenableBuilder(
-      listenable: widget.session,
+      listenable: Listenable.merge([
+        session.beautyPreviewListenable,
+        session.processingListenable,
+        session.faceChromeListenable,
+      ]),
       builder: (context, _) {
         final look = widget.session.previewBeautyLook ??
             widget.session.committedBeautyLook;

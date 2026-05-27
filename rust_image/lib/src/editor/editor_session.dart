@@ -33,6 +33,7 @@ import 'services/image_export_saver.dart';
 import 'services/gpu_texture_registry.dart';
 import 'services/live_camera_service.dart';
 import 'services/rust_worker.dart';
+import 'services/swipe_look_names.dart';
 import 'services/temporal_face_smoother.dart';
 import 'widgets/gpu_texture_preview.dart';
 import 'widgets/paint_stroke_painter.dart';
@@ -59,11 +60,20 @@ class EditorSession extends ChangeNotifier {
 
   final gpuTextureListenable = ValueNotifier<int>(0);
 
-  /// Swipe mood filter shown during browse (may differ from committed until release).
+  /// Swipe mood filter shown during browse (Filters tab moods).
   MoodFilterPreset? previewMoodPreset;
 
   /// Committed swipe mood filter from [editGraph].
   MoodFilterPreset? get committedMoodPreset => editGraph.committedMoodPreset;
+
+  /// Combo swipe look shown during browse (may differ from committed until release).
+  SwipeLookPreset? previewSwipeLook;
+
+  /// Committed combo swipe look from [editGraph].
+  SwipeLookPreset? get committedSwipeLookPreset =>
+      editGraph.committedSwipeLookPreset;
+
+  Timer? _swipeLookDebounceTimer;
 
   /// Sprint 12 — native face analysis + feathered skin mask at edit resolution.
   FaceAnalysisResult? faceAnalysis;
@@ -122,6 +132,8 @@ class EditorSession extends ChangeNotifier {
   LayerStack layerStack = LayerStack();
 
   PaintBrushKind paintBrush = PaintBrushKind.pen;
+  EraserMode eraserMode = EraserMode.partial;
+  bool paintShapeFilled = false;
   Color paintColor = const Color(0xFF4EDEA3);
   double paintStrokeWidth = 8;
   double paintStrokeOpacity = 1;
@@ -141,16 +153,26 @@ class EditorSession extends ChangeNotifier {
   /// Beauty panel status (analyzing / landmarks) without full editor rebuilds.
   final ValueNotifier<int> faceChromeListenable = ValueNotifier<int>(0);
 
-  /// Stable merge instance — do not allocate a new [Listenable.merge] per build
-  /// (that churns [ListenableBuilder] subscriptions and can destabilize rebuilds).
+  /// Swipe mood label — preset browse only (Sprint 14; not full session).
+  final ValueNotifier<int> moodPreviewListenable = ValueNotifier<int>(0);
+
+  /// Combo swipe look label chip.
+  final ValueNotifier<int> swipeLookPreviewListenable = ValueNotifier<int>(0);
+
+  /// Swipe beauty look label — look browse only (Sprint 14).
+  final ValueNotifier<int> beautyPreviewListenable = ValueNotifier<int>(0);
+
+  /// Stable merge — shell chrome only; preview uses [previewListenable] separately.
   late final Listenable editorChromeListenable = Listenable.merge([
     layerListenable,
-    previewListenable,
     processingListenable,
     blockingListenable,
     statusListenable,
     chromeListenable,
   ]);
+
+  DateTime? _statusThrottleNext;
+  static const _liveStatusThrottleMs = 250;
 
   Uint8List? sourceBytes;
   Uint8List? displayBytes;
@@ -247,7 +269,10 @@ class EditorSession extends ChangeNotifier {
 
   void notifyLayerChanged() {
     layerListenable.value++;
+    _bumpPreviewOnly();
   }
+
+  bool get hasUncommittedLayers => layerStack.isNotEmpty;
 
   void notifyPreviewChanged() {
     previewListenable.value++;
@@ -275,6 +300,27 @@ class EditorSession extends ChangeNotifier {
   void _bumpStatus() {
     statusListenable.value++;
     notifyListeners();
+  }
+
+  /// Live camera FPS / status — throttle shell rebuilds (Sprint 14, scenario H).
+  void _bumpStatusThrottled() {
+    final now = DateTime.now();
+    final next = _statusThrottleNext;
+    if (next != null && now.isBefore(next)) return;
+    _statusThrottleNext = now.add(const Duration(milliseconds: _liveStatusThrottleMs));
+    _bumpStatus();
+  }
+
+  void _bumpMoodPreview() {
+    moodPreviewListenable.value++;
+  }
+
+  void _bumpSwipeLookPreview() {
+    swipeLookPreviewListenable.value++;
+  }
+
+  void _bumpBeautyPreview() {
+    beautyPreviewListenable.value++;
   }
 
   /// Tool panel / export settings (format, quality, backend) — not preview pixels.
@@ -310,6 +356,7 @@ class EditorSession extends ChangeNotifier {
       width: paintStrokeWidth,
       opacity: paintStrokeOpacity,
       brush: paintBrush,
+      filled: paintShapeFilled,
     );
     if (imageWidth > 0 && imageHeight > 0 && childSize != Size.zero) {
       layer.displayPath = buildPaintStrokePath(
@@ -317,10 +364,54 @@ class EditorSession extends ChangeNotifier {
         imageWidth: imageWidth,
         imageHeight: imageHeight,
         childSize: childSize,
+        brush: paintBrush,
       );
     }
     layerStack.add(layer);
     setActivePaintStroke(const []);
+    notifyLayerChanged();
+    notifyListeners();
+  }
+
+  /// Duplicate all selected top-level layers with a small offset (Sprint 17).
+  void duplicateSelection() {
+    if (layerStack.selectedIds.isEmpty) return;
+    pushLayerUndo();
+    final newIds = <String>[];
+    for (final id in layerStack.selectedIds.toList()) {
+      for (final layer in layerStack.layers) {
+        if (layer.id != id) continue;
+        final dup = cloneLayerWithNewId(layer);
+        layerStack.add(dup, select: false);
+        newIds.add(dup.id);
+        break;
+      }
+    }
+    if (newIds.isNotEmpty) layerStack.selectMany(newIds);
+    notifyLayerChanged();
+    notifyListeners();
+  }
+
+  /// Group selected layers; returns error message for UI snackbar.
+  String? groupSelection() {
+    pushLayerUndo();
+    final err = layerStack.groupSelected();
+    if (err != null) {
+      if (_undoLayers.isNotEmpty) _undoLayers.removeLast();
+      return err;
+    }
+    notifyLayerChanged();
+    notifyListeners();
+    return null;
+  }
+
+  void ungroupSelection() {
+    final id = layerStack.selectedId;
+    if (id == null) return;
+    final layer = layerStack.findById(id);
+    if (layer is! GroupLayer) return;
+    pushLayerUndo();
+    layerStack.ungroup(id);
     notifyLayerChanged();
     notifyListeners();
   }
@@ -345,6 +436,7 @@ class EditorSession extends ChangeNotifier {
   void dispose() {
     _debounceTimer?.cancel();
     _moodDebounceTimer?.cancel();
+    _swipeLookDebounceTimer?.cancel();
     _beautyDebounceTimer?.cancel();
     _overlayDebounceTimer?.cancel();
     activePaintStrokeListenable.dispose();
@@ -355,6 +447,9 @@ class EditorSession extends ChangeNotifier {
     statusListenable.dispose();
     chromeListenable.dispose();
     faceChromeListenable.dispose();
+    moodPreviewListenable.dispose();
+    swipeLookPreviewListenable.dispose();
+    beautyPreviewListenable.dispose();
     gpuTextureListenable.dispose();
     _disposeGpuSurface();
     _temporalSmoother?.dispose();
@@ -526,6 +621,7 @@ class EditorSession extends ChangeNotifier {
       _redoGraph.clear();
       editGraph = EditGraph();
       previewMoodPreset = null;
+      previewSwipeLook = null;
       faceAnalysis = null;
       skinMask = null;
       faceAnalyzing = false;
@@ -822,8 +918,17 @@ class EditorSession extends ChangeNotifier {
       await LiveCameraService.start(
         onFrame: _onLiveCameraFrame,
         maxWidth: liveCameraMaxEdge,
+        beforeInitialize: (_) async {
+          liveCameraActive = true;
+          _bumpFaceChrome();
+          notifyListeners();
+          await _yieldToUi();
+          await _yieldToUi();
+          if (defaultTargetPlatform == TargetPlatform.android) {
+            await Future<void>.delayed(const Duration(milliseconds: 200));
+          }
+        },
       );
-      liveCameraActive = true;
       final previewSize = LiveCameraService.controller?.value.previewSize;
       if (previewSize != null) {
         imageInfo = ImageInfo(
@@ -835,6 +940,7 @@ class EditorSession extends ChangeNotifier {
       status = 'Live camera · front';
       _bumpStatus();
     } catch (e) {
+      liveCameraActive = false;
       _temporalSmoother?.dispose();
       _temporalSmoother = null;
       status = 'Live camera failed: $e';
@@ -965,15 +1071,15 @@ class EditorSession extends ChangeNotifier {
             await _ensureGpuSurface(base);
             final handle = gpuPreviewHandle;
             if (handle != null) {
-              uploadGpuPreviewSurface(id: handle, buffer: base);
-              _applyGpuBeautyPipelineSync(
+              await uploadGpuPreviewSurface(id: handle, buffer: base);
+              await _applyGpuBeautyPipeline(
                 handle: handle,
                 buffer: base,
                 skinMask: mask,
                 analysis: analysis,
                 params: params,
               );
-              final displayRb = readbackGpuPreviewSurface(id: handle);
+              final displayRb = await readbackGpuPreviewSurface(id: handle);
               rgbaBuffer = displayRb;
               previewRgba = null;
               liveBeautyGpuActive = true;
@@ -988,7 +1094,7 @@ class EditorSession extends ChangeNotifier {
               status = look != null
                   ? 'Live · ${beautyLookLabel(look)}$fps'
                   : 'Live · beauty$fps';
-              _bumpStatus();
+              _bumpStatusThrottled();
               displayBytes = null;
               _bumpPreviewOnly();
               return;
@@ -1012,7 +1118,7 @@ class EditorSession extends ChangeNotifier {
         status = look != null
             ? 'Live · ${beautyLookLabel(look)}'
             : 'Live · beauty';
-        _bumpStatus();
+        _bumpStatusThrottled();
       } else {
         previewRgba = null;
         rgbaBuffer = null;
@@ -1021,7 +1127,7 @@ class EditorSession extends ChangeNotifier {
         final pending = params?.hasEffect ?? false;
         if (pending) {
           status = 'Live · detecting face…';
-          _bumpStatus();
+          _bumpStatusThrottled();
         }
       }
       displayBytes = null;
@@ -1124,7 +1230,7 @@ class EditorSession extends ChangeNotifier {
         _previewBeautyParams = p;
         previewBeautyLook = beautyLookMatching(p);
         _beautyDebounceTimer?.cancel();
-        notifyListeners();
+        _bumpBeautyPreview();
         return;
       }
       if (commit) {
@@ -1147,6 +1253,7 @@ class EditorSession extends ChangeNotifier {
     if (livePreview && !commit) {
       _previewBeautyParams = p;
       previewBeautyLook = beautyLookMatching(p);
+      _bumpBeautyPreview();
       _beautyDebounceTimer?.cancel();
       _beautyDebounceTimer = Timer(const Duration(milliseconds: 150), () {
         unawaited(_replayBeautyOnly());
@@ -1204,6 +1311,7 @@ class EditorSession extends ChangeNotifier {
     bool commit = false,
   }) async {
     previewBeautyLook = look;
+    _bumpBeautyPreview();
     final params = look == null
         ? BeautyParamsX.zero
         : beautyParamsForLookPreset(look);
@@ -1221,7 +1329,7 @@ class EditorSession extends ChangeNotifier {
   Future<void> cancelBeautyLookPreview() async {
     previewBeautyLook = committedBeautyLook;
     _previewBeautyParams = null;
-    notifyListeners();
+    _bumpBeautyPreview();
     if (!hasWorkingImage || rgbaBase == null) return;
     await _replayPreview(previewEdge: liveEditMaxEdge);
   }
@@ -1276,14 +1384,14 @@ class EditorSession extends ChangeNotifier {
     return parts.isEmpty ? '' : ' · ${parts.join(' · ')}';
   }
 
-  void _applyGpuBeautyPipelineSync({
+  Future<void> _applyGpuBeautyPipeline({
     required PlatformInt64 handle,
     required RgbaImageBuffer buffer,
     required SegmentationMask skinMask,
     required FaceAnalysisResult analysis,
     required BeautyParams params,
-  }) {
-    applyGpuBeautyPipeline(
+  }) async {
+    await applyGpuBeautyPipeline(
       id: handle,
       analysis: analysis,
       skinMask: skinMask,
@@ -1336,6 +1444,14 @@ class EditorSession extends ChangeNotifier {
 
   /// Live beauty slider — re-smooth cached pipeline output only (no full graph replay).
   Future<void> _replayBeautyOnly({int? gen}) async {
+    try {
+      await _replayBeautyOnlyImpl(gen: gen);
+    } on CoalesceCancelledException {
+      return;
+    }
+  }
+
+  Future<void> _replayBeautyOnlyImpl({int? gen}) async {
     final g = gen ?? _opGeneration;
     var base = _beautyPipelineBase ?? rgbaEditBase;
     if (base == null) {
@@ -1353,29 +1469,33 @@ class EditorSession extends ChangeNotifier {
         await _yieldToUi();
         if (g != _opGeneration) return;
         try {
-          uploadGpuPreviewSurface(id: handle, buffer: base);
-          applyGpuPreviewOps(
+          await uploadGpuPreviewSurface(id: handle, buffer: base);
+          if (g != _opGeneration) return;
+          await applyGpuPreviewOps(
             id: handle,
             ops: editGraph.ops,
             backend: backend,
           );
+          if (g != _opGeneration) return;
           final params = _activeBeautyParams();
           final mask = await _maskForBuffer(base);
+          if (g != _opGeneration) return;
           final analysis = faceAnalysis;
           if (params != null &&
               params.hasEffect &&
               mask != null &&
               analysis != null &&
               FaceAnalysisService.isAnalysisValid(analysis)) {
-            _applyGpuBeautyPipelineSync(
+            await _applyGpuBeautyPipeline(
               handle: handle,
               buffer: base,
               skinMask: mask,
               analysis: analysis,
               params: params,
             );
+            if (g != _opGeneration) return;
           }
-          final displayRb = readbackGpuPreviewSurface(id: handle);
+          final displayRb = await readbackGpuPreviewSurface(id: handle);
           if (g != _opGeneration) return;
           rgbaBuffer = displayRb;
           previewRgba = displayRb;
@@ -1450,7 +1570,7 @@ class EditorSession extends ChangeNotifier {
 
     if (livePreview && !commit) {
       previewMoodPreset = preset;
-      notifyListeners();
+      _bumpMoodPreview();
       _moodDebounceTimer?.cancel();
       _moodDebounceTimer = Timer(const Duration(milliseconds: 60), () {
         unawaited(_previewMoodFilter(preset, strength));
@@ -1468,7 +1588,7 @@ class EditorSession extends ChangeNotifier {
   /// Revert live swipe preview to the committed mood filter (drag cancelled).
   Future<void> cancelMoodPreview() async {
     previewMoodPreset = committedMoodPreset;
-    notifyListeners();
+    _bumpMoodPreview();
     if (!hasWorkingImage || rgbaBase == null) return;
     await _replayPreview(previewEdge: liveEditMaxEdge);
   }
@@ -1524,6 +1644,129 @@ class EditorSession extends ChangeNotifier {
     } catch (e) {
       if (gen == _opGeneration) {
         status = 'Mood failed: $e';
+      }
+    } finally {
+      _endHistoryOp(gen);
+    }
+    notifyListeners();
+  }
+
+  /// Combo swipe look (global grade + beauty). Live while dragging; commit on release.
+  Future<void> setSwipeLook({
+    SwipeLookPreset? look,
+    double strength = 1.0,
+    bool livePreview = false,
+    bool commit = false,
+  }) async {
+    if (!hasWorkingImage) return;
+
+    if (livePreview && !commit) {
+      previewSwipeLook = look;
+      _bumpSwipeLookPreview();
+      _previewBeautyParams =
+          look == null ? null : swipeLookBeautyParamsFor(look);
+      _swipeLookDebounceTimer?.cancel();
+      _swipeLookDebounceTimer = Timer(const Duration(milliseconds: 60), () {
+        unawaited(_previewSwipeLook(look, strength));
+      });
+      return;
+    }
+
+    if (!commit) return;
+
+    _swipeLookDebounceTimer?.cancel();
+    previewSwipeLook = look;
+    _previewBeautyParams = null;
+    await _commitSwipeLook(look, strength);
+  }
+
+  /// Revert live swipe look preview to committed state (drag cancelled).
+  Future<void> cancelSwipeLookPreview() async {
+    previewSwipeLook = committedSwipeLookPreset;
+    _previewBeautyParams = null;
+    _bumpSwipeLookPreview();
+    if (!hasWorkingImage || rgbaBase == null) return;
+    await _replayPreview(previewEdge: liveEditMaxEdge);
+  }
+
+  Future<void> _previewSwipeLook(
+    SwipeLookPreset? look,
+    double strength,
+  ) async {
+    if (!hasWorkingImage || rgbaBase == null) return;
+    if (look != null &&
+        FaceAnalysisService.isSupported &&
+        !FaceAnalysisService.isAnalysisValid(faceAnalysis)) {
+      await analyzeFaceForBeauty();
+    }
+    final liveFilter = look != null
+        ? FilterDescriptor.swipeLook(look, strength: strength)
+        : null;
+    _previewBeautyParams =
+        look == null ? null : swipeLookBeautyParamsFor(look);
+    await _replayPreview(
+      liveFilter: liveFilter,
+      previewEdge: liveEditMaxEdge,
+      excludeCommittedSwipeLook: true,
+      excludeCommittedBeauty: true,
+    );
+  }
+
+  Future<void> _commitSwipeLook(
+    SwipeLookPreset? look,
+    double strength,
+  ) async {
+    final swipeDescriptor = look != null
+        ? FilterDescriptor.swipeLook(look, strength: strength)
+        : null;
+    final beauty = look == null ? null : swipeLookBeautyParamsFor(look);
+    final nextSwipe = editGraph.replaceSwipeLookFilter(swipeDescriptor);
+    final next = nextSwipe.replaceBeautyParams(
+      beauty != null && beauty.hasEffect ? beauty : null,
+    );
+    if (next == editGraph) {
+      notifyListeners();
+      return;
+    }
+
+    cancelDebounced();
+    final gen = ++_opGeneration;
+    status = look != null
+        ? swipeLookDisplayNameFor(look)
+        : 'Original…';
+    _setProcessing(true);
+    _bumpStatus();
+    await _yieldToUi();
+    if (gen != _opGeneration) {
+      _endHistoryOp(gen);
+      return;
+    }
+
+    try {
+      if (rgbaBase != null) {
+        if (look != null &&
+            FaceAnalysisService.isSupported &&
+            !FaceAnalysisService.isAnalysisValid(faceAnalysis)) {
+          await analyzeFaceForBeauty();
+        }
+        _pushGraphUndo();
+        editGraph = next;
+        await _replayPreview(gen: gen);
+        if (gen == _opGeneration) {
+          if (look != null) {
+            final faceOk = FaceAnalysisService.isAnalysisValid(faceAnalysis) &&
+                skinMask != null;
+            status = faceOk
+                ? swipeLookDisplayNameFor(look)
+                : '${swipeLookDisplayNameFor(look)} · no face';
+          } else {
+            status = 'Original';
+          }
+        }
+      }
+    } catch (e) {
+      if (gen == _opGeneration) {
+        status = 'Look failed: $e';
       }
     } finally {
       _endHistoryOp(gen);
@@ -1671,6 +1914,7 @@ class EditorSession extends ChangeNotifier {
     rgbaBuffer = null;
     previewRgba = null;
     previewMoodPreset = editGraph.committedMoodPreset;
+    previewSwipeLook = editGraph.committedSwipeLookPreset;
     _beautyPipelineBase = null;
   }
 
@@ -1688,13 +1932,17 @@ class EditorSession extends ChangeNotifier {
     int? previewEdge,
     int? gen,
     bool excludeCommittedMood = false,
+    bool excludeCommittedSwipeLook = false,
+    bool excludeCommittedBeauty = false,
   }) async {
     final g = gen ?? _opGeneration;
     final base = _editBaseUnfiltered();
     if (g != _opGeneration) return;
-    final graphOps = excludeCommittedMood
-        ? editGraph.withoutMoodFilter().ops
-        : editGraph.ops;
+    var graph = editGraph;
+    if (excludeCommittedMood) graph = graph.withoutMoodFilter();
+    if (excludeCommittedSwipeLook) graph = graph.withoutSwipeLookFilter();
+    if (excludeCommittedBeauty) graph = graph.withoutBeautyFilter();
+    final graphOps = graph.ops;
     final ops = <EditOp>[...graphOps];
     if (liveFilter != null) {
       ops.add(EditOp.filter(filter: liveFilter.toImageFilter()));
@@ -1707,10 +1955,14 @@ class EditorSession extends ChangeNotifier {
         await _ensureGpuSurface(base);
         final handle = gpuPreviewHandle;
         if (handle != null) {
-          uploadGpuPreviewSurface(id: handle, buffer: base);
-          applyGpuPreviewOps(id: handle, ops: ops, backend: backend);
+          if (g != _opGeneration) return;
+          await uploadGpuPreviewSurface(id: handle, buffer: base);
+          if (g != _opGeneration) return;
+          await applyGpuPreviewOps(id: handle, ops: ops, backend: backend);
+          if (g != _opGeneration) return;
           final params = _activeBeautyParams();
           final mask = await _maskForBuffer(base);
+          if (g != _opGeneration) return;
           final analysis = faceAnalysis;
           final needsBeauty = params != null &&
               params.hasEffect &&
@@ -1718,15 +1970,17 @@ class EditorSession extends ChangeNotifier {
               analysis != null &&
               FaceAnalysisService.isAnalysisValid(analysis);
           if (needsBeauty) {
-            _applyGpuBeautyPipelineSync(
+            await _applyGpuBeautyPipeline(
               handle: handle,
               buffer: base,
               skinMask: mask,
               analysis: analysis,
               params: params,
             );
+            if (g != _opGeneration) return;
           }
-          final displayRb = readbackGpuPreviewSurface(id: handle);
+          final displayRb = await readbackGpuPreviewSurface(id: handle);
+          if (g != _opGeneration) return;
           if (ops.isNotEmpty || needsBeauty) {
             _beautyPipelineBase = needsBeauty ? null : displayRb;
           }
@@ -1797,6 +2051,75 @@ class EditorSession extends ChangeNotifier {
     );
     gpuTextureId = texId;
     gpuTextureListenable.value = texId ?? 0;
+  }
+
+  /// Bake stickers, text, and paint into image pixels so filters/beauty apply to
+  /// the whole canvas. Clears layer undo; layer strokes can no longer be undone.
+  Future<void> commitLayersToCanvas() async {
+    if (!hasImage || layerStack.isEmpty || busy) return;
+
+    final gen = ++_opGeneration;
+    status = 'Applying layers…';
+    _setProcessing(true);
+    _bumpStatus();
+    await _yieldToUi();
+
+    final sw = Stopwatch()..start();
+    try {
+      await _ensureRgbaReady();
+      await RustWorker.ensureStarted();
+      final full = rgbaBase;
+      if (full == null) return;
+
+      await _bakeGraphIntoFullBase();
+
+      rgbaBase = await LayerBake.bakeOnto(rgbaBase!, layerStack);
+
+      layerStack = LayerStack();
+      _undoLayers.clear();
+      _redoLayers.clear();
+
+      final prepared = await RustWorker.prepareEditBaseFromRgba(
+        buffer: rgbaBase!,
+        liveEditMaxEdge: liveEditMaxEdge,
+      );
+      rgbaEditBase = prepared.edit;
+      rgbaBuffer = prepared.edit;
+      previewRgba = prepared.edit;
+      rgbaPipeline = true;
+
+      if (!useRgbaPreview) {
+        displayBytes = await RustWorker.encodePreview(
+          buffer: prepared.edit,
+          previewMaxEdge: previewMaxEdge,
+          quality: quality,
+        );
+      }
+      imageInfo = ImageInfo(
+        width: rgbaBase!.width,
+        height: rgbaBase!.height,
+        format: imageInfo?.format,
+      );
+
+      _beautyPipelineBase = null;
+      _disposeGpuSurface();
+      if (gen != _opGeneration) return;
+      await _replayPreview(gen: gen);
+
+      notifyPreviewChanged();
+      notifyLayerChanged();
+      lastDuration = sw.elapsed;
+      status =
+          'Layers applied · ${sw.elapsedMilliseconds} ms · filters affect whole image';
+    } catch (e) {
+      status = 'Apply layers failed: $e';
+    } finally {
+      if (gen == _opGeneration) {
+        _setProcessing(false);
+        _bumpStatus();
+        notifyListeners();
+      }
+    }
   }
 
   /// Bake committed filters into full-res base before destructive pixel edits.

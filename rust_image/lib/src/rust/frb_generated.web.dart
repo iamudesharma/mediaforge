@@ -203,6 +203,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SegmentationMask dco_decode_segmentation_mask(dynamic raw);
 
   @protected
+  SwipeLookExtrasDto dco_decode_swipe_look_extras_dto(dynamic raw);
+
+  @protected
+  SwipeLookPreset dco_decode_swipe_look_preset(dynamic raw);
+
+  @protected
   TextOverlay dco_decode_text_overlay(dynamic raw);
 
   @protected
@@ -420,6 +426,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SegmentationMask sse_decode_segmentation_mask(SseDeserializer deserializer);
+
+  @protected
+  SwipeLookExtrasDto sse_decode_swipe_look_extras_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  SwipeLookPreset sse_decode_swipe_look_preset(SseDeserializer deserializer);
 
   @protected
   TextOverlay sse_decode_text_overlay(SseDeserializer deserializer);
@@ -712,6 +726,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_segmentation_mask(
     SegmentationMask self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_swipe_look_extras_dto(
+    SwipeLookExtrasDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_swipe_look_preset(
+    SwipeLookPreset self,
     SseSerializer serializer,
   );
 

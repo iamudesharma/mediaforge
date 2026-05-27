@@ -1,8 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'crop_controller.dart';
+import 'state/editor_providers.dart';
 import 'draw_placement.dart';
 import 'editor_session.dart';
 import 'models/overlay_layer.dart';
@@ -24,11 +27,12 @@ import 'widgets/compare_hold_button.dart';
 import 'services/face_analysis_service.dart';
 import 'services/live_camera_service.dart';
 import 'services/sticker_image_import.dart';
+import 'services/paint_hit_test.dart';
 import 'widgets/editor_tool_rail.dart';
 import 'widgets/live_preview.dart';
 
 /// Full-screen editor layout (preview + tool rail). Prefer [RustImageEditorWidget] for drop-in use.
-class RustImageEditorView extends StatefulWidget {
+class RustImageEditorView extends ConsumerStatefulWidget {
   const RustImageEditorView({
     super.key,
     required this.config,
@@ -43,16 +47,21 @@ class RustImageEditorView extends StatefulWidget {
     required RustImageEditorConfig config,
     required EditorSession session,
   }) =>
-      RustImageEditorView(config: config, session: session);
+      ProviderScope(
+        overrides: [
+          editorSessionProvider.overrideWithValue(session),
+        ],
+        child: RustImageEditorView(config: config, session: session),
+      );
 
   @override
-  State<RustImageEditorView> createState() => _RustImageEditorViewState();
+  ConsumerState<RustImageEditorView> createState() => _RustImageEditorViewState();
 }
 
 /// @deprecated Use [RustImageEditorView]
 typedef EditorScreen = RustImageEditorView;
 
-class _RustImageEditorViewState extends State<RustImageEditorView> {
+class _RustImageEditorViewState extends ConsumerState<RustImageEditorView> {
   final _drawPlacement = DrawPlacementController();
   final _overlayPlacement = OverlayPlacementController();
   final _cropController = CropController();
@@ -63,7 +72,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   AdjustControlKind _adjustKind = AdjustControlKind.brightness;
   Completer<StickerShapeMask?>? _shapeMaskCompleter;
 
-  EditorSession get _session => widget.session;
+  EditorSession get _session => ref.watch(editorSessionProvider);
   List<EditorTool> get _tools => widget.config.enabledTools;
 
   /// Fallback when [RustImageEditorConfig.enabledTools] is empty (avoids crashes).
@@ -91,7 +100,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
   void initState() {
     super.initState();
     _tool = _initialTool();
-    _session.addListener(_onSessionChanged);
+    widget.session.addListener(_onSessionChanged);
   }
 
   @override
@@ -107,7 +116,7 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
 
   @override
   void dispose() {
-    _session.removeListener(_onSessionChanged);
+    widget.session.removeListener(_onSessionChanged);
     _drawPlacement.dispose();
     _overlayPlacement.dispose();
     _cropController.dispose();
@@ -190,19 +199,42 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
     return 'Beauty';
   }
 
+  Widget _previewListenableBuilder(
+    Widget Function(BuildContext context) builder,
+  ) {
+    return ListenableBuilder(
+      listenable: ref.watch(editorCanvasListenableProvider),
+      builder: (context, _) => builder(context),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final wide = _useWideLayout(context);
+    final shellListenable = ref.watch(editorChromeListenableProvider);
 
-    return Scaffold(
+    return CallbackShortcuts(
+      bindings: {
+        if (_tool == EditorTool.layers)
+          const SingleActivator(LogicalKeyboardKey.keyD, control: true):
+              () => _session.duplicateSelection(),
+        if (_tool == EditorTool.layers)
+          const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
+              () => _session.duplicateSelection(),
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
       backgroundColor: wide ? LuminaTokens.background : LuminaTokens.canvas,
       body: ListenableBuilder(
-        listenable: _session.editorChromeListenable,
+        listenable: shellListenable,
         builder: (context, _) {
           return wide
               ? SafeArea(child: _buildWide(context))
               : _buildMobile(context);
         },
+      ),
+    ),
       ),
     );
   }
@@ -265,10 +297,12 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
               onDismiss: _dismissOverlay,
             )
           : null,
-      previewBuilder: (metrics) => _buildPreview(
-        context,
-        immersive: true,
-        overlayBottomInset: metrics.bottomInset,
+      previewBuilder: (metrics) => _previewListenableBuilder(
+        (context) => _buildPreview(
+          context,
+          immersive: true,
+          overlayBottomInset: metrics.bottomInset,
+        ),
       ),
       toolPanelBuilder: () => _toolPanelHost(
         compact: true,
@@ -314,14 +348,16 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
         children: [
           if (!immersive) ...[
             _buildTopBar(context),
-            _MetaChips(session: _session),
+            _MetaChips(session: _session, statusListenable: ref.watch(editorStatusListenableProvider)),
             const SizedBox(height: 8),
           ],
           Expanded(
-            child: _buildPreview(
-              context,
-              immersive: immersive,
-              overlayBottomInset: 0,
+            child: _previewListenableBuilder(
+              (context) => _buildPreview(
+                context,
+                immersive: immersive,
+                overlayBottomInset: 0,
+              ),
             ),
           ),
         ],
@@ -353,14 +389,14 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
         (onPaintTool ||
             (hasLayers &&
                 (_tool == EditorTool.stickers || _tool == EditorTool.layers)));
-    final swipeMoodEnabled = widget.config.enableSwipeMoodFilters &&
+    final swipeLookEnabled = widget.config.enableSwipeLooks &&
         !_compareHeld &&
         _tool != EditorTool.transform &&
-        !onBeautyTool &&
         _tool != EditorTool.draw &&
         _tool != EditorTool.overlay &&
         !onPaintTool &&
-        !layerInteraction;
+        !layerInteraction &&
+        !(onBeautyTool && _session.beautyEraserMode);
 
     final swipeBeautyEnabled = widget.config.enableSwipeBeautyLooks &&
         !_compareHeld &&
@@ -399,9 +435,22 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
       showLayerOverlay:
           (hasLayers || onPaintTool || beautyEraser) && _session.hasImage && iw > 0,
       layerInteractionEnabled: layerInteraction,
+      layersToolActive: _tool == EditorTool.layers,
       paintMode: onPaintTool || beautyEraser,
       imageWidth: iw,
       imageHeight: ih,
+      eraserMode: _session.eraserMode,
+      onObjectErase: (pixelOffset) {
+        final layers = _session.layerStack.layers;
+        final hitIndex = layers.lastIndexWhere(
+          (l) => l is PaintStrokeLayer && PaintHitTest.hitTestLayer(l, pixelOffset),
+        );
+        if (hitIndex < 0) return;
+        _session.pushLayerUndo();
+        layers.removeAt(hitIndex);
+        _session.notifyLayerChanged();
+        _session.notifyListeners();
+      },
       onLayerStackChanged: _session.notifyLayerChanged,
       onTransformBegin: _session.pushLayerUndo,
       onUserImageStickerTap: (layer) {
@@ -464,17 +513,19 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
           : _session.paintStrokeWidth,
       activePaintOpacity: beautyEraser ? 0.45 : _session.paintStrokeOpacity,
       activePaintBrush: beautyEraser ? PaintBrushKind.eraser : _session.paintBrush,
-      enableSwipeMoodFilters: widget.config.enableSwipeMoodFilters,
-      swipeMoodFiltersEnabled: swipeMoodEnabled,
-      moodFilterStrength: widget.config.swipeMoodFilterStrength,
-      moodSession: _session,
+      activePaintFilled: _session.paintShapeFilled,
+      enableSwipeLooks: widget.config.enableSwipeLooks,
+      swipeLooksEnabled: swipeLookEnabled,
+      swipeLookStrength: widget.config.swipeLookStrength,
+      swipeLookSession: _session,
       enableSwipeBeautyLooks: widget.config.enableSwipeBeautyLooks,
       swipeBeautyLooksEnabled: swipeBeautyEnabled,
       beautySession: _session,
       showFaceLandmarks: _session.showDebugFaceLandmarks &&
           FaceAnalysisService.isAnalysisValid(_session.faceAnalysis),
       faceLandmarks: _session.faceAnalysis?.landmarks,
-      liveCameraController: _session.liveCameraActive
+      liveCameraController: (_session.liveCameraActive ||
+              _session.liveCameraTransitioning)
           ? LiveCameraService.controller
           : null,
       liveShowBeautyPreview: _session.liveBeautyRgbaActive,
@@ -505,21 +556,33 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
                   widget.config.title.toUpperCase(),
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
-                AnimatedSwitcher(
-                  duration: EditorMotion.fast,
-                  child: Text(
-                    _session.status,
-                    key: ValueKey(_session.status),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                  ),
+                ListenableBuilder(
+                  listenable: ref.watch(editorStatusListenableProvider),
+                  builder: (context, _) {
+                    return AnimatedSwitcher(
+                      duration: EditorMotion.fast,
+                      child: Text(
+                        _session.status,
+                        key: ValueKey(_session.status),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
+          if (_session.hasUncommittedLayers)
+            FilledButton.tonal(
+              onPressed: _session.busy
+                  ? null
+                  : () => unawaited(_session.commitLayersToCanvas()),
+              child: const Text('Apply'),
+            ),
           if (_tool == EditorTool.transform && _session.hasImage)
             FilledButton(
               onPressed: _session.busy
@@ -555,25 +618,45 @@ class _RustImageEditorViewState extends State<RustImageEditorView> {
 }
 
 class _MetaChips extends StatelessWidget {
-  const _MetaChips({required this.session});
+  const _MetaChips({
+    required this.session,
+    required this.statusListenable,
+  });
 
   final EditorSession session;
+  final Listenable statusListenable;
 
   @override
   Widget build(BuildContext context) {
-    if (!session.hasImage && !session.liveCameraActive) {
-      return const SizedBox.shrink();
-    }
+    return ListenableBuilder(
+      listenable: statusListenable,
+      builder: (context, _) {
+        if (!session.hasImage && !session.liveCameraActive) {
+          return const SizedBox.shrink();
+        }
 
-    final gpu = session.gpuInfo;
-    final labels = <String>[
-      session.dimensionsLabel,
-      session.sizeLabel,
-      if (session.rgbaPipeline) 'RGBA',
-      if (session.editOpCount > 0) '${session.editOpCount} ops',
-      if (gpu?.available == true) gpu!.api,
-    ];
+        final gpu = session.gpuInfo;
+        final labels = <String>[
+          session.dimensionsLabel,
+          session.sizeLabel,
+          if (session.rgbaPipeline) 'RGBA',
+          if (session.editOpCount > 0) '${session.editOpCount} ops',
+          if (gpu?.available == true) gpu!.api,
+        ];
 
+        return _MetaChipsRow(labels: labels);
+      },
+    );
+  }
+}
+
+class _MetaChipsRow extends StatelessWidget {
+  const _MetaChipsRow({required this.labels});
+
+  final List<String> labels;
+
+  @override
+  Widget build(BuildContext context) {
     return AnimatedSize(
       duration: EditorMotion.medium,
       curve: EditorMotion.enter,

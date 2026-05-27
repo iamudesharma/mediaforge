@@ -1,5 +1,6 @@
 use crate::api::image::{MoodFilterPreset, RgbaImageBuffer};
-use crate::filters::{apply_mood_color_rgba, recipe_for};
+use crate::filters::{apply_mood_color_rgba, recipe_for, swipe_look_recipe_for, MoodRecipe};
+use crate::api::image::SwipeLookPreset;
 
 /// Edge length of baked 3D LUT cubes (33³ ≈ 36k entries).
 pub const LUT_SIZE: u32 = 33;
@@ -14,7 +15,16 @@ pub fn lut_byte_len() -> usize {
 
 /// Bake a 33³ RGBA LUT for [preset] using the color-only mood recipe.
 pub fn bake_mood_lut(preset: MoodFilterPreset) -> Vec<u8> {
-    let recipe = recipe_for(preset);
+    bake_recipe_lut(recipe_for(preset))
+}
+
+/// Bake a 33³ RGBA LUT for a swipe look color grade.
+pub fn bake_swipe_look_lut(preset: SwipeLookPreset) -> Vec<u8> {
+    bake_recipe_lut(swipe_look_recipe_for(preset).mood)
+}
+
+/// Bake a 33³ RGBA LUT from a parametric mood recipe (color only).
+pub fn bake_recipe_lut(recipe: MoodRecipe) -> Vec<u8> {
     let size = LUT_SIZE as usize;
     let mut data = vec![0u8; lut_byte_len()];
 

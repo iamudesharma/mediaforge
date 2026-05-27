@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../layer_coordinates.dart';
 import '../models/layer_transform.dart';
 import '../models/overlay_layer.dart';
+import '../services/layer_bounds.dart';
 import '../theme/lumina_tokens.dart';
+import 'group_layer_widget.dart';
 import 'layer_content_widgets.dart';
 
 /// Pinch-drag-rotate wrapper for a single overlay layer.
@@ -82,6 +84,7 @@ class _TransformableLayerState extends State<TransformableLayer> {
     final phone = MediaQuery.sizeOf(context).shortestSide < 600;
     return switch (widget.layer) {
       EmojiLayer() => phone ? 140 : 104,
+      GroupLayer() => phone ? 140 : 104,
       StickerLayer() => phone ? 132 : 96,
       TextLayer() => phone ? 120 : 88,
       _ => phone ? 120 : 88,
@@ -97,6 +100,14 @@ class _TransformableLayerState extends State<TransformableLayer> {
   }
 
   Size _sourceSize() {
+    final layer = widget.layer;
+    if (layer is GroupLayer) {
+      final union =
+          LayerBounds.unionBounds(layer.children, parentGroup: layer.transform);
+      if (union != null) {
+        return Size(union.width, union.height);
+      }
+    }
     return switch (widget.layer) {
       StickerLayer(:final userBytes, :final userSourceWidth, :final userSourceHeight)
           when userBytes != null && userBytes.isNotEmpty =>
@@ -126,8 +137,8 @@ class _TransformableLayerState extends State<TransformableLayer> {
     if (widget.layer is PaintStrokeLayer) {
       return const SizedBox.shrink();
     }
-
     final source = _sourceSize();
+    final isGroup = widget.layer is GroupLayer;
     final visual = widget.coords.layerDisplaySize(
       sourceWidth: source.width,
       sourceHeight: source.height,
@@ -161,7 +172,12 @@ class _TransformableLayerState extends State<TransformableLayer> {
                 opacity: _t.opacity.clamp(0, 1),
                 child: Container(
                   decoration: widget.selected ? _selectionDecoration : null,
-                  child: LayerContentWidget(layer: widget.layer),
+                  child: isGroup
+                      ? GroupLayerWidget(
+                          group: widget.layer as GroupLayer,
+                          coords: widget.coords,
+                        )
+                      : LayerContentWidget(layer: widget.layer),
                 ),
               ),
             ),

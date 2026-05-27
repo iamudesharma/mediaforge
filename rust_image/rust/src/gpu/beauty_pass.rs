@@ -21,6 +21,7 @@ struct SkinSmoothParams {
     height: u32,
     radius: u32,
     strength: f32,
+    preserve_detail: f32,
 }
 
 #[repr(C)]
@@ -114,6 +115,7 @@ impl GpuEngine {
         teeth_mask: Option<&SegmentationMask>,
         exclude: Option<&SegmentationMask>,
     ) -> Result<(), String> {
+        let _gpu = super::engine::gpu_op_lock();
         if !params.is_active() {
             return Ok(());
         }
@@ -200,6 +202,7 @@ impl GpuEngine {
                 height,
                 radius,
                 strength,
+                preserve_detail: params.skin_preserve_detail,
             };
             active_is_1 = dispatch(
                 &mut encoder,
