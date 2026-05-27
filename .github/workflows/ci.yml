@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  melos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Bootstrap workspace
+        run: |
+          dart pub get
+          dart run melos bootstrap
+
+      - name: Analyze rust_gpu_texture
+        run: dart run melos exec --scope=rust_gpu_texture -- flutter analyze --no-fatal-infos
+
+      - name: Test rust_gpu_texture
+        run: dart run melos exec --scope=rust_gpu_texture -- flutter test
+
+      - name: Analyze rust_image_core
+        run: dart run melos exec --scope=rust_image_core -- flutter analyze --no-fatal-infos
+
+      - name: Analyze rust_camera_runtime
+        run: dart run melos exec --scope=rust_camera_runtime -- flutter analyze --no-fatal-infos
+
+      - name: Test rust_camera_runtime
+        run: dart run melos exec --scope=rust_camera_runtime -- flutter test
+
+      - name: Analyze rust_image_editor
+        run: dart run melos exec --scope=rust_image_editor -- flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+
+      - name: Test rust_image_editor
+        run: dart run melos exec --scope=rust_image_editor -- flutter test
+
+      - name: Analyze rust_image shim
+        run: dart run melos exec --scope=rust_image -- flutter analyze lib --no-fatal-infos --no-fatal-warnings

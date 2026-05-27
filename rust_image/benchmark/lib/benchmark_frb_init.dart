@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:rust_image/rust_image.dart';
+import 'package:rust_image_editor/rust_image_editor.dart';
 
 bool _benchmarkFfiReady = false;
 
@@ -39,33 +39,21 @@ Future<void> ensureBenchmarkFfi() async {
 }
 
 String? _discoverDylibPath() {
-  const libNames = ['librust_image_core.dylib', 'librust_image_core.so'];
   const relDirs = [
-    'rust/target/release',
-    'rust/target/release/deps',
-    '../rust/target/release',
-    '../rust/target/release/deps',
-    '../../rust/target/release',
-    '../../rust/target/release/deps',
-    '../../../rust/target/release',
-    '../../../rust/target/release/deps',
+    'packages/rust_image_core/rust/target/release',
+    'packages/rust_image_core/rust/target/release/deps',
+    '../rust_image_core/rust/target/release',
+    '../rust_image_core/rust/target/release/deps',
+    '../../packages/rust_image_core/rust/target/release',
+    '../../packages/rust_image_core/rust/target/release/deps',
   ];
+  const libNames = ['librust_image_core.dylib', 'librust_image_core.so'];
 
   for (final dir in relDirs) {
     for (final name in libNames) {
       final file = File('$dir/$name');
       if (file.existsSync()) return file.absolute.path;
     }
-  }
-
-  const frameworkBins = [
-    'build/macos/Build/Products/Debug/rust_image/rust_image_core.framework/Versions/A/rust_image_core',
-    '../example/build/macos/Build/Products/Debug/rust_image/rust_image_core.framework/Versions/A/rust_image_core',
-    'example/build/macos/Build/Products/Debug/rust_image/rust_image_core.framework/Versions/A/rust_image_core',
-  ];
-  for (final path in frameworkBins) {
-    final file = File(path);
-    if (file.existsSync()) return file.absolute.path;
   }
 
   return null;

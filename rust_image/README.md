@@ -11,7 +11,7 @@ dependencies:
 
 ## Supported Platforms & Setup Requirements
 
-Since `rust_image` compiles a native Rust core using CargoKit, you must have the Rust toolchain installed on your development machine.
+The editor UI lives in **`rust_image_editor`**; this package re-exports it for compatibility. Native Rust is built via **`rust_image_core`** (CargoKit) — install the Rust toolchain on your machine.
 
 ### General Prerequisites
 
@@ -190,9 +190,21 @@ end
 
 **GPU mood (11b.1):** Mood + vignette run on wgpu when backend is auto/Gpu; status line shows `gpu_mood` / `gpu_vignette`.
 
-**GPU texture preview (11b.2):** Set `useGpuTexturePreview: true` on macOS **or iOS** for Flutter `Texture` display (skips Dart `ui.Image` decode). Falls back to `RgbaPreviewImage` when unavailable.
+**GPU texture preview (11b.2 + Sprint 22.4):** Set `useGpuTexturePreview: true` on **macOS, iOS, or Android** for Flutter `Texture` display (skips `RgbaPreviewImage` on the hot path when active). Falls back to `RgbaPreviewImage` when unavailable.
 
-**Beauty (Nexus complete):** Beauty tab → looks, regional sliders, eraser, under-eye, **teeth whiten**. **Live camera:** temporal face smooth + GPU texture preview on Apple when `useGpuTexturePreview: true`. Optional **MediaPipe 468** download in Beauty panel (`enableMediaPipeDownloadPrompt`). Vision / ML Kit fallback without download.
+**Beauty GPU (Sprint 22):** All regional beauty (skin, eyes, lips, blush, teeth, under-eye, plump, face warp) runs on **wgpu** when available. With `useGpuTexturePreview: true`, still-photo sliders update the `Texture` only (`previewRgba` stays null). Status: `gpu_beauty`, `gpu_skin`, `gpu_plump`, etc. See [`docs/BEAUTY_GPU.md`](../docs/BEAUTY_GPU.md).
+
+**Beauty (Nexus complete):** Beauty tab → looks, regional sliders, eraser, under-eye, **teeth whiten**. **Live camera:** temporal face smooth + GPU Texture when `useGpuTexturePreview: true`. Optional **MediaPipe 468** download (`enableMediaPipeDownloadPrompt`). Vision / ML Kit fallback without download.
+
+**Recommended config for portrait beauty performance:**
+
+```dart
+RustImageEditorConfig(
+  useRgbaPreview: true,
+  useGpuTexturePreview: true,
+  showPerformanceInStatus: true,
+)
+```
 
 **GPU overlay (Sprint 2 P2):** `apply_gpu_overlay_blend` composites one RGBA layer on the GPU preview cache (normal / multiply / screen).
 
@@ -246,3 +258,7 @@ final out = RustImageEditor.filter(
 ```bash
 cd example && flutter run
 ```
+
+## Publishing (planned split)
+
+Before stable pub.dev, this plugin will split into **`rust_gpu_texture`**, **`rust_image_core`**, **`rust_image_editor`**, and (later) **`rust_camera_runtime`**. The Rust crate is already named `rust_image_core`; the Flutter package will become `rust_image_editor`. Details: [docs/PUB_PACKAGE_SPLIT.md](../docs/PUB_PACKAGE_SPLIT.md).

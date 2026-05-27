@@ -1,0 +1,40 @@
+name: rust_image_editor
+resolution: workspace
+description: >
+  Instagram-style Flutter image editor UI — panels, gestures, Riverpod shell.
+  Engine: rust_image_core. GPU Texture: rust_gpu_texture.
+version: 0.1.0
+homepage: https://github.com/iamudesharma/rust_image
+repository: https://github.com/iamudesharma/rust_image
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  rust_image_core:
+  rust_gpu_texture:
+  rust_camera_runtime:
+  flutter_rust_bridge: 2.12.0
+  freezed_annotation: 3.1.0
+  plugin_platform_interface: ^2.1.8
+  file_selector: ^1.1.0
+  image_picker: ^1.2.2
+  gal: ^2.3.2
+  path_provider: ^2.1.5
+  squadron: ^7.4.3
+  flutter_riverpod: ^2.6.1
+
+dev_dependencies:
+  squadron_builder: ^9.2.0
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  freezed: 3.2.5
+  build_runner: ^2.15.0
+
+flutter:
+  assets:
+    - assets/stickers/
