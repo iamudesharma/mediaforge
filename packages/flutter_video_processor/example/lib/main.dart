@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'demo_session.dart';
 import 'device_benchmark_page.dart';
+import 'media_runtime_perf_page.dart';
 import 'pages/showcase_page.dart';
 import 'pages/status_page.dart';
 import 'pages/video_studio_page.dart';
@@ -77,6 +78,7 @@ class _DemoShellState extends State<DemoShell> {
                 ProcessPage(session: _session),
                 QueuePage(session: _session),
                 DeviceBenchmarkPage(session: _session),
+                MediaRuntimePerfPage(session: _session),
               ],
             ),
           ),
@@ -113,6 +115,11 @@ class _DemoShellState extends State<DemoShell> {
                 icon: Icon(Icons.speed_outlined),
                 selectedIcon: Icon(Icons.speed),
                 label: 'Benchmark',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.monitor_heart_outlined),
+                selectedIcon: Icon(Icons.monitor_heart),
+                label: 'Preview',
               ),
             ],
           ),

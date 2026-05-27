@@ -6,3 +6,4 @@ library;
 
 export 'src/gpu_texture_preview.dart';
 export 'src/gpu_texture_registry.dart';
+export 'src/preview_surface_frame.dart';

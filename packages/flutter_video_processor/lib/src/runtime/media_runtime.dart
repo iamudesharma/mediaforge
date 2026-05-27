@@ -1,33 +1,65 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:rust_gpu_texture/rust_gpu_texture.dart';
-
 import '../video_processor.dart';
+import 'frame_queue.dart';
+import 'media_runtime_metrics.dart';
+import 'playback_clock.dart';
+import 'preview_frame.dart';
 import 'video_texture_pool.dart';
 
 /// Owns one open video asset: probe, trim metadata, preview decode, and texture upload.
 ///
-/// Sprint V1.1 — scrub via [seekTo]; decoder-clock playback lands in V1.3.
+/// V1.3: [PlaybackClock] + decoder-driven [play] / [pause] (no UI timer as master clock).
 class MediaRuntime extends ChangeNotifier {
   MediaRuntime({
     this.previewMaxEdge = 720,
+    this.targetPreviewFps = 30,
+    this.scrubDebounce = const Duration(milliseconds: 280),
+    this.frameQueueMaxDepth = FrameQueue.defaultMaxDepth,
+    this.loopPlayback = true,
     VideoTexturePool? texturePool,
-  }) : _texturePool = texturePool ?? VideoTexturePool();
+    FrameQueue? frameQueue,
+    PlaybackClock? clock,
+  })  : _texturePool = texturePool ?? VideoTexturePool(),
+        _frameQueue = frameQueue ?? FrameQueue(maxDepth: frameQueueMaxDepth),
+        _clock = clock ?? PlaybackClock();
 
   final int previewMaxEdge;
+  final int targetPreviewFps;
+  final Duration scrubDebounce;
+  final int frameQueueMaxDepth;
+  final bool loopPlayback;
   final VideoTexturePool _texturePool;
+  final FrameQueue _frameQueue;
+  final PlaybackClock _clock;
 
   String? _inputPath;
   MediaInfo? _mediaInfo;
   int _trimStartMs = 0;
   int _trimEndMs = 0;
   int _ptsMs = 0;
-  bool _loading = false;
+  bool _scrubLoading = false;
   String? _error;
   Uint8List? _fallbackRgba;
   int _seekGeneration = 0;
+  int _playGeneration = 0;
   bool _disposed = false;
+  bool _closeInProgress = false;
+  Timer? _scrubDebounceTimer;
+  int? _pendingScrubMs;
+  final MediaRuntimeMetrics _metrics = MediaRuntimeMetrics();
+  int? _scrubStartedAtMs;
+  int _playbackFramesInWindow = 0;
+  int _playbackWindowStartMs = 0;
+
+  /// V1.7 — rolling scrub/playback/texture stats (reset on [open]).
+  MediaRuntimeMetrics get metrics => _metrics;
+
+  MediaRuntimeMetricsSnapshot get metricsSnapshot => _metrics.snapshot();
 
   /// Whether [GpuTextureRegistry] can display preview on this platform.
   static bool get isTexturePreviewAvailable => gpuTextureSupported();
@@ -36,16 +68,31 @@ class MediaRuntime extends ChangeNotifier {
   MediaInfo? get mediaInfo => _mediaInfo;
   int get trimStartMs => _trimStartMs;
   int get trimEndMs => _trimEndMs;
+
+  /// Display / decoder-clock position (ms).
   int get ptsMs => _ptsMs;
-  bool get isLoading => _loading;
+  int get mediaTimeMs => _clock.mediaTimeMs;
+
+  PlaybackState get playbackState => _clock.state;
+  bool get isPlaying => _clock.isPlaying;
+  bool get isPaused => _clock.isPaused;
+
+  /// True while a scrub/seek decode is in flight (not used during playback).
+  bool get isLoading => _scrubLoading;
   String? get error => _error;
   Uint8List? get fallbackRgba => _fallbackRgba;
+  int get queuedFrameCount => _frameQueue.length;
 
   int? get textureId => _texturePool.textureId;
   int get previewWidth => _texturePool.width;
   int get previewHeight => _texturePool.height;
 
   bool get isOpen => _inputPath != null && _mediaInfo != null;
+
+  void _notifyIfActive() {
+    if (_disposed) return;
+    notifyListeners();
+  }
 
   double get aspectRatio {
     final info = _mediaInfo;
@@ -57,21 +104,26 @@ class MediaRuntime extends ChangeNotifier {
   Future<void> open(String path) async {
     if (_disposed) return;
     await close();
+    _metrics.reset();
+    _scrubStartedAtMs = null;
+    _playbackFramesInWindow = 0;
+    _playbackWindowStartMs = DateTime.now().millisecondsSinceEpoch;
     _inputPath = path;
-    _loading = true;
+    _scrubLoading = true;
     _error = null;
-    notifyListeners();
+    _notifyIfActive();
 
     try {
       await VideoProcessor.initialize();
       _mediaInfo = await VideoProcessor.getMediaInfo(path);
       _trimStartMs = 0;
       _trimEndMs = _mediaInfo!.durationMs.toInt();
-      await seekTo(Duration.zero, coalesce: false);
+      _clock.reset();
+      await seekTo(Duration.zero);
     } catch (e) {
       _error = e.toString();
-      _loading = false;
-      notifyListeners();
+      _scrubLoading = false;
+      _notifyIfActive();
       rethrow;
     }
   }
@@ -81,67 +133,396 @@ class MediaRuntime extends ChangeNotifier {
     final dur = _mediaInfo!.durationMs.toInt();
     _trimStartMs = (startMs ?? _trimStartMs).clamp(0, dur);
     _trimEndMs = (endMs ?? _trimEndMs).clamp(_trimStartMs, dur);
-    notifyListeners();
+    if (_ptsMs > _trimEndMs) {
+      _ptsMs = _trimEndMs;
+      _clock.mediaTimeMs = _trimEndMs;
+    }
+    _notifyIfActive();
   }
 
-  /// Decodes and presents the frame at [position]. When [coalesce] is true, stale results are dropped.
-  Future<void> seekTo(Duration position, {bool coalesce = true}) async {
-    final path = _inputPath;
-    if (path == null || _disposed) return;
+  /// Starts decoder-clock playback within the trim range (video-only).
+  Future<void> play() async {
+    if (!isOpen || _disposed) return;
+    _scrubDebounceTimer?.cancel();
+    _pendingScrubMs = null;
+    _stopPlaybackLoop();
+    _clock.mediaTimeMs = _clampPositionMs(_ptsMs);
+    _clock.startPlaying();
+    final gen = ++_playGeneration;
+    unawaited(_playbackLoop(gen));
+    _notifyIfActive();
+  }
 
-    final gen = ++_seekGeneration;
-    _loading = true;
-    _error = null;
-    notifyListeners();
+  /// Pauses playback; position is retained.
+  void pause() {
+    _stopPlaybackLoop();
+    _notifyIfActive();
+  }
 
-    final positionMs = position.inMilliseconds.clamp(0, _trimEndMs);
+  /// Immediate seek — stops playback, flushes queue, decodes one frame.
+  Future<void> seekTo(Duration position) async {
+    _stopPlaybackLoop();
+    _scrubDebounceTimer?.cancel();
+    _pendingScrubMs = null;
+    _scrubStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+    final ms = _clampPositionMs(position.inMilliseconds);
+    _clock.mediaTimeMs = ms;
+    await _decodeAndPresentScrub(ms);
+  }
 
-    try {
-      final frame = await VideoProcessor.decodePreviewFrameRgba(
-        inputPath: path,
-        positionMs: positionMs,
-        maxEdge: previewMaxEdge,
-      );
+  /// Debounced scrub for UI playhead drags — stops playback first.
+  void scheduleScrub(Duration position) {
+    if (_inputPath == null || _disposed) return;
+    _stopPlaybackLoop();
+    _pendingScrubMs = _clampPositionMs(position.inMilliseconds);
+    _scrubDebounceTimer?.cancel();
+    _scrubDebounceTimer = Timer(scrubDebounce, () {
+      final ms = _pendingScrubMs;
+      if (ms == null || _disposed) return;
+      _scrubStartedAtMs = DateTime.now().millisecondsSinceEpoch;
+      _clock.mediaTimeMs = ms;
+      unawaited(_decodeAndPresentScrub(ms));
+    });
+  }
 
-      if (_disposed || (coalesce && gen != _seekGeneration)) return;
+  int _clampPositionMs(int positionMs) =>
+      positionMs.clamp(_trimStartMs, _trimEndMs);
 
-      _ptsMs = frame.ptsMs.toInt();
-      _fallbackRgba = frame.rgba;
+  int _frameStepMs() {
+    final info = _mediaInfo;
+    if (info != null && info.fps > 1 && info.fps <= 60) {
+      final step = (1000 / info.fps).round();
+      return step.clamp(16, 100);
+    }
+    final step = (1000 / targetPreviewFps).round();
+    return step.clamp(16, 100);
+  }
 
-      final w = frame.width.toInt();
-      final h = frame.height.toInt();
-      final texId = await _texturePool.ensureTexture(width: w, height: h);
-      if (_disposed || (coalesce && gen != _seekGeneration)) return;
+  void _stopPlaybackLoop() {
+    if (_clock.isPlaying) {
+      _clock.pause();
+    }
+    _playGeneration++;
+  }
 
-      if (texId != null) {
-        await _texturePool.presentRgba(frame.rgba);
+  Future<void> _playbackLoop(int playGen) async {
+    final stepMs = _frameStepMs();
+
+    while (!_disposed &&
+        playGen == _playGeneration &&
+        _clock.state == PlaybackState.playing) {
+      var targetMs = _clampPositionMs(_clock.mediaTimeMs);
+
+      if (targetMs >= _trimEndMs) {
+        if (loopPlayback) {
+          targetMs = _trimStartMs;
+          _clock.mediaTimeMs = _trimStartMs;
+          _frameQueue.flush();
+        } else {
+          _clock.pause();
+          _notifyIfActive();
+          break;
+        }
       }
 
-      _loading = false;
-      notifyListeners();
-    } catch (e) {
-      if (_disposed || (coalesce && gen != _seekGeneration)) return;
-      _error = e.toString();
-      _loading = false;
-      notifyListeners();
+      final frame = await _decodeFrame(targetMs);
+      if (_disposed || playGen != _playGeneration) break;
+      if (frame == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+        continue;
+      }
+
+      _frameQueue.enqueue(frame);
+      final ok = await _presentLatest(
+        _seekGeneration,
+        advanceClock: true,
+      );
+      if (!ok || _disposed || playGen != _playGeneration) break;
+
+      final displayedPts = _ptsMs;
+      var nextMs = displayedPts + stepMs;
+      if (nextMs > _trimEndMs) {
+        if (loopPlayback) {
+          nextMs = _trimStartMs;
+        } else {
+          _clock.pause();
+          _notifyIfActive();
+          break;
+        }
+      }
+      _clock.mediaTimeMs = nextMs;
+      _notifyIfActive();
     }
   }
 
-  Future<void> close() async {
-    _seekGeneration++;
-    _inputPath = null;
-    _mediaInfo = null;
-    _fallbackRgba = null;
-    _ptsMs = 0;
-    _loading = false;
+  Future<void> _decodeAndPresentScrub(int positionMs) async {
+    final gen = ++_seekGeneration;
+    _scrubStartedAtMs ??= DateTime.now().millisecondsSinceEpoch;
+    _frameQueue.flush();
+    _scrubLoading = true;
     _error = null;
-    await _texturePool.release();
-    notifyListeners();
+    _notifyIfActive();
+
+    try {
+      final frame = await _decodeFrame(positionMs);
+      if (_disposed || gen != _seekGeneration) return;
+      if (frame != null) {
+        _frameQueue.enqueue(frame);
+        await _presentLatest(gen, advanceClock: true);
+      }
+    } catch (e) {
+      if (_disposed || gen != _seekGeneration) return;
+      _error = e.toString();
+      _scrubLoading = false;
+      _notifyIfActive();
+    }
+  }
+
+  bool get _hwPreviewDisabled {
+    final v = Platform.environment['VFP_DISABLE_HW_PREVIEW'];
+    return v == '1' || v == 'true' || v == 'yes';
+  }
+
+  bool get _preferApplePixelBufferPreview =>
+      !kIsWeb &&
+      (Platform.isMacOS || Platform.isIOS) &&
+      isTexturePreviewAvailable &&
+      !_hwPreviewDisabled;
+
+  bool get _preferAndroidSurfacePreview =>
+      !kIsWeb &&
+      Platform.isAndroid &&
+      isTexturePreviewAvailable &&
+      !_hwPreviewDisabled &&
+      _nativeVideoFitsPreviewMaxEdge;
+
+  bool get _nativeVideoFitsPreviewMaxEdge {
+    final info = _mediaInfo;
+    if (info == null) return false;
+    final maxDim = info.width > info.height ? info.width : info.height;
+    return maxDim <= previewMaxEdge;
+  }
+
+  Future<Uint8List?> _decodeFrameRgbaAt(int positionMs) async {
+    final path = _inputPath;
+    if (path == null) return null;
+    final frame = await VideoProcessor.decodePreviewFrameRgba(
+      inputPath: path,
+      positionMs: positionMs,
+      maxEdge: previewMaxEdge,
+    );
+    return frame.rgba;
+  }
+
+  Future<PreviewFrame?> _decodeFrame(int positionMs) async {
+    final path = _inputPath;
+    if (path == null) return null;
+
+    if (_preferAndroidSurfacePreview) {
+      try {
+        final info = _mediaInfo!;
+        await _texturePool.ensureTexture(
+          width: info.width,
+          height: info.height,
+        );
+        final surface = await _texturePool.decodePreviewToSurface(
+          path: path,
+          positionMs: positionMs,
+          maxEdge: previewMaxEdge,
+        );
+        if (surface != null) {
+          return PreviewFrame(
+            ptsMs: surface.ptsMs,
+            width: surface.width,
+            height: surface.height,
+            presentedToSurface: true,
+          );
+        }
+      } catch (_) {
+        // RGBA fallback (4K, codec error, etc.).
+      }
+    }
+
+    if (_preferApplePixelBufferPreview) {
+      try {
+        final hw = await VideoProcessor.decodePreviewFramePixelBuffer(
+          inputPath: path,
+          positionMs: positionMs,
+          maxEdge: previewMaxEdge,
+        );
+        final ptr = hw.pixelBufferPtr.toInt();
+        if (ptr > 0) {
+          return PreviewFrame(
+            ptsMs: hw.ptsMs.toInt(),
+            width: hw.width,
+            height: hw.height,
+            pixelBufferPtr: ptr,
+          );
+        }
+      } catch (_) {
+        // Fall back to RGBA upload (e.g. HW decode unavailable).
+      }
+    }
+
+    final frame = await VideoProcessor.decodePreviewFrameRgba(
+      inputPath: path,
+      positionMs: positionMs,
+      maxEdge: previewMaxEdge,
+    );
+
+    return PreviewFrame(
+      ptsMs: frame.ptsMs.toInt(),
+      width: frame.width,
+      height: frame.height,
+      rgba: frame.rgba,
+    );
+  }
+
+  Future<bool> _presentLatest(int generation, {bool advanceClock = false}) async {
+    if (_disposed || generation != _seekGeneration) return false;
+
+    final preview = _frameQueue.takeLatest();
+    if (preview == null) {
+      _scrubLoading = false;
+      _notifyIfActive();
+      return false;
+    }
+
+    if (advanceClock) {
+      _clock.advanceToFramePts(preview.ptsMs);
+    }
+    _ptsMs = preview.ptsMs;
+    _fallbackRgba = preview.rgba;
+
+    final texId = await _texturePool.ensureTexture(
+      width: preview.width,
+      height: preview.height,
+    );
+    if (_disposed || generation != _seekGeneration) return false;
+
+    if (texId != null) {
+      if (!preview.presentedToSurface) {
+      final ptr = preview.pixelBufferPtr;
+      if (ptr != null && ptr > 0) {
+        try {
+          await _texturePool.presentPixelBuffer(ptr);
+        } on PlatformException catch (_) {
+          VideoProcessor.releasePreviewPixelBuffer(ptr);
+          final fallback = await _decodeFrameRgbaAt(preview.ptsMs);
+          if (fallback != null) {
+            _fallbackRgba = fallback;
+            await _texturePool.presentRgba(fallback);
+          }
+        } catch (e) {
+          VideoProcessor.releasePreviewPixelBuffer(ptr);
+          if (preview.rgba != null) {
+            await _texturePool.presentRgba(preview.rgba!);
+          } else {
+            final fallback = await _decodeFrameRgbaAt(preview.ptsMs);
+            if (fallback != null) {
+              _fallbackRgba = fallback;
+              await _texturePool.presentRgba(fallback);
+            } else {
+              rethrow;
+            }
+          }
+        }
+      } else if (preview.rgba != null) {
+        await _texturePool.presentRgba(preview.rgba!);
+      }
+      }
+    } else if (preview.isHwPixelBuffer) {
+      VideoProcessor.releasePreviewPixelBuffer(preview.pixelBufferPtr!);
+    }
+
+    _scrubLoading = false;
+    _recordPresentedFrame(wasScrub: _scrubStartedAtMs != null, preview: preview);
+    _notifyIfActive();
+    return true;
+  }
+
+  void _recordPresentedFrame({
+    required bool wasScrub,
+    required PreviewFrame preview,
+  }) {
+    final path = _previewPathFor(preview);
+    final texId = _texturePool.textureId;
+    _metrics.recordPreviewPath(path, textureId: texId);
+
+    if (wasScrub && _scrubStartedAtMs != null) {
+      final latency =
+          DateTime.now().millisecondsSinceEpoch - _scrubStartedAtMs!;
+      _metrics.recordScrubComplete(latency);
+      _scrubStartedAtMs = null;
+    }
+
+    if (_clock.isPlaying) {
+      _metrics.recordPlaybackFrame();
+      _playbackFramesInWindow++;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final windowMs = now - _playbackWindowStartMs;
+      if (windowMs >= 1000) {
+        _metrics.recordPlaybackFpsSample(
+          _playbackFramesInWindow * 1000.0 / windowMs,
+        );
+        _playbackFramesInWindow = 0;
+        _playbackWindowStartMs = now;
+      }
+    }
+  }
+
+  PreviewDeliveryPath _previewPathFor(PreviewFrame preview) {
+    if (preview.presentedToSurface) {
+      return PreviewDeliveryPath.textureSurface;
+    }
+    if (preview.isHwPixelBuffer) {
+      return PreviewDeliveryPath.texturePixelBuffer;
+    }
+    final texId = _texturePool.textureId;
+    if (texId != null && texId > 0) {
+      return PreviewDeliveryPath.textureRgba;
+    }
+    if (preview.rgba != null) {
+      return PreviewDeliveryPath.rgbaOnly;
+    }
+    return PreviewDeliveryPath.none;
+  }
+
+  Future<void> close() async {
+    if (_closeInProgress) return;
+    _closeInProgress = true;
+    try {
+      _stopPlaybackLoop();
+      _scrubDebounceTimer?.cancel();
+      _scrubDebounceTimer = null;
+      _pendingScrubMs = null;
+      _seekGeneration++;
+      _frameQueue.flush();
+      _inputPath = null;
+      _mediaInfo = null;
+      _fallbackRgba = null;
+      _ptsMs = 0;
+      _scrubLoading = false;
+      _error = null;
+      _clock.reset();
+      final hadTexture = _texturePool.textureId != null;
+      await _texturePool.release();
+      final released = _texturePool.textureId == null;
+      _metrics.recordOpenCloseCycle(textureReleased: !hadTexture || released);
+      _scrubStartedAtMs = null;
+      _notifyIfActive();
+    } finally {
+      _closeInProgress = false;
+    }
   }
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
+    _scrubDebounceTimer?.cancel();
+    _scrubDebounceTimer = null;
+    _stopPlaybackLoop();
     unawaited(close());
     super.dispose();
   }

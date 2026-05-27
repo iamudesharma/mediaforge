@@ -21,8 +21,12 @@ pub fn probe_media_info(path: &str) -> Result<MediaInfo> {
 
     let path = Path::new(trimmed);
     if !is_remote_input(trimmed) {
+        let file_size = std::fs::metadata(path)
+            .map(|m| m.len())
+            .unwrap_or(0);
         if let Ok(Some(fast)) = probe_mp4_fast(path) {
-            if fast.width > 0 && fast.duration_ms > 0 {
+            if fast.width > 0 && fast.duration_ms > 0 && !fast_probe_suspicious(&fast, file_size)
+            {
                 return Ok(fast);
             }
         }
@@ -33,6 +37,18 @@ pub fn probe_media_info(path: &str) -> Result<MediaInfo> {
         probe_cache_insert(trimmed, info.clone());
     }
     Ok(info)
+}
+
+/// Reject fast-probe results that look like a wrong track or unit bug (→ FFmpeg fallback).
+fn fast_probe_suspicious(info: &MediaInfo, file_size: u64) -> bool {
+    if file_size < 2_000_000 {
+        return false;
+    }
+    if info.duration_ms >= 5_000 {
+        return false;
+    }
+    // e.g. 50 MB file probed as <5 s → implausible bitrate
+    info.bitrate > 8_000_000
 }
 
 fn probe_with_ffmpeg(input: &str) -> Result<MediaInfo> {

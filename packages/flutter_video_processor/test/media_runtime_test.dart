@@ -9,4 +9,10 @@ void main() {
   test('VideoTexturePool default handle', () {
     expect(VideoTexturePool.defaultHandle, 9001);
   });
+
+  test('dispose then async close does not throw', () async {
+    final runtime = MediaRuntime();
+    runtime.dispose();
+    await expectLater(runtime.close(), completes);
+  });
 }

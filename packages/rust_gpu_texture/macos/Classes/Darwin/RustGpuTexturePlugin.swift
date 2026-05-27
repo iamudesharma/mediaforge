@@ -1,4 +1,5 @@
 import CoreVideo
+import VideoToolbox
 
 #if canImport(FlutterMacOS)
 import Cocoa
@@ -54,15 +55,13 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       }
       let tex = RustGpuPixelTexture()
       var pb: CVPixelBuffer?
-      let attrs: [String: Any] = [
-        kCVPixelBufferIOSurfacePropertiesKey as String: [:],
-      ]
+      let attrs = Self.metalPixelBufferAttributes()
       CVPixelBufferCreate(
         kCFAllocatorDefault,
         width,
         height,
         kCVPixelFormatType_32BGRA,
-        attrs as CFDictionary,
+        attrs,
         &pb
       )
       tex.pixelBuffer = pb
@@ -127,6 +126,32 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       registry.textureFrameAvailable(texId)
       result(nil)
 
+    case "presentPixelBuffer":
+      guard let args = call.arguments as? [String: Any],
+            let handle = Self.handleFromArgs(args["handle"]),
+            let ptr = Self.ptrFromArgs(args["pixelBufferPtr"]),
+            let tex = textures[handle],
+            let registry = textureRegistry,
+            let texId = textureIds[handle]
+      else {
+        result(FlutterError(code: "bad_args", message: "handle/pixelBufferPtr required", details: nil))
+        return
+      }
+      let raw = UnsafeRawPointer(bitPattern: UInt(truncatingIfNeeded: ptr))!
+      let srcPb = Unmanaged<CVPixelBuffer>.fromOpaque(raw).takeRetainedValue()
+      let width = CVPixelBufferGetWidth(srcPb)
+      let height = CVPixelBufferGetHeight(srcPb)
+      guard let dstPb = Self.ensureMetalPixelBuffer(tex: tex, width: width, height: height) else {
+        result(FlutterError(code: "create_failed", message: "Metal CVPixelBuffer alloc failed", details: nil))
+        return
+      }
+      if !Self.copyPixelBufferContents(from: srcPb, to: dstPb) {
+        result(FlutterError(code: "blit_failed", message: "CVPixelBuffer copy failed", details: nil))
+        return
+      }
+      registry.textureFrameAvailable(texId)
+      result(nil)
+
     case "disposeTexture":
       guard let args = call.arguments as? [String: Any],
             let handle = Self.handleFromArgs(args["handle"]),
@@ -150,5 +175,98 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     if let handle = value as? Int { return Int64(handle) }
     if let number = value as? NSNumber { return number.int64Value }
     return nil
+  }
+
+  private static func ptrFromArgs(_ value: Any?) -> Int64? {
+    if let ptr = value as? Int64 { return ptr }
+    if let ptr = value as? Int { return Int64(ptr) }
+    if let number = value as? NSNumber { return number.uint64Value > 0 ? number.int64Value : nil }
+    return nil
+  }
+
+  /// IOSurface + Metal compatibility — required for Flutter macOS/iOS `Texture` (avoids CVReturn -6660).
+  private static func metalPixelBufferAttributes() -> CFDictionary {
+    [
+      kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+      kCVPixelBufferMetalCompatibilityKey as String: true,
+    ] as CFDictionary
+  }
+
+  private static func ensureMetalPixelBuffer(
+    tex: RustGpuPixelTexture,
+    width: Int,
+    height: Int
+  ) -> CVPixelBuffer? {
+    if let existing = tex.pixelBuffer,
+       CVPixelBufferGetWidth(existing) == width,
+       CVPixelBufferGetHeight(existing) == height {
+      return existing
+    }
+    var pb: CVPixelBuffer?
+    let err = CVPixelBufferCreate(
+      kCFAllocatorDefault,
+      width,
+      height,
+      kCVPixelFormatType_32BGRA,
+      metalPixelBufferAttributes(),
+      &pb
+    )
+    guard err == kCVReturnSuccess, let pb else { return nil }
+    tex.pixelBuffer = pb
+    return pb
+  }
+
+  /// Copies [src] into the Flutter-registered Metal-compatible [dst] (does not replace [dst]).
+  private static func copyPixelBufferContents(from src: CVPixelBuffer, to dst: CVPixelBuffer) -> Bool {
+    let sw = CVPixelBufferGetWidth(src)
+    let sh = CVPixelBufferGetHeight(src)
+    let dw = CVPixelBufferGetWidth(dst)
+    let dh = CVPixelBufferGetHeight(dst)
+    guard sw == dw, sh == dh else { return false }
+
+    if CVPixelBufferGetPixelFormatType(src) == kCVPixelFormatType_32BGRA,
+       CVPixelBufferGetPixelFormatType(dst) == kCVPixelFormatType_32BGRA {
+      return copyBgraLocked(src: src, dst: dst)
+    }
+
+    var session: VTPixelTransferSession?
+    guard VTPixelTransferSessionCreate(
+      allocator: kCFAllocatorDefault,
+      pixelTransferSessionOut: &session
+    ) == noErr,
+      let session
+    else {
+      return false
+    }
+    defer { VTPixelTransferSessionInvalidate(session) }
+    let err = VTPixelTransferSessionTransferImage(session, from: src, to: dst)
+    return err == noErr
+  }
+
+  private static func copyBgraLocked(src: CVPixelBuffer, dst: CVPixelBuffer) -> Bool {
+    CVPixelBufferLockBaseAddress(src, .readOnly)
+    CVPixelBufferLockBaseAddress(dst, [])
+    defer {
+      CVPixelBufferUnlockBaseAddress(src, .readOnly)
+      CVPixelBufferUnlockBaseAddress(dst, [])
+    }
+    guard let srcBase = CVPixelBufferGetBaseAddress(src),
+          let dstBase = CVPixelBufferGetBaseAddress(dst)
+    else {
+      return false
+    }
+    let width = CVPixelBufferGetWidth(src)
+    let height = CVPixelBufferGetHeight(src)
+    let srcRow = CVPixelBufferGetBytesPerRow(src)
+    let dstRow = CVPixelBufferGetBytesPerRow(dst)
+    let rowBytes = width * 4
+    for y in 0..<height {
+      memcpy(
+        dstBase.advanced(by: y * dstRow),
+        srcBase.advanced(by: y * srcRow),
+        rowBytes
+      )
+    }
+    return true
   }
 }

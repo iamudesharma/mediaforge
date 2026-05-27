@@ -1,22 +1,28 @@
 PODS:
   - Flutter (1.0.0)
-  - flutter_video_processor (0.1.0):
+  - rust_gpu_texture (0.1.0):
+    - Flutter
+  - video_processor_core (0.1.0):
     - Flutter
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - flutter_video_processor (from `.symlinks/plugins/flutter_video_processor/ios`)
+  - rust_gpu_texture (from `.symlinks/plugins/rust_gpu_texture/ios`)
+  - video_processor_core (from `.symlinks/plugins/video_processor_core/ios`)
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
-  flutter_video_processor:
-    :path: ".symlinks/plugins/flutter_video_processor/ios"
+  rust_gpu_texture:
+    :path: ".symlinks/plugins/rust_gpu_texture/ios"
+  video_processor_core:
+    :path: ".symlinks/plugins/video_processor_core/ios"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  flutter_video_processor: 27cc04f6e9d0dc02b68818ef0611cdb73a81eee6
+  rust_gpu_texture: dee07d375b50eaa38bec7cee88479731f8cb3d52
+  video_processor_core: 407ea75d5d176fa703f50d0d732c219186ba8cfc
 
-PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
+PODFILE CHECKSUM: 4d8774849f2a7dc2d0e700b3589d14358262b89d
 
 COCOAPODS: 1.16.2

@@ -3,6 +3,7 @@ use std::io::Cursor;
 use std::path::Path;
 
 use memmap2::Mmap;
+use mp4parse::{MediaTimeScale, Track, TrackType};
 
 use crate::error::{Result, VideoProcessorError};
 use crate::types::MediaInfo;
@@ -33,17 +34,17 @@ pub fn probe_mp4_fast(path: &Path) -> Result<Option<MediaInfo>> {
         Err(_) => return Ok(None),
     };
 
-    let track = context.tracks.first();
+    let movie_timescale = context.timescale;
+    let track = pick_video_track(&context.tracks, movie_timescale);
     let Some(track) = track else {
         return Ok(None);
     };
 
-    let duration_ms = track
-        .tkhd
-        .as_ref()
-        .map(|t| t.duration / 1000)
-        .or_else(|| track.duration.map(|d| d.0 / 1000))
-        .unwrap_or(0);
+    let duration_ms = track_duration_ms(track, movie_timescale);
+    if duration_ms == 0 {
+        return Ok(None);
+    }
+
     // tkhd width/height are 16.16 fixed-point (pixels in upper 16 bits).
     let width = track
         .tkhd
@@ -74,8 +75,70 @@ pub fn probe_mp4_fast(path: &Path) -> Result<Option<MediaInfo>> {
     }))
 }
 
+fn is_video_track(track: &Track) -> bool {
+    matches!(
+        track.track_type,
+        TrackType::Video | TrackType::AuxiliaryVideo
+    )
+}
+
+fn ticks_to_ms(ticks: u64, timescale: u64) -> u64 {
+    if timescale == 0 {
+        return 0;
+    }
+    ((ticks as u128) * 1000 / (timescale as u128)) as u64
+}
+
+/// Duration from mdhd (track timescale) or tkhd (movie timescale).
+fn track_duration_ms(track: &Track, movie_timescale: Option<MediaTimeScale>) -> u64 {
+    if let (Some(duration), Some(scale)) = (&track.duration, &track.timescale) {
+        let ms = ticks_to_ms(duration.0, scale.0);
+        if ms > 0 {
+            return ms;
+        }
+    }
+    if let (Some(tkhd), Some(movie_scale)) = (track.tkhd.as_ref(), movie_timescale) {
+        if tkhd.duration > 0 {
+            return ticks_to_ms(tkhd.duration, movie_scale.0);
+        }
+    }
+    if let (Some(edited), Some(movie_scale)) = (track.edited_duration, movie_timescale) {
+        return ticks_to_ms(edited.0, movie_scale.0);
+    }
+    0
+}
+
+/// Prefer the longest video track (iPhone MOV often lists metadata/aux tracks first).
+fn pick_video_track<'a>(
+    tracks: &'a [Track],
+    movie_timescale: Option<MediaTimeScale>,
+) -> Option<&'a Track> {
+    tracks
+        .iter()
+        .filter(|t| is_video_track(t))
+        .max_by_key(|t| track_duration_ms(t, movie_timescale))
+        .or_else(|| {
+            tracks
+                .iter()
+                .max_by_key(|t| track_duration_ms(t, movie_timescale))
+        })
+}
+
 /// Opens large files via mmap for zero-copy sample access (reserved for future demux/IO paths).
 pub fn open_mmap(path: &Path) -> Result<Mmap> {
     let file = File::open(path).map_err(|e| VideoProcessorError::IoError(e.to_string()))?;
     unsafe { Mmap::map(&file).map_err(|e| VideoProcessorError::IoError(e.to_string())) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ticks_to_ms_uses_timescale_not_magic_divisor() {
+        // 60 s @ timescale 600 → 36_000 ticks (not 60_000 ms).
+        assert_eq!(ticks_to_ms(36_000, 600), 60_000);
+        // Old bug: tkhd.duration / 1000 would yield 36 ms for this case.
+        assert_ne!(36_000 / 1000, 60_000);
+    }
 }

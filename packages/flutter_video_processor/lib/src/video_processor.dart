@@ -13,6 +13,7 @@ export 'package:video_processor_core/video_processor_core.dart'
     show
         MediaInfo,
         PreviewFrameRgba,
+        PreviewFramePixelBuffer,
         ProgressEvent,
         ProcessingPhase,
         VideoCodec,
@@ -225,6 +226,28 @@ abstract final class VideoProcessor {
       inputPath: inputPath,
       positionMs: BigInt.from(positionMs),
       maxEdge: maxEdge,
+    );
+  }
+
+  /// Apple VideoToolbox → BGRA `CVPixelBuffer` for zero-copy texture (V1.4).
+  static Future<PreviewFramePixelBuffer> decodePreviewFramePixelBuffer({
+    required String inputPath,
+    required int positionMs,
+    int? maxEdge,
+  }) async {
+    await initialize();
+    return core.decodePreviewFramePixelBuffer(
+      inputPath: inputPath,
+      positionMs: BigInt.from(positionMs),
+      maxEdge: maxEdge,
+    );
+  }
+
+  /// Release a native buffer when texture present did not run.
+  static void releasePreviewPixelBuffer(int pixelBufferPtr) {
+    if (pixelBufferPtr == 0) return;
+    core.releasePreviewPixelBuffer(
+      pixelBufferPtr: BigInt.from(pixelBufferPtr),
     );
   }
 

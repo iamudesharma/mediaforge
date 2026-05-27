@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:rust_gpu_texture/rust_gpu_texture.dart';
 
 import '../runtime/media_runtime.dart';
+import 'rgba_preview_image.dart';
 
-/// Displays [MediaRuntime] preview — [GpuTextureView] when available, else [Image.memory].
+/// Displays [MediaRuntime] preview — [GpuTextureView] when available, else [RgbaPreviewImage].
 class VideoPreviewSurface extends StatelessWidget {
   const VideoPreviewSurface({
     super.key,
@@ -56,12 +57,11 @@ class VideoPreviewSurface extends StatelessWidget {
       return Center(
         child: AspectRatio(
           aspectRatio: runtime.aspectRatio,
-          child: Image.memory(
-            rgba,
+          child: RgbaPreviewImage(
+            pixels: rgba,
+            width: w,
+            height: h,
             fit: fit,
-            gaplessPlayback: true,
-            width: w.toDouble(),
-            height: h.toDouble(),
           ),
         ),
       );

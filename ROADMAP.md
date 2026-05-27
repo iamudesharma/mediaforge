@@ -4,7 +4,7 @@ Performance and architecture plan for reaching native-editor responsiveness (GPU
 
 **Current sprint:** Sprint V1 (Video media runtime & texture preview)  
 **Status:** Sprint 22 + P0 **done** — beauty GPU texture path; image/video package split documented  
-**Next:** V1.2 (frame queue) → V1.7 — [VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md) · V0 pub.dev — [V0_ACCEPTANCE.md](docs/V0_ACCEPTANCE.md)
+**Next:** V0 pub.dev — [V0_ACCEPTANCE.md](docs/V0_ACCEPTANCE.md) · Sprint 20 (timeline editors)
 
 ---
 
@@ -526,12 +526,12 @@ Example recipes (face-only, not global grade):
 | Phase | Deliverable | Status | Notes |
 |-------|-------------|--------|-------|
 | **V1.1** | `MediaRuntime` + `VideoTexturePool` + `VideoPreviewSurface` | **Done** | FRB `decode_preview_frame_rgba`; `rust_gpu_texture` dep; studio scrub on texture |
-| **V1.2** | `FrameQueue` (depth 3) + scrub flush/coalesce | Planned | Remove `Image.file` scrub hot path in video studio example |
-| **V1.3** | `PlaybackClock` + decoder-driven play/pause | Planned | Video-only; 24–30 fps @ `previewMaxEdge`; no UI `Timer` as master clock |
-| **V1.4** | GPU residency — Apple CVPixelBuffer → texture | Planned | Extend `rust_gpu_texture`; VT HW preview decode in core |
-| **V1.5** | Overlay compositor shell (`Stack` + timeline metadata) | Planned | Stickers/text over texture; feeds Sprint 20 UI |
-| **V1.6** | Android zero-copy preview (MediaCodec → SurfaceTexture) | Planned | Gated on stability; RGBA upload fallback until then |
-| **V1.7** | Perf matrix I/J/K + leak checks on open/dispose | Planned | Example status timings |
+| **V1.2** | `FrameQueue` (depth 3) + scrub flush/coalesce | **Done** | `scheduleScrub` debounce on `MediaRuntime`; queue flush before decode |
+| **V1.3** | `PlaybackClock` + decoder-driven play/pause | **Done** | `play()` / `pause()`; PTS advances clock; video-only; step from `MediaInfo.fps` or `targetPreviewFps` |
+| **V1.4** | GPU residency — Apple CVPixelBuffer → texture | **Done** | `decodePreviewFramePixelBuffer` + `presentPixelBuffer`; VT transfer → BGRA; RGBA fallback |
+| **V1.5** | Overlay compositor shell (`Stack` + timeline metadata) | **Done** | `VideoCompositorCanvas` + `VideoOverlayItem`; playhead visibility; studio demo |
+| **V1.6** | Android zero-copy preview (MediaCodec → SurfaceTexture) | **Done** | `decodePreviewToSurface`; ≤ `previewMaxEdge`; RGBA fallback for 4K+ |
+| **V1.7** | Perf matrix I/J/K + leak checks on open/dispose | **Done** | `MediaRuntimeMetrics`, `MediaRuntimePerf`; example **Preview** tab |
 
 **Future (not V1):** Render graph (V2), HDR/color pipeline (V3), audio master clock + mixer (V2–V3) — see design doc §5–7.
 
@@ -662,4 +662,4 @@ Run in **rust_image Studio** after changes; record status-line timings.
 
 ---
 
-*Last updated: Sprint V1 (video media runtime) planned; Sprint 22 + P0 done*
+*Last updated: Sprint V1.7 (preview perf matrix) done; Sprint 22 + P0 done*

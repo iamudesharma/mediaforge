@@ -23,6 +23,9 @@ type OSStatus = i32;
 /// NV12 bi-planar video range — matches FFmpeg VT hw frames default.
 const K_CV_NV12_BIPLANAR_VIDEO: u32 = u32::from_be_bytes(*b"420v");
 
+/// 32-bit BGRA — matches Flutter `FlutterTexture` / `kCVPixelFormatType_32BGRA`.
+const K_CV_32BGRA: u32 = u32::from_be_bytes(*b"BGRA");
+
 #[link(name = "CoreVideo", kind = "framework")]
 #[link(name = "CoreFoundation", kind = "framework")]
 #[link(name = "VideoToolbox", kind = "framework")]
@@ -40,6 +43,8 @@ extern "C" {
 
     fn CVPixelBufferGetWidth(pixel_buffer: CVPixelBufferRef) -> usize;
     fn CVPixelBufferGetHeight(pixel_buffer: CVPixelBufferRef) -> usize;
+
+    fn CVPixelBufferRetain(pixel_buffer: CVPixelBufferRef) -> CVPixelBufferRef;
 
     fn VTPixelTransferSessionCreate(
         allocator: *mut std::ffi::c_void,
@@ -310,4 +315,60 @@ pub unsafe fn release_transfer_session(session: VTPixelTransferSessionRef) {
     if !session.is_null() {
         CFRelease(session);
     }
+}
+
+/// Scale / convert a VideoToolbox-decoded frame into a standalone BGRA `CVPixelBuffer`.
+///
+/// Caller owns the returned buffer (+1). Release with [release_pixel_buffer] if not handed to UI.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub unsafe fn transfer_vt_frame_to_bgra_pixel_buffer(
+    session: VTPixelTransferSessionRef,
+    src: &VideoFrame,
+    width: usize,
+    height: usize,
+) -> Result<CVPixelBufferRef> {
+    if session.is_null() {
+        return Err(VideoProcessorError::Internal(
+            "VTPixelTransferSession is null".into(),
+        ));
+    }
+    let src_buf = cv_buffer_from_frame(src.as_ptr()).ok_or_else(|| {
+        VideoProcessorError::Internal("VT frame missing CVPixelBuffer".into())
+    })?;
+
+    let mut dst: CVPixelBufferRef = ptr::null_mut();
+    // IOSurface is implied for VT transfer targets on Apple; attrs may be extended later.
+    let err = CVPixelBufferCreate(
+        ptr::null_mut(),
+        width,
+        height,
+        K_CV_32BGRA,
+        ptr::null_mut(),
+        &mut dst,
+    );
+    if err != 0 || dst.is_null() {
+        return Err(map_vt_status(err, "CVPixelBufferCreate BGRA"));
+    }
+
+    let xfer = VTPixelTransferSessionTransferImage(session, src_buf, dst);
+    if xfer != 0 {
+        CFRelease(dst);
+        return Err(map_vt_status(xfer, "VTPixelTransferSessionTransferImage→BGRA"));
+    }
+    Ok(dst)
+}
+
+/// Release a preview `CVPixelBuffer` when not adopted by the texture plugin.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub unsafe fn release_pixel_buffer(pb: CVPixelBufferRef) {
+    if !pb.is_null() {
+        CFRelease(pb);
+    }
+}
+
+/// Retain for handoff to Dart/native (`takeRetainedValue` consumes one retain).
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub unsafe fn retain_pixel_buffer_for_handoff(pb: CVPixelBufferRef) -> u64 {
+    CVPixelBufferRetain(pb);
+    pb as u64
 }

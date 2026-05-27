@@ -639,7 +639,7 @@ fn frame_pts_ms(frame: &Video, tb: Rational) -> u64 {
     ms.max(0.0) as u64
 }
 
-fn thumb_dimensions(
+pub(crate) fn thumb_dimensions(
     src_w: u32,
     src_h: u32,
     max_w: Option<u32>,

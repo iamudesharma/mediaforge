@@ -1,6 +1,6 @@
 # Video media runtime & texture preview (Sprint V1)
 
-**Status:** V1.1 **done** — V1.2+ planned ([ROADMAP.md](../ROADMAP.md) Sprint V1).
+**Status:** V1.7 **done** ([ROADMAP.md](../ROADMAP.md) Sprint V1).
 
 **Goal:** Move from **preview-centric / frame-on-demand** to a **stream-centric** playback model with explicit **runtime ownership**, **decoder-clock** timing, **texture lifecycle**, and a **frame queue** — without building a custom full video engine in V1.
 
@@ -17,10 +17,10 @@
 | Level | Model | V1 target |
 |-------|--------|-----------|
 | 0 (today) | `video_player` OR thumbnail → `Image.file` | Example studio only |
-| 1 | **MediaRuntime** owns asset; **frame queue** + **texture lifecycle**; scrub via decode | **V1.1–V1.2** |
-| 2 | **Decoder-clock** playback (Rust time master, not UI `Timer`) | **V1.3** |
-| 3 | **GPU residency** — CVPixelBuffer / SurfaceTexture zero-copy where possible | **V1.4** |
-| 4 | **Compositor** — Flutter `Stack` overlays + timeline metadata (Sprint 20 UI) | **V1.5** + Sprint 20 |
+| 1 | **MediaRuntime** owns asset; **frame queue** + **texture lifecycle**; scrub via decode | **V1.1–V1.2 done** |
+| 2 | **Decoder-clock** playback (PTS-driven clock, not UI `Timer`) | **V1.3 done** |
+| 3 | **GPU residency** — CVPixelBuffer / SurfaceTexture zero-copy where possible | **V1.4–V1.6 done** (Apple CVPixelBuffer; Android MediaCodec → SurfaceTexture) |
+| 4 | **Compositor** — Flutter `Stack` overlays + timeline metadata (Sprint 20 UI) | **V1.5 done** (shell) + Sprint 20 (full editor) |
 | 5 | **Render graph** — Rust/GPU node graph for filters, transitions, exports | Future (V2+) |
 | 6 | **HDR / wide gamut** + **audio master clock** | Future (V3+) |
 
@@ -82,7 +82,8 @@ final runtime = MediaRuntime(
 await runtime.open(VideoAsset.local(path));
 runtime.setTrimRange(startMs: 0, endMs: 30_000);
 await runtime.seekTo(Duration(milliseconds: 12_000)); // scrub
-await runtime.play(); // decoder-clock in V1.3+
+await runtime.play(); // decoder-clock (V1.3)
+runtime.pause();
 
 // Widget: runtime.previewSurface(fit: BoxFit.contain)
 ```
@@ -128,6 +129,10 @@ await runtime.play(); // decoder-clock in V1.3+
 
 **Preview surface widget:** `VideoPreviewSurface` wraps `GpuTextureView` + aspect ratio from `MediaInfo`; rebuilds only on `textureId` / dimension change, not every queue tick (use `Listenable` / `ValueListenable<int>` for generation counter).
 
+**Compositor (V1.5):** `VideoCompositorCanvas` letterboxes the video frame and stacks `VideoOverlayItem` children filtered by `runtime.ptsMs` (`startMs` inclusive, `endMs` exclusive). Same pattern as image `LivePreview` — export does not bake overlays until Sprint 20/V2.
+
+**Android zero-copy (V1.6):** When longest edge ≤ `previewMaxEdge`, `GpuTextureRegistry.decodePreviewToSurface` uses **MediaCodec** + **MediaExtractor** to render into the Flutter `SurfaceTexture` (no RGBA upload). Larger sources or `VFP_DISABLE_HW_PREVIEW=1` fall back to FFmpeg RGBA. Implementation: `rust_gpu_texture` Kotlin (`AndroidPreviewDecoder.kt`), not Rust FFmpeg decode+encode.
+
 ---
 
 ## 4. Frame queue architecture
@@ -149,6 +154,7 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 | Play | Fill queue ahead; drop stale frames if `pts < clock.mediaTimeMs` |
 | Frame payload V1.1 | `PreviewFrame { ptsMs, width, height, rgba }` |
 | Frame payload V1.4 | `HwPreviewFrame { ptsMs, bufferHandle }` on Apple |
+| Frame payload V1.6 | `PreviewFrame.presentedToSurface` on Android (MediaCodec → pool SurfaceTexture) |
 
 **Rust:** `PreviewDecoder` session in `video_processor_core` (new `pipeline/preview.rs`), reusing thumbnail seek helpers but **separate** from filmstrip CPU-only policy (preview may enable HW decode on Apple when stable).
 
@@ -212,12 +218,12 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 | ID | Name | Deliverable | Package touchpoints |
 |----|------|-------------|---------------------|
 | **V1.1** | MediaRuntime + texture lifecycle | **Done** — `MediaRuntime`, `VideoTexturePool`, `VideoPreviewSurface`; FRB `decodePreviewFrameRgba`; studio scrub on texture | `flutter_video_processor`, `video_processor_core`, `rust_gpu_texture` |
-| **V1.2** | Frame queue + scrub stream | Bounded queue, flush/coalesce on seek; remove `Image.file` scrub fallback in studio | Same |
-| **V1.3** | Decoder-clock playback | `PlaybackClock`, decode loop, play/pause; video-only 24–30 fps target at `previewMaxEdge` | + `PreviewDecoder` session API |
-| **V1.4** | GPU residency (Apple first) | `rust_gpu_texture` CVPixelBuffer attach; VT HW decode path for preview | `rust_gpu_texture`, `video_processor_core` |
-| **V1.5** | Overlay compositor shell | `VideoEditorCanvas` = texture + `Stack` overlays; trim/playhead wired to runtime | Example + thin SDK widgets |
-| **V1.6** | Android zero-copy | MediaCodec → SurfaceTexture path (if stable) | Platform-specific |
-| **V1.7** | Metrics & perf matrix | Scenarios I/J/K in ROADMAP; status timing in example | Docs + example |
+| **V1.2** | Frame queue + scrub stream | **Done** — `FrameQueue`, `PreviewFrame`, `scheduleScrub`; flush before decode | Same |
+| **V1.3** | Decoder-clock playback | **Done** — `PlaybackClock`, `play()` / `pause()`, async decode loop; PTS sets clock; video-only | Per-frame `decodePreviewFrameRgba` (session API deferred to V1.4+) |
+| **V1.4** | GPU residency (Apple first) | **Done** — VT HW `decodePreviewFramePixelBuffer`; `GpuTextureRegistry.presentPixelBuffer`; RGBA fallback | `rust_gpu_texture`, `video_processor_core`, `flutter_video_processor` |
+| **V1.5** | Overlay compositor shell | **Done** — `VideoCompositorCanvas`, `VideoOverlayItem` (`startMs`/`endMs`); studio demo | `flutter_video_processor` |
+| **V1.6** | Android zero-copy | **Done** — `decodePreviewToSurface`; MediaCodec → pool SurfaceTexture; RGBA if &gt; `previewMaxEdge` | `rust_gpu_texture`, `flutter_video_processor` |
+| **V1.7** | Metrics & perf matrix | **Done** — `MediaRuntimeMetrics`, `MediaRuntimePerf` (I/J/K); example **Preview** tab + studio status line | `flutter_video_processor` |
 
 **Explicitly out of V1:** Custom full video engine, render graph execution, HDR display, audio mixer.
 
@@ -252,7 +258,10 @@ Run in `flutter_video_processor` example after each sub-phase:
 |-------|----------------|
 | Design | `docs/VIDEO_MEDIA_RUNTIME.md` (this file) |
 | Runtime | `packages/flutter_video_processor/lib/src/runtime/media_runtime.dart` |
+| Metrics | `packages/flutter_video_processor/lib/src/runtime/media_runtime_metrics.dart` |
+| Perf matrix | `packages/flutter_video_processor/lib/src/runtime/media_runtime_perf.dart` |
 | Queue | `packages/flutter_video_processor/lib/src/runtime/frame_queue.dart` |
+| Frame | `packages/flutter_video_processor/lib/src/runtime/preview_frame.dart` |
 | Clock | `packages/flutter_video_processor/lib/src/runtime/playback_clock.dart` |
 | Textures | `packages/flutter_video_processor/lib/src/runtime/video_texture_pool.dart` |
 | Widget | `packages/flutter_video_processor/lib/src/widgets/video_preview_surface.dart` |
@@ -267,4 +276,4 @@ Run in `flutter_video_processor` example after each sub-phase:
 
 ---
 
-*Last updated: V1.1 implemented*
+*Last updated: V1.7 implemented*

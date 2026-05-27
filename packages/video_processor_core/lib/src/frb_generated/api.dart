@@ -62,6 +62,23 @@ Future<PreviewFrameRgba> decodePreviewFrameRgba({
   maxEdge: maxEdge,
 );
 
+/// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
+Future<PreviewFramePixelBuffer> decodePreviewFramePixelBuffer({
+  required String inputPath,
+  required BigInt positionMs,
+  int? maxEdge,
+}) => RustLib.instance.api.crateApiDecodePreviewFramePixelBuffer(
+  inputPath: inputPath,
+  positionMs: positionMs,
+  maxEdge: maxEdge,
+);
+
+/// Release a native preview pixel buffer not adopted by [rust_gpu_texture].
+void releasePreviewPixelBuffer({required BigInt pixelBufferPtr}) => RustLib
+    .instance
+    .api
+    .crateApiReleasePreviewPixelBuffer(pixelBufferPtr: pixelBufferPtr);
+
 /// Returns the number of active jobs.
 Future<int> activeJobCount() => RustLib.instance.api.crateApiActiveJobCount();
 

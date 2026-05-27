@@ -139,6 +139,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String>? dco_decode_opt_list_String(dynamic raw);
 
   @protected
+  PreviewFramePixelBuffer dco_decode_preview_frame_pixel_buffer(dynamic raw);
+
+  @protected
   PreviewFrameRgba dco_decode_preview_frame_rgba(dynamic raw);
 
   @protected
@@ -308,6 +311,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
+
+  @protected
+  PreviewFramePixelBuffer sse_decode_preview_frame_pixel_buffer(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PreviewFrameRgba sse_decode_preview_frame_rgba(SseDeserializer deserializer);
@@ -510,6 +518,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_preview_frame_pixel_buffer(
+    PreviewFramePixelBuffer self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_preview_frame_rgba(
