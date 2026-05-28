@@ -109,11 +109,14 @@ class OverlayRasterExporter {
     final buildOwner = BuildOwner(focusManager: FocusManager());
     final root = RenderObjectToWidgetAdapter<RenderBox>(
       container: repaintBoundary,
-      child: MediaQuery(
-        data: const MediaQueryData(size: Size(maxW, maxH)),
-        child: Material(
-          type: MaterialType.transparency,
-          child: child,
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: MediaQuery(
+          data: const MediaQueryData(size: Size(maxW, maxH)),
+          child: Material(
+            type: MaterialType.transparency,
+            child: child,
+          ),
         ),
       ),
     );

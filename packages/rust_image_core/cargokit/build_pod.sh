@@ -24,8 +24,6 @@ if command -v xcrun >/dev/null 2>&1; then
   export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 fi
 
-env
-
 # Platform name (macosx, iphoneos, iphonesimulator)
 export CARGOKIT_DARWIN_PLATFORM_NAME=$PLATFORM_NAME
 
@@ -62,8 +60,17 @@ do
   fi
 done
 
-PREBUILT="${CARGOKIT_MANIFEST_DIR}/../macos/Prebuilt/librust_image_core.a"
-if [ -f "${PREBUILT}" ]; then
+PREBUILT=""
+case "${PLATFORM_NAME}" in
+  macosx)
+    PREBUILT="${CARGOKIT_MANIFEST_DIR}/../macos/Prebuilt/librust_image_core.a"
+    ;;
+  iphoneos|iphonesimulator)
+    PREBUILT="${CARGOKIT_MANIFEST_DIR}/../ios/Prebuilt/librust_image_core.a"
+    ;;
+esac
+
+if [ -n "${PREBUILT}" ] && [ -f "${PREBUILT}" ]; then
   mkdir -p "${CARGOKIT_OUTPUT_DIR}"
   cp "${PREBUILT}" "${CARGOKIT_OUTPUT_DIR}/librust_image_core.a"
 else

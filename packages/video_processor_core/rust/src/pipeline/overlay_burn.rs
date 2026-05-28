@@ -271,6 +271,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn loads_png_overlay_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("overlay.png");
+        image::RgbaImage::from_pixel(4, 4, image::Rgba([10, 20, 30, 200]))
+            .save(&path)
+            .expect("write png");
+
+        let spec = BurnInOverlay {
+            image_path: path.to_string_lossy().into_owned(),
+            start_ms: 0,
+            end_ms: 1000,
+            anchor_x: 0.5,
+            anchor_y: 0.5,
+            fade_in_ms: 0,
+            fade_out_ms: 0,
+        };
+        let comp = OverlayCompositor::new(&[spec], 640, 360).expect("compositor");
+        assert!(comp.is_some());
+    }
+
+    #[test]
     fn opacity_fade_matches_flutter() {
         let o = LoadedOverlay {
             pixels: vec![],

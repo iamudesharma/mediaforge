@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.LibraryExtension
+
 allprojects {
     repositories {
         google()
@@ -15,8 +17,13 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+// file_picker and other plugins may ship compileSdk 34; lifecycle requires 36.
 subprojects {
-    project.evaluationDependsOn(":app")
+    afterEvaluate {
+        extensions.findByType(LibraryExtension::class.java)?.apply {
+            compileSdk = 36
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
