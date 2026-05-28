@@ -111,6 +111,7 @@ abstract final class VideoProcessor {
     bool preferHardwareEncoder = true,
     int? startMs,
     int? endMs,
+    List<BurnInOverlay> burnInOverlays = const [],
   }) async {
     final job = await compressJob(
       input: input,
@@ -128,6 +129,7 @@ abstract final class VideoProcessor {
       preferHardwareEncoder: preferHardwareEncoder,
       startMs: startMs,
       endMs: endMs,
+      burnInOverlays: burnInOverlays,
     );
 
     StreamSubscription<ProgressEvent>? sub;
@@ -161,6 +163,7 @@ abstract final class VideoProcessor {
     bool preferHardwareEncoder = true,
     int? startMs,
     int? endMs,
+    List<BurnInOverlay> burnInOverlays = const [],
   }) async {
     await initialize();
 
@@ -180,6 +183,7 @@ abstract final class VideoProcessor {
       preferHardwareEncoder: preferHardwareEncoder,
       startMs: startMs,
       endMs: endMs,
+      burnInOverlays: burnInOverlays,
     ).build();
 
     final progressStream = core.startCompress(options: options);

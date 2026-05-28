@@ -2,6 +2,10 @@
 
 Demo app for the [`flutter_video_processor`](../packages/flutter_video_processor) plugin.
 
+> [!TIP]
+> **Looking for the main unified product demo?**
+> We have built a unified product experience combining both the video stack and the image editor in `examples/media_studio`. It showcases a cohesive workflow: import, trim, add text/emoji overlays, edit poster frames, and export. Check it out at [examples/media_studio](../../../examples/media_studio)!
+
 ## Run on a phone (Android / iOS)
 
 ### Android (required native build once)

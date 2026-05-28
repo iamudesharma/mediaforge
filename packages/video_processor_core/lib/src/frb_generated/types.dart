@@ -122,6 +122,54 @@ class BatchThumbnailResult {
           paths == other.paths;
 }
 
+/// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
+class BurnInOverlay {
+  final String imagePath;
+
+  /// Visible on [start_ms, end_ms) in source timeline milliseconds.
+  final BigInt startMs;
+  final BigInt endMs;
+
+  /// Normalized anchor 0–1 (top-left origin), matches Flutter compositor.
+  final double anchorX;
+  final double anchorY;
+  final BigInt fadeInMs;
+  final BigInt fadeOutMs;
+
+  const BurnInOverlay({
+    required this.imagePath,
+    required this.startMs,
+    required this.endMs,
+    required this.anchorX,
+    required this.anchorY,
+    required this.fadeInMs,
+    required this.fadeOutMs,
+  });
+
+  @override
+  int get hashCode =>
+      imagePath.hashCode ^
+      startMs.hashCode ^
+      endMs.hashCode ^
+      anchorX.hashCode ^
+      anchorY.hashCode ^
+      fadeInMs.hashCode ^
+      fadeOutMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BurnInOverlay &&
+          runtimeType == other.runtimeType &&
+          imagePath == other.imagePath &&
+          startMs == other.startMs &&
+          endMs == other.endMs &&
+          anchorX == other.anchorX &&
+          anchorY == other.anchorY &&
+          fadeInMs == other.fadeInMs &&
+          fadeOutMs == other.fadeOutMs;
+}
+
 class CompressOptions {
   final String inputPath;
   final String? outputPath;
@@ -143,6 +191,9 @@ class CompressOptions {
   /// Inclusive clip end in milliseconds (None = end of file).
   final BigInt? endMs;
 
+  /// Pre-rasterized overlay PNGs (Flutter) composited on each encoded frame.
+  final List<BurnInOverlay> burnInOverlays;
+
   const CompressOptions({
     required this.inputPath,
     this.outputPath,
@@ -159,6 +210,7 @@ class CompressOptions {
     required this.preferHardwareEncoder,
     this.startMs,
     this.endMs,
+    required this.burnInOverlays,
   });
 
   @override
@@ -177,7 +229,8 @@ class CompressOptions {
       fragmentedMp4.hashCode ^
       preferHardwareEncoder.hashCode ^
       startMs.hashCode ^
-      endMs.hashCode;
+      endMs.hashCode ^
+      burnInOverlays.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -198,7 +251,8 @@ class CompressOptions {
           fragmentedMp4 == other.fragmentedMp4 &&
           preferHardwareEncoder == other.preferHardwareEncoder &&
           startMs == other.startMs &&
-          endMs == other.endMs;
+          endMs == other.endMs &&
+          burnInOverlays == other.burnInOverlays;
 }
 
 class CompressResult {

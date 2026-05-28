@@ -8,12 +8,14 @@ import 'video_overlay_item.dart';
 /// Letterboxed video preview with timeline-filtered Flutter overlays (Sprint V1.5).
 ///
 /// Same pattern as image editor [LivePreview]: texture/video underneath, `Stack` on top.
-/// No Rust compositor — export still uses source video until Sprint 20/V2.
+/// Overlays use [timelinePlayheadMs] when provided (Sprint 20); export is still source video.
 class VideoCompositorCanvas extends StatelessWidget {
   const VideoCompositorCanvas({
     super.key,
     required this.runtime,
     this.overlays = const [],
+    /// Master timeline position for overlay visibility (defaults to [MediaRuntime.ptsMs]).
+    this.timelinePlayheadMs,
     this.fit = BoxFit.contain,
     this.backgroundColor = Colors.black,
     this.loadingBuilder,
@@ -22,6 +24,7 @@ class VideoCompositorCanvas extends StatelessWidget {
 
   final MediaRuntime runtime;
   final List<VideoOverlayItem> overlays;
+  final int? timelinePlayheadMs;
   final BoxFit fit;
   final Color backgroundColor;
   final WidgetBuilder? loadingBuilder;
@@ -44,7 +47,7 @@ class VideoCompositorCanvas extends StatelessWidget {
           builder: (context, constraints) {
             final max = Size(constraints.maxWidth, constraints.maxHeight);
             final frame = _containedSize(max, runtime.aspectRatio);
-            final playhead = runtime.ptsMs;
+            final playhead = timelinePlayheadMs ?? runtime.ptsMs;
             final visible =
                 overlays.where((o) => o.isVisibleAt(playhead)).toList();
 
@@ -64,6 +67,7 @@ class VideoCompositorCanvas extends StatelessWidget {
                     for (final overlay in visible)
                       _OverlayPositioned(
                         anchor: overlay.anchor,
+                        opacity: overlay.opacityAt(playhead),
                         child: overlay.child,
                       ),
                   ],
@@ -149,10 +153,12 @@ class _VideoFrameLayer extends StatelessWidget {
 class _OverlayPositioned extends StatelessWidget {
   const _OverlayPositioned({
     required this.anchor,
+    required this.opacity,
     required this.child,
   });
 
   final Offset anchor;
+  final double opacity;
   final Widget child;
 
   @override
@@ -162,7 +168,7 @@ class _OverlayPositioned extends StatelessWidget {
     return Positioned.fill(
       child: Align(
         alignment: Alignment(ax * 2 - 1, ay * 2 - 1),
-        child: child,
+        child: Opacity(opacity: opacity, child: child),
       ),
     );
   }

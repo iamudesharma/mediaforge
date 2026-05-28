@@ -91,6 +91,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoProcessorError dco_decode_box_autoadd_video_processor_error(dynamic raw);
 
   @protected
+  BurnInOverlay dco_decode_burn_in_overlay(dynamic raw);
+
+  @protected
   CompressOptions dco_decode_compress_options(dynamic raw);
 
   @protected
@@ -107,6 +110,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<BurnInOverlay> dco_decode_list_burn_in_overlay(dynamic raw);
 
   @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
@@ -263,6 +269,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  BurnInOverlay sse_decode_burn_in_overlay(SseDeserializer deserializer);
+
+  @protected
   CompressOptions sse_decode_compress_options(SseDeserializer deserializer);
 
   @protected
@@ -279,6 +288,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<BurnInOverlay> sse_decode_list_burn_in_overlay(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<Uint8List> sse_decode_list_list_prim_u_8_strict(
@@ -457,6 +471,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_burn_in_overlay(BurnInOverlay self, SseSerializer serializer);
+
+  @protected
   void sse_encode_compress_options(
     CompressOptions self,
     SseSerializer serializer,
@@ -479,6 +496,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_burn_in_overlay(
+    List<BurnInOverlay> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_list_prim_u_8_strict(

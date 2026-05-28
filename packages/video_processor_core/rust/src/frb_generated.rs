@@ -786,6 +786,28 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for crate::types::BurnInOverlay {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_imagePath = <String>::sse_decode(deserializer);
+        let mut var_startMs = <u64>::sse_decode(deserializer);
+        let mut var_endMs = <u64>::sse_decode(deserializer);
+        let mut var_anchorX = <f32>::sse_decode(deserializer);
+        let mut var_anchorY = <f32>::sse_decode(deserializer);
+        let mut var_fadeInMs = <u64>::sse_decode(deserializer);
+        let mut var_fadeOutMs = <u64>::sse_decode(deserializer);
+        return crate::types::BurnInOverlay {
+            image_path: var_imagePath,
+            start_ms: var_startMs,
+            end_ms: var_endMs,
+            anchor_x: var_anchorX,
+            anchor_y: var_anchorY,
+            fade_in_ms: var_fadeInMs,
+            fade_out_ms: var_fadeOutMs,
+        };
+    }
+}
+
 impl SseDecode for crate::types::CompressOptions {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -804,6 +826,7 @@ impl SseDecode for crate::types::CompressOptions {
         let mut var_preferHardwareEncoder = <bool>::sse_decode(deserializer);
         let mut var_startMs = <Option<u64>>::sse_decode(deserializer);
         let mut var_endMs = <Option<u64>>::sse_decode(deserializer);
+        let mut var_burnInOverlays = <Vec<crate::types::BurnInOverlay>>::sse_decode(deserializer);
         return crate::types::CompressOptions {
             input_path: var_inputPath,
             output_path: var_outputPath,
@@ -820,6 +843,7 @@ impl SseDecode for crate::types::CompressOptions {
             prefer_hardware_encoder: var_preferHardwareEncoder,
             start_ms: var_startMs,
             end_ms: var_endMs,
+            burn_in_overlays: var_burnInOverlays,
         };
     }
 }
@@ -884,6 +908,18 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::types::BurnInOverlay> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::types::BurnInOverlay>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -1385,6 +1421,29 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::BatchThumbnailResult>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::BurnInOverlay {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.image_path.into_into_dart().into_dart(),
+            self.start_ms.into_into_dart().into_dart(),
+            self.end_ms.into_into_dart().into_dart(),
+            self.anchor_x.into_into_dart().into_dart(),
+            self.anchor_y.into_into_dart().into_dart(),
+            self.fade_in_ms.into_into_dart().into_dart(),
+            self.fade_out_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::BurnInOverlay {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::BurnInOverlay>
+    for crate::types::BurnInOverlay
+{
+    fn into_into_dart(self) -> crate::types::BurnInOverlay {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::CompressOptions {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -1403,6 +1462,7 @@ impl flutter_rust_bridge::IntoDart for crate::types::CompressOptions {
             self.prefer_hardware_encoder.into_into_dart().into_dart(),
             self.start_ms.into_into_dart().into_dart(),
             self.end_ms.into_into_dart().into_dart(),
+            self.burn_in_overlays.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1791,6 +1851,19 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for crate::types::BurnInOverlay {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.image_path, serializer);
+        <u64>::sse_encode(self.start_ms, serializer);
+        <u64>::sse_encode(self.end_ms, serializer);
+        <f32>::sse_encode(self.anchor_x, serializer);
+        <f32>::sse_encode(self.anchor_y, serializer);
+        <u64>::sse_encode(self.fade_in_ms, serializer);
+        <u64>::sse_encode(self.fade_out_ms, serializer);
+    }
+}
+
 impl SseEncode for crate::types::CompressOptions {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1809,6 +1882,7 @@ impl SseEncode for crate::types::CompressOptions {
         <bool>::sse_encode(self.prefer_hardware_encoder, serializer);
         <Option<u64>>::sse_encode(self.start_ms, serializer);
         <Option<u64>>::sse_encode(self.end_ms, serializer);
+        <Vec<crate::types::BurnInOverlay>>::sse_encode(self.burn_in_overlays, serializer);
     }
 }
 
@@ -1862,6 +1936,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::types::BurnInOverlay> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::types::BurnInOverlay>::sse_encode(item, serializer);
         }
     }
 }

@@ -854,11 +854,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BurnInOverlay dco_decode_burn_in_overlay(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return BurnInOverlay(
+      imagePath: dco_decode_String(arr[0]),
+      startMs: dco_decode_u_64(arr[1]),
+      endMs: dco_decode_u_64(arr[2]),
+      anchorX: dco_decode_f_32(arr[3]),
+      anchorY: dco_decode_f_32(arr[4]),
+      fadeInMs: dco_decode_u_64(arr[5]),
+      fadeOutMs: dco_decode_u_64(arr[6]),
+    );
+  }
+
+  @protected
   CompressOptions dco_decode_compress_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
     return CompressOptions(
       inputPath: dco_decode_String(arr[0]),
       outputPath: dco_decode_opt_String(arr[1]),
@@ -875,6 +892,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       preferHardwareEncoder: dco_decode_bool(arr[12]),
       startMs: dco_decode_opt_box_autoadd_u_64(arr[13]),
       endMs: dco_decode_opt_box_autoadd_u_64(arr[14]),
+      burnInOverlays: dco_decode_list_burn_in_overlay(arr[15]),
     );
   }
 
@@ -925,6 +943,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<BurnInOverlay> dco_decode_list_burn_in_overlay(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_burn_in_overlay).toList();
   }
 
   @protected
@@ -1320,6 +1344,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  BurnInOverlay sse_decode_burn_in_overlay(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_imagePath = sse_decode_String(deserializer);
+    var var_startMs = sse_decode_u_64(deserializer);
+    var var_endMs = sse_decode_u_64(deserializer);
+    var var_anchorX = sse_decode_f_32(deserializer);
+    var var_anchorY = sse_decode_f_32(deserializer);
+    var var_fadeInMs = sse_decode_u_64(deserializer);
+    var var_fadeOutMs = sse_decode_u_64(deserializer);
+    return BurnInOverlay(
+      imagePath: var_imagePath,
+      startMs: var_startMs,
+      endMs: var_endMs,
+      anchorX: var_anchorX,
+      anchorY: var_anchorY,
+      fadeInMs: var_fadeInMs,
+      fadeOutMs: var_fadeOutMs,
+    );
+  }
+
+  @protected
   CompressOptions sse_decode_compress_options(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_inputPath = sse_decode_String(deserializer);
@@ -1337,6 +1382,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_preferHardwareEncoder = sse_decode_bool(deserializer);
     var var_startMs = sse_decode_opt_box_autoadd_u_64(deserializer);
     var var_endMs = sse_decode_opt_box_autoadd_u_64(deserializer);
+    var var_burnInOverlays = sse_decode_list_burn_in_overlay(deserializer);
     return CompressOptions(
       inputPath: var_inputPath,
       outputPath: var_outputPath,
@@ -1353,6 +1399,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       preferHardwareEncoder: var_preferHardwareEncoder,
       startMs: var_startMs,
       endMs: var_endMs,
+      burnInOverlays: var_burnInOverlays,
     );
   }
 
@@ -1411,6 +1458,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<BurnInOverlay> sse_decode_list_burn_in_overlay(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <BurnInOverlay>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_burn_in_overlay(deserializer));
     }
     return ans_;
   }
@@ -1884,6 +1945,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_burn_in_overlay(
+    BurnInOverlay self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.imagePath, serializer);
+    sse_encode_u_64(self.startMs, serializer);
+    sse_encode_u_64(self.endMs, serializer);
+    sse_encode_f_32(self.anchorX, serializer);
+    sse_encode_f_32(self.anchorY, serializer);
+    sse_encode_u_64(self.fadeInMs, serializer);
+    sse_encode_u_64(self.fadeOutMs, serializer);
+  }
+
+  @protected
   void sse_encode_compress_options(
     CompressOptions self,
     SseSerializer serializer,
@@ -1904,6 +1980,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.preferHardwareEncoder, serializer);
     sse_encode_opt_box_autoadd_u_64(self.startMs, serializer);
     sse_encode_opt_box_autoadd_u_64(self.endMs, serializer);
+    sse_encode_list_burn_in_overlay(self.burnInOverlays, serializer);
   }
 
   @protected
@@ -1950,6 +2027,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_burn_in_overlay(
+    List<BurnInOverlay> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_burn_in_overlay(item, serializer);
     }
   }
 

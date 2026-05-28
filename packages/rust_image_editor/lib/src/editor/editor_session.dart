@@ -53,6 +53,8 @@ class EditorSession extends ChangeNotifier {
 
   final gpuTextureListenable = ValueNotifier<int>(0);
 
+  bool _isDisposed = false;
+
   /// Swipe mood filter shown during browse (Filters tab moods).
   MoodFilterPreset? previewMoodPreset;
 
@@ -264,6 +266,7 @@ class EditorSession extends ChangeNotifier {
   int get layerCount => layerStack.length;
 
   void notifyLayerChanged() {
+    if (_isDisposed) return;
     layerListenable.value++;
     _bumpPreviewOnly();
   }
@@ -271,15 +274,24 @@ class EditorSession extends ChangeNotifier {
   bool get hasUncommittedLayers => layerStack.isNotEmpty;
 
   void notifyPreviewChanged() {
+    if (_isDisposed) return;
     previewListenable.value++;
     notifyListeners();
   }
 
   void _bumpPreviewOnly() {
+    if (_isDisposed) return;
     previewListenable.value++;
   }
 
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    super.notifyListeners();
+  }
+
   void _setProcessing(bool value) {
+    if (_isDisposed) return;
     if (processing == value) return;
     processing = value;
     processingListenable.value = value;
@@ -287,6 +299,7 @@ class EditorSession extends ChangeNotifier {
   }
 
   void _setBlocking(bool value) {
+    if (_isDisposed) return;
     if (blocking == value) return;
     blocking = value;
     blockingListenable.value = value;
@@ -294,12 +307,14 @@ class EditorSession extends ChangeNotifier {
   }
 
   void _bumpStatus() {
+    if (_isDisposed) return;
     statusListenable.value++;
     notifyListeners();
   }
 
   /// Live camera FPS / status — throttle shell rebuilds (Sprint 14, scenario H).
   void _bumpStatusThrottled() {
+    if (_isDisposed) return;
     final now = DateTime.now();
     final next = _statusThrottleNext;
     if (next != null && now.isBefore(next)) return;
@@ -308,25 +323,30 @@ class EditorSession extends ChangeNotifier {
   }
 
   void _bumpMoodPreview() {
+    if (_isDisposed) return;
     moodPreviewListenable.value++;
   }
 
   void _bumpSwipeLookPreview() {
+    if (_isDisposed) return;
     swipeLookPreviewListenable.value++;
   }
 
   void _bumpBeautyPreview() {
+    if (_isDisposed) return;
     beautyPreviewListenable.value++;
   }
 
   /// Tool panel / export settings (format, quality, backend) — not preview pixels.
   void _bumpChrome() {
+    if (_isDisposed) return;
     chromeListenable.value++;
     notifyListeners();
   }
 
   void setActivePaintStroke(List<Offset> points) {
     activePaintStroke = points;
+    if (_isDisposed) return;
     activePaintStrokeListenable.value = points;
   }
 
@@ -430,11 +450,13 @@ class EditorSession extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _debounceTimer?.cancel();
     _moodDebounceTimer?.cancel();
     _swipeLookDebounceTimer?.cancel();
     _beautyDebounceTimer?.cancel();
     _overlayDebounceTimer?.cancel();
+    _disposeGpuSurface();
     activePaintStrokeListenable.dispose();
     layerListenable.dispose();
     previewListenable.dispose();
@@ -447,7 +469,6 @@ class EditorSession extends ChangeNotifier {
     swipeLookPreviewListenable.dispose();
     beautyPreviewListenable.dispose();
     gpuTextureListenable.dispose();
-    _disposeGpuSurface();
     _temporalSmoother?.dispose();
     _temporalSmoother = null;
     if (liveCameraActive || LiveCameraService.isActive) {
@@ -833,6 +854,7 @@ class EditorSession extends ChangeNotifier {
   }
 
   void _bumpFaceChrome() {
+    if (_isDisposed) return;
     faceChromeListenable.value++;
   }
 
@@ -1088,7 +1110,9 @@ class EditorSession extends ChangeNotifier {
                   handle: handle.toInt(),
                   pixels: displayRb.pixels,
                 );
-                gpuTextureListenable.value = gpuTextureId!;
+                if (!_isDisposed) {
+                  gpuTextureListenable.value = gpuTextureId!;
+                }
               } else {
                 final displayRb = await readbackGpuPreviewSurface(id: handle);
                 rgbaBuffer = displayRb;
@@ -1594,7 +1618,9 @@ class EditorSession extends ChangeNotifier {
         handle: handle.toInt(),
         pixels: displayRb.pixels,
       );
-      gpuTextureListenable.value = gpuTextureId!;
+      if (!_isDisposed) {
+        gpuTextureListenable.value = gpuTextureId!;
+      }
     } else {
       previewRgba = displayRb;
     }
@@ -2042,7 +2068,9 @@ class EditorSession extends ChangeNotifier {
               handle: handle.toInt(),
               pixels: displayRb.pixels,
             );
-            gpuTextureListenable.value = gpuTextureId!;
+            if (!_isDisposed) {
+              gpuTextureListenable.value = gpuTextureId!;
+            }
           } else {
             previewRgba = displayRb;
           }
@@ -2091,7 +2119,9 @@ class EditorSession extends ChangeNotifier {
       unawaited(GpuTextureRegistry.disposeTexture(handle.toInt()));
       gpuPreviewHandle = null;
       gpuTextureId = null;
-      gpuTextureListenable.value = 0;
+      if (!_isDisposed) {
+        gpuTextureListenable.value = 0;
+      }
     }
   }
 
@@ -2109,7 +2139,9 @@ class EditorSession extends ChangeNotifier {
         height: base.height,
       );
       gpuTextureId = texId;
-      gpuTextureListenable.value = texId ?? 0;
+      if (!_isDisposed) {
+        gpuTextureListenable.value = texId ?? 0;
+      }
     }
   }
 
