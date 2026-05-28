@@ -4,6 +4,11 @@
 # Skip the native rebuild (faster, may hit FRB hash mismatch): --no-rebuild
 set -euo pipefail
 
+# Homebrew rustc in PATH breaks cross-target macOS builds (missing std / FRB link).
+if [[ -d "${HOME}/.cargo/bin" ]]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${REPO_ROOT}/examples/media_studio"
 REBUILD_SCRIPT="${REPO_ROOT}/scripts/rebuild-video-native-macos.sh"

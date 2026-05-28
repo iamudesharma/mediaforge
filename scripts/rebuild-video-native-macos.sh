@@ -2,9 +2,30 @@
 # Rebuild video_processor_core Rust + FRB bindings, then refresh the macOS Flutter app.
 set -euo pipefail
 
+if [[ -d "${HOME}/.cargo/bin" ]]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VP="${REPO_ROOT}/packages/video_processor_core"
+RIC="${REPO_ROOT}/packages/rust_image_core"
 RUST="${VP}/rust"
+MACOS_TARGET="$(rustc -vV | sed -n 's/^host: //p')"
+PREBUILT_DIR="${RIC}/macos/Prebuilt"
+
+echo "==> cargo build --release (rust_image_core, target=${MACOS_TARGET})"
+mkdir -p "${PREBUILT_DIR}"
+(cd "${RIC}/rust" && cargo build --release --target "${MACOS_TARGET}")
+RIC_LIB="${RIC}/rust/target/${MACOS_TARGET}/release/librust_image_core.a"
+if [[ ! -f "${RIC_LIB}" ]]; then
+  RIC_LIB="${RIC}/rust/target/release/librust_image_core.a"
+fi
+if [[ ! -f "${RIC_LIB}" ]]; then
+  echo "ERROR: librust_image_core.a not found after cargo build" >&2
+  exit 1
+fi
+cp "${RIC_LIB}" "${PREBUILT_DIR}/librust_image_core.a"
 
 echo "==> flutter_rust_bridge_codegen (video_processor_core)"
 (cd "${VP}" && flutter_rust_bridge_codegen generate)
@@ -22,11 +43,15 @@ rm -rf "${REPO_ROOT}/examples/media_studio/.dart_tool"
 rm -f "${REPO_ROOT}/rust video/target/release/libvideo_processor_core.dylib" \
   "${REPO_ROOT}/rust video/target/release/deps/libvideo_processor_core.dylib"
 
-echo "==> cargo clean + build --release (video_processor_core)"
-(cd "${RUST}" && cargo clean && cargo build --release)
+echo "==> cargo clean + build --release (video_processor_core, target=${MACOS_TARGET})"
+(cd "${RUST}" && cargo clean && cargo build --release --target "${MACOS_TARGET}")
 
 echo "==> Copy newly built dylib to macOS Frameworks and update install name"
-cp "${REPO_ROOT}/packages/video_processor_core/target/release/libvideo_processor_core.dylib" "${REPO_ROOT}/packages/video_processor_core/macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core"
+DYLIB="${REPO_ROOT}/packages/video_processor_core/rust/target/${MACOS_TARGET}/release/libvideo_processor_core.dylib"
+if [[ ! -f "${DYLIB}" ]]; then
+  DYLIB="${REPO_ROOT}/packages/video_processor_core/target/release/libvideo_processor_core.dylib"
+fi
+cp "${DYLIB}" "${REPO_ROOT}/packages/video_processor_core/macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core"
 install_name_tool -id "@rpath/video_processor_core.framework/video_processor_core" "${REPO_ROOT}/packages/video_processor_core/macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core"
 
 echo "==> Verify FRB content hash in source"

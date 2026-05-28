@@ -191,7 +191,7 @@ Future<String?> _cargoBuild({
   );
 
   await Directory(outDir.toFilePath()).create(recursive: true);
-  final env = Map<String, String>.from(Platform.environment);
+  final env = _cargoEnvironment();
 
   if (os == OS.android) {
     final abi = _androidAbiFolder(arch)!;
@@ -243,6 +243,47 @@ Future<String?> _cargoBuild({
 
   final built = p.join(outDir.toFilePath(), triple, 'release', libFileName);
   return await File(built).exists() ? built : null;
+}
+
+/// Prefer rustup over Homebrew rustc (breaks macOS cross-target / FRB builds).
+Map<String, String> _cargoEnvironment() {
+  final env = Map<String, String>.from(Platform.environment);
+  final home = Platform.environment['HOME'];
+  if (home == null) {
+    return env;
+  }
+  final cargoBin = p.join(home, '.cargo', 'bin');
+  if (!Directory(cargoBin).existsSync()) {
+    return env;
+  }
+  final sep = Platform.isWindows ? ';' : ':';
+  final path = env['PATH'] ?? '';
+  if (!path.split(sep).contains(cargoBin)) {
+    env['PATH'] = '$cargoBin$sep$path';
+  }
+  if (Platform.isMacOS) {
+    final sdk = env['SDKROOT'];
+    if (sdk == null || sdk.isEmpty) {
+      final sdkResult = Process.runSync('xcrun', ['--sdk', 'macosx', '--show-sdk-path']);
+      if (sdkResult.exitCode == 0) {
+        env['SDKROOT'] = (sdkResult.stdout as String).trim();
+      }
+    }
+    env['MACOSX_DEPLOYMENT_TARGET'] ??= '12.0';
+    if (env['CC'] == null || env['CC']!.isEmpty) {
+      final ccResult = Process.runSync('xcrun', ['--sdk', 'macosx', '--find', 'clang']);
+      if (ccResult.exitCode == 0) {
+        env['CC'] = (ccResult.stdout as String).trim();
+      }
+    }
+    if (env['CXX'] == null || env['CXX']!.isEmpty) {
+      final cxxResult = Process.runSync('xcrun', ['--sdk', 'macosx', '--find', 'clang++']);
+      if (cxxResult.exitCode == 0) {
+        env['CXX'] = (cxxResult.stdout as String).trim();
+      }
+    }
+  }
+  return env;
 }
 
 String? _rustTriple(OS os, Architecture arch) {

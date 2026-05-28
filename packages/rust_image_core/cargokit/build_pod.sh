@@ -6,10 +6,23 @@ BASEDIR=$(dirname "$0")
 # Workaround for https://github.com/dart-lang/pub/issues/4010
 BASEDIR=$(cd "$BASEDIR" ; pwd -P)
 
+# Prefer rustup over Homebrew rustc (breaks cross-target / FRB macOS builds).
+if [ -d "${HOME}/.cargo/bin" ]; then
+  export PATH="${HOME}/.cargo/bin:${PATH}"
+fi
+
 # Remove XCode SDK from path. Otherwise this breaks tool compilation when building iOS project
 NEW_PATH=`echo $PATH | tr ":" "\n" | grep -v "Contents/Developer/" | tr "\n" ":"`
 
 export PATH=${NEW_PATH%?} # remove trailing :
+
+# cc-rs still needs a macOS SDK when building FRB / dart-sys during hook-style builds.
+if command -v xcrun >/dev/null 2>&1; then
+  export CC="${CC:-$(xcrun --sdk macosx --find clang 2>/dev/null)}"
+  export CXX="${CXX:-$(xcrun --sdk macosx --find clang++ 2>/dev/null)}"
+  export SDKROOT="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path 2>/dev/null)}"
+  export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
+fi
 
 env
 
@@ -49,7 +62,13 @@ do
   fi
 done
 
-sh "$BASEDIR/run_build_tool.sh" build-pod "$@"
+PREBUILT="${CARGOKIT_MANIFEST_DIR}/../macos/Prebuilt/librust_image_core.a"
+if [ -f "${PREBUILT}" ]; then
+  mkdir -p "${CARGOKIT_OUTPUT_DIR}"
+  cp "${PREBUILT}" "${CARGOKIT_OUTPUT_DIR}/librust_image_core.a"
+else
+  sh "$BASEDIR/run_build_tool.sh" build-pod "$@"
+fi
 
 # Make a symlink from built framework to phony file, which will be used as input to
 # build script. This should force rebuild (podspec currently doesn't support alwaysOutOfDate
