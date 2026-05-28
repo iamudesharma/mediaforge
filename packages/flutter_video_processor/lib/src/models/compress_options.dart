@@ -18,6 +18,7 @@ class CompressOptionsBuilder {
     this.preferHardwareEncoder = true,
     this.startMs,
     this.endMs,
+    this.burnInOverlays = const [],
   });
 
   final String inputPath;
@@ -35,6 +36,7 @@ class CompressOptionsBuilder {
   bool preferHardwareEncoder;
   int? startMs;
   int? endMs;
+  List<BurnInOverlay> burnInOverlays;
 
   CompressOptions build() => CompressOptions(
         inputPath: inputPath,
@@ -52,5 +54,6 @@ class CompressOptionsBuilder {
         preferHardwareEncoder: preferHardwareEncoder,
         startMs: startMs != null ? BigInt.from(startMs!) : null,
         endMs: endMs != null ? BigInt.from(endMs!) : null,
+        burnInOverlays: burnInOverlays,
       );
 }

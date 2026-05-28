@@ -22,9 +22,14 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
   private static let minLandmarksForValid = 68
 
   public static func register(with registrar: FlutterPluginRegistrar) {
+#if canImport(FlutterMacOS)
+    let messenger = registrar.messenger
+#else
+    let messenger = registrar.messenger()
+#endif
     let channel = FlutterMethodChannel(
       name: "rust_image/face",
-      binaryMessenger: registrar.messenger()
+      binaryMessenger: messenger
     )
     let instance = RustImageFacePlugin()
     registrar.addMethodCallDelegate(instance, channel: channel)
@@ -61,13 +66,23 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
           do {
             let payload: [String: Any]
             if let dir = modelDir, RustImageMediaPipeAnalyzer.modelsReady(at: dir) {
-              payload = try RustImageMediaPipeAnalyzer.analyze(
-                imageData: imageData,
-                pixelFormat: pixelFormat,
-                targetWidth: width,
-                targetHeight: height,
-                modelDir: dir
-              )
+              do {
+                payload = try RustImageMediaPipeAnalyzer.analyze(
+                  imageData: imageData,
+                  pixelFormat: pixelFormat,
+                  targetWidth: width,
+                  targetHeight: height,
+                  modelDir: dir
+                )
+              } catch {
+                payload = try Self.analyzeVision(
+                  imageData: imageData,
+                  pixelFormat: pixelFormat,
+                  targetWidth: width,
+                  targetHeight: height,
+                  maxEdge: maxEdge
+                )
+              }
             } else {
               payload = try Self.analyzeVision(
                 imageData: imageData,
@@ -193,7 +208,7 @@ public final class RustImageFacePlugin: NSObject, FlutterPlugin {
     }
 
     let beforeContour = points.count
-    _ = addRegion(lm.faceContour)
+    addRegion(lm.faceContour)
     contourCount = points.count - beforeContour
     // Face contour count is in faceContourCount only — regionCounts are the 11 feature regions.
     if !regionCounts.isEmpty {

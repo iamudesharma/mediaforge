@@ -11,6 +11,7 @@ Use before first pub.dev release of the video packages. See [VIDEO_PACKAGE_SPLIT
 | **video_processor_core** — probe + compress (FRB) | `cd packages/video_processor_core/example && flutter run -d macos` |
 | **flutter_video_processor** — full SDK demo | From repo root: `./scripts/run-video-macos.sh` |
 | **video_thumbnail_cache** — unit smoke | `cd packages/video_thumbnail_cache && flutter test` |
+| **media_studio** — unified photo/video studio | `cd examples/media_studio && flutter run` |
 
 ### Engine CLI (no Flutter UI)
 

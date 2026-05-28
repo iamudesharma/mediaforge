@@ -19,6 +19,7 @@ workspace:
   - packages/flutter_video_processor
   - packages/flutter_video_processor/example
   - packages/video_thumbnail_cache
+  - examples/media_studio
 
 dev_dependencies:
   melos: ^7.8.0

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:rust_gpu_texture/rust_gpu_texture.dart';
 import '../video_processor.dart';
 import 'frame_queue.dart';
@@ -13,7 +12,7 @@ import 'video_texture_pool.dart';
 
 /// Owns one open video asset: probe, trim metadata, preview decode, and texture upload.
 ///
-/// V1.3: [PlaybackClock] + decoder-driven [play] / [pause] (no UI timer as master clock).
+/// V1.3+: [PlaybackClock] wall-clock during [play]; async per-frame decode (UI stays real-time).
 class MediaRuntime extends ChangeNotifier {
   MediaRuntime({
     this.previewMaxEdge = 720,
@@ -55,6 +54,12 @@ class MediaRuntime extends ChangeNotifier {
   int? _scrubStartedAtMs;
   int _playbackFramesInWindow = 0;
   int _playbackWindowStartMs = 0;
+
+  /// Wall-clock anchor for real-time preview (decode may lag; UI clock must not).
+  DateTime? _playbackWallOrigin;
+  int _playbackMediaOriginMs = 0;
+  bool _playbackDecodeBusy = false;
+  int _playbackDecodeToken = 0;
 
   /// V1.7 — rolling scrub/playback/texture stats (reset on [open]).
   MediaRuntimeMetrics get metrics => _metrics;
@@ -140,21 +145,26 @@ class MediaRuntime extends ChangeNotifier {
     _notifyIfActive();
   }
 
-  /// Starts decoder-clock playback within the trim range (video-only).
+  /// Starts playback within the trim range (wall-clock master, async decode).
   Future<void> play() async {
     if (!isOpen || _disposed) return;
     _scrubDebounceTimer?.cancel();
     _pendingScrubMs = null;
     _stopPlaybackLoop();
-    _clock.mediaTimeMs = _clampPositionMs(_ptsMs);
+    _playbackMediaOriginMs = _clampPositionMs(_ptsMs);
+    _playbackWallOrigin = DateTime.now();
+    _clock.mediaTimeMs = _playbackMediaOriginMs;
     _clock.startPlaying();
     final gen = ++_playGeneration;
     unawaited(_playbackLoop(gen));
     _notifyIfActive();
   }
 
-  /// Pauses playback; position is retained.
+  /// Pauses playback; position is retained at the wall-clock playhead.
   void pause() {
+    if (_clock.isPlaying) {
+      _ptsMs = _clock.mediaTimeMs;
+    }
     _stopPlaybackLoop();
     _notifyIfActive();
   }
@@ -188,70 +198,83 @@ class MediaRuntime extends ChangeNotifier {
   int _clampPositionMs(int positionMs) =>
       positionMs.clamp(_trimStartMs, _trimEndMs);
 
-  int _frameStepMs() {
-    final info = _mediaInfo;
-    if (info != null && info.fps > 1 && info.fps <= 60) {
-      final step = (1000 / info.fps).round();
-      return step.clamp(16, 100);
-    }
-    final step = (1000 / targetPreviewFps).round();
-    return step.clamp(16, 100);
-  }
-
   void _stopPlaybackLoop() {
     if (_clock.isPlaying) {
       _clock.pause();
     }
+    _playbackWallOrigin = null;
+    _playbackDecodeBusy = false;
+    _playbackDecodeToken++;
     _playGeneration++;
   }
 
-  Future<void> _playbackLoop(int playGen) async {
-    final stepMs = _frameStepMs();
+  int _wallClockTargetMs() {
+    final origin = _playbackWallOrigin;
+    if (origin == null) return _clampPositionMs(_clock.mediaTimeMs);
+    final wallMs = DateTime.now().difference(origin).inMilliseconds;
+    final scaled = (wallMs * _clock.rate).round();
+    return _clampPositionMs(_playbackMediaOriginMs + scaled);
+  }
 
+  Future<void> _playbackLoop(int playGen) async {
     while (!_disposed &&
         playGen == _playGeneration &&
         _clock.state == PlaybackState.playing) {
-      var targetMs = _clampPositionMs(_clock.mediaTimeMs);
+      var targetMs = _wallClockTargetMs();
 
       if (targetMs >= _trimEndMs) {
         if (loopPlayback) {
+          _playbackWallOrigin = DateTime.now();
+          _playbackMediaOriginMs = _trimStartMs;
           targetMs = _trimStartMs;
-          _clock.mediaTimeMs = _trimStartMs;
           _frameQueue.flush();
         } else {
+          targetMs = _trimEndMs;
+          _clock.mediaTimeMs = targetMs;
+          _ptsMs = targetMs;
           _clock.pause();
+          _playbackWallOrigin = null;
           _notifyIfActive();
           break;
         }
       }
 
-      final frame = await _decodeFrame(targetMs);
-      if (_disposed || playGen != _playGeneration) break;
-      if (frame == null) {
-        await Future<void>.delayed(const Duration(milliseconds: 16));
-        continue;
-      }
-
-      _frameQueue.enqueue(frame);
-      final ok = await _presentLatest(
-        _seekGeneration,
-        advanceClock: true,
-      );
-      if (!ok || _disposed || playGen != _playGeneration) break;
-
-      final displayedPts = _ptsMs;
-      var nextMs = displayedPts + stepMs;
-      if (nextMs > _trimEndMs) {
-        if (loopPlayback) {
-          nextMs = _trimStartMs;
-        } else {
-          _clock.pause();
-          _notifyIfActive();
-          break;
-        }
-      }
-      _clock.mediaTimeMs = nextMs;
+      _clock.mediaTimeMs = targetMs;
       _notifyIfActive();
+
+      if (!_playbackDecodeBusy) {
+        _playbackDecodeBusy = true;
+        final token = ++_playbackDecodeToken;
+        final captureTarget = targetMs;
+        unawaited(() async {
+          try {
+            final frame = await _decodeFrame(captureTarget);
+            if (_disposed ||
+                playGen != _playGeneration ||
+                token != _playbackDecodeToken ||
+                _clock.state != PlaybackState.playing) {
+              return;
+            }
+            if (frame == null) return;
+
+            _frameQueue.enqueue(frame);
+            final ok = await _presentLatest(
+              _seekGeneration,
+              advanceClock: false,
+            );
+            if (ok && playGen == _playGeneration) {
+              _ptsMs = frame.ptsMs;
+              _notifyIfActive();
+            }
+          } finally {
+            if (token == _playbackDecodeToken) {
+              _playbackDecodeBusy = false;
+            }
+          }
+        }());
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 16));
     }
   }
 
@@ -406,14 +429,7 @@ class MediaRuntime extends ChangeNotifier {
       if (ptr != null && ptr > 0) {
         try {
           await _texturePool.presentPixelBuffer(ptr);
-        } on PlatformException catch (_) {
-          VideoProcessor.releasePreviewPixelBuffer(ptr);
-          final fallback = await _decodeFrameRgbaAt(preview.ptsMs);
-          if (fallback != null) {
-            _fallbackRgba = fallback;
-            await _texturePool.presentRgba(fallback);
-          }
-        } catch (e) {
+        } catch (_) {
           VideoProcessor.releasePreviewPixelBuffer(ptr);
           if (preview.rgba != null) {
             await _texturePool.presentRgba(preview.rgba!);
@@ -422,8 +438,6 @@ class MediaRuntime extends ChangeNotifier {
             if (fallback != null) {
               _fallbackRgba = fallback;
               await _texturePool.presentRgba(fallback);
-            } else {
-              rethrow;
             }
           }
         }

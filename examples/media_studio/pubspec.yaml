@@ -1,0 +1,31 @@
+name: media_studio
+resolution: workspace
+description: "Unified Media Studio Example App"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_video_processor:
+    path: ../../packages/flutter_video_processor
+  rust_image_editor:
+    path: ../../packages/rust_image_editor
+  file_picker: ^8.3.7
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  uuid: ^4.5.1
+  video_player: ^2.9.2
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

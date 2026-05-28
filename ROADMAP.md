@@ -4,7 +4,7 @@ Performance and architecture plan for reaching native-editor responsiveness (GPU
 
 **Current sprint:** Sprint V1 (Video media runtime & texture preview)  
 **Status:** Sprint 22 + P0 **done** — beauty GPU texture path; image/video package split documented  
-**Next:** V0 pub.dev — [V0_ACCEPTANCE.md](docs/V0_ACCEPTANCE.md) · Sprint 20 (timeline editors)
+**Next:** V0 pub.dev — [V0_ACCEPTANCE.md](docs/V0_ACCEPTANCE.md) · Sprint 21 (background swap / AI hooks)
 
 ---
 
@@ -529,7 +529,7 @@ Example recipes (face-only, not global grade):
 | **V1.2** | `FrameQueue` (depth 3) + scrub flush/coalesce | **Done** | `scheduleScrub` debounce on `MediaRuntime`; queue flush before decode |
 | **V1.3** | `PlaybackClock` + decoder-driven play/pause | **Done** | `play()` / `pause()`; PTS advances clock; video-only; step from `MediaInfo.fps` or `targetPreviewFps` |
 | **V1.4** | GPU residency — Apple CVPixelBuffer → texture | **Done** | `decodePreviewFramePixelBuffer` + `presentPixelBuffer`; VT transfer → BGRA; RGBA fallback |
-| **V1.5** | Overlay compositor shell (`Stack` + timeline metadata) | **Done** | `VideoCompositorCanvas` + `VideoOverlayItem`; playhead visibility; studio demo |
+| **V1.5** | Overlay compositor shell (`Stack` + timeline metadata) | **Done** | `VideoCompositorCanvas` + `VideoOverlayItem`; playhead visibility; unified Media Studio app |
 | **V1.6** | Android zero-copy preview (MediaCodec → SurfaceTexture) | **Done** | `decodePreviewToSurface`; ≤ `previewMaxEdge`; RGBA fallback for 4K+ |
 | **V1.7** | Perf matrix I/J/K + leak checks on open/dispose | **Done** | `MediaRuntimeMetrics`, `MediaRuntimePerf`; example **Preview** tab |
 
@@ -553,9 +553,9 @@ Example recipes (face-only, not global grade):
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Video Clips Editor | Planned | Visual trimming, splitting, and merging of video tracks |
-| Audio Mixer Editor | Planned | Add background tracks, volume controls, and start offsets — see [VIDEO_MEDIA_RUNTIME.md §7](docs/VIDEO_MEDIA_RUNTIME.md#7-audio-sync-roadmap) |
-| Layer Timeline visibility | Planned | Set `startTime` and `endTime` for layers with transition animations |
+| Video Clips Editor | Done | `TimelineController` + `VideoClipsTimeline` — split/merge/delete; wired in `media_studio` Video Creator |
+| Audio Mixer Editor | Done | `AudioMixerPanel` — tracks, volume, mute, offsets; host adds via file picker + `video_player` preview |
+| Layer Timeline visibility | Done | `OverlayTimelinePanel` — start/end, fade in/out; `VideoOverlayItem.opacityAt` in compositor |
 
 ---
 

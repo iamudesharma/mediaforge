@@ -16,13 +16,19 @@ import UIKit
 enum RustImageMediaPipeAnalyzer {
   private static let minLandmarksForValid = 468
 
+  /// True only when MediaPipe Tasks is linked (iOS pod) and model files exist.
+  /// macOS uses Apple Vision when this returns false.
   static func modelsReady(at modelDir: String?) -> Bool {
+    #if canImport(MediaPipeTasksVision)
     guard let dir = modelDir, !dir.isEmpty else { return false }
     let base = URL(fileURLWithPath: dir, isDirectory: true)
     let face = base.appendingPathComponent("face_landmarker.task")
     let seg = base.appendingPathComponent("selfie_segmenter.tflite")
     return FileManager.default.fileExists(atPath: face.path)
       && FileManager.default.fileExists(atPath: seg.path)
+    #else
+    return false
+    #endif
   }
 
   static func analyze(

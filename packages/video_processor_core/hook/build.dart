@@ -154,12 +154,22 @@ Future<String?> _findExistingLibrary({
       ),
   ];
 
+  // Pick the newest artifact so stale rust_hook / jniLibs copies cannot win after
+  // `flutter_rust_bridge_codegen` (FRB content-hash mismatch vs Dart).
+  String? newestPath;
+  DateTime? newestModified;
   for (final path in candidates) {
-    if (await File(path).exists()) {
-      return path;
+    final file = File(path);
+    if (!await file.exists()) {
+      continue;
+    }
+    final modified = await file.lastModified();
+    if (newestModified == null || modified.isAfter(newestModified)) {
+      newestModified = modified;
+      newestPath = path;
     }
   }
-  return null;
+  return newestPath;
 }
 
 Future<String?> _cargoBuild({

@@ -30,7 +30,6 @@ A new Flutter FFI plugin project.
   s.dependency 'FlutterMacOS'
 
   s.platform = :osx, '12.0'
-  s.static_framework = true
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.swift_version = '5.0'
 
@@ -48,10 +47,6 @@ A new Flutter FFI plugin project.
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
-    'OTHER_LDFLAGS' => rust_ldflags,
-    'DEAD_CODE_STRIPPING' => 'NO',
-  }
-  s.user_target_xcconfig = {
     'OTHER_LDFLAGS' => rust_ldflags,
     'DEAD_CODE_STRIPPING' => 'NO',
   }

@@ -95,6 +95,23 @@ pub struct CompressOptions {
     pub start_ms: Option<u64>,
     /// Inclusive clip end in milliseconds (None = end of file).
     pub end_ms: Option<u64>,
+    /// Pre-rasterized overlay PNGs (Flutter) composited on each encoded frame.
+    pub burn_in_overlays: Vec<BurnInOverlay>,
+}
+
+/// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
+#[frb]
+#[derive(Clone, Debug, Default)]
+pub struct BurnInOverlay {
+    pub image_path: String,
+    /// Visible on [start_ms, end_ms) in source timeline milliseconds.
+    pub start_ms: u64,
+    pub end_ms: u64,
+    /// Normalized anchor 0–1 (top-left origin), matches Flutter compositor.
+    pub anchor_x: f32,
+    pub anchor_y: f32,
+    pub fade_in_ms: u64,
+    pub fade_out_ms: u64,
 }
 
 #[frb]
@@ -214,6 +231,7 @@ impl Default for CompressOptions {
             prefer_hardware_encoder: true,
             start_ms: None,
             end_ms: None,
+            burn_in_overlays: Vec::new(),
         }
     }
 }

@@ -18,6 +18,7 @@ use crate::ffmpeg::{
 use crate::ffmpeg::vt_pipeline::{self, VtScaler};
 use crate::jobs::progress::ProgressReporter;
 use crate::jobs::registry::CancellationToken;
+use crate::pipeline::overlay_burn::OverlayCompositor;
 use crate::pipeline::streaming::movflags;
 use crate::types::{CompressOptions, CompressResult, VideoCodec};
 
@@ -64,6 +65,7 @@ struct VideoTranscoder {
     clip_start_ms: u64,
     clip_end_ms: Option<u64>,
     stop_encoding: bool,
+    burn_in: Option<OverlayCompositor>,
 }
 
 fn describe_pipeline_mode(
@@ -176,6 +178,7 @@ impl VideoTranscoder {
     fn send_to_encoder(
         &mut self,
         src: &mut Video,
+        frame_ms: u64,
         octx: &mut format::context::Output,
         ost_time_base: Rational,
         scaled: &mut Video,
@@ -191,8 +194,14 @@ impl VideoTranscoder {
             s.run(src, scaled).map_err(map_ffmpeg_error)?;
             scaled.set_pts(pts);
             scaled.set_kind(picture::Type::None);
+            if let Some(comp) = &mut self.burn_in {
+                comp.apply_on_yuv420(scaled, frame_ms)?;
+            }
             self.encoder.send_frame(scaled).map_err(map_ffmpeg_error)?;
         } else {
+            if let Some(comp) = &mut self.burn_in {
+                comp.apply_on_yuv420(src, frame_ms)?;
+            }
             self.encoder.send_frame(src).map_err(map_ffmpeg_error)?;
         }
         self.drain_encoder(octx, ost_time_base, packet_pool)
@@ -201,16 +210,26 @@ impl VideoTranscoder {
     fn process_decoded(
         &mut self,
         frame: &mut Video,
+        frame_ms: u64,
         octx: &mut format::context::Output,
         ost_time_base: Rational,
         scaled: &mut Video,
         packet_pool: &mut PacketPool,
     ) -> Result<()> {
         #[cfg(any(target_os = "ios", target_os = "macos"))]
-        if crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format()) {
+        if self.burn_in.is_none()
+            && crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format())
+        {
             match self.vt_link {
                 VtLinkMode::ZeroCopy => {
-                    return self.send_to_encoder(frame, octx, ost_time_base, scaled, packet_pool);
+                    return self.send_to_encoder(
+                        frame,
+                        frame_ms,
+                        octx,
+                        ost_time_base,
+                        scaled,
+                        packet_pool,
+                    );
                 }
                 VtLinkMode::GpuScale => {
                     return self.send_vt_gpu_scaled(frame, octx, ost_time_base, packet_pool);
@@ -223,10 +242,24 @@ impl VideoTranscoder {
             if crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format()) {
                 let mut sw = Video::empty();
                 hw.transfer_to_sw(frame, &mut sw)?;
-                return self.send_to_encoder(&mut sw, octx, ost_time_base, scaled, packet_pool);
+                return self.send_to_encoder(
+                    &mut sw,
+                    frame_ms,
+                    octx,
+                    ost_time_base,
+                    scaled,
+                    packet_pool,
+                );
             }
         }
-        self.send_to_encoder(frame, octx, ost_time_base, scaled, packet_pool)
+        self.send_to_encoder(
+            frame,
+            frame_ms,
+            octx,
+            ost_time_base,
+            scaled,
+            packet_pool,
+        )
     }
 }
 
@@ -365,6 +398,7 @@ fn run_compress_inner(
                 options.max_fps,
                 clip_start_ms,
                 clip_end_ms,
+                &options.burn_in_overlays,
             )?;
             transcoders.insert(ist_index, transcoder);
         } else {
@@ -489,6 +523,7 @@ fn run_compress_inner(
 
                 transcoder.process_decoded(
                     &mut decoded,
+                    frame_ms,
                     &mut octx,
                     ost_time_base,
                     &mut scaled,
@@ -524,8 +559,11 @@ fn run_compress_inner(
 
         transcoder.decoder.send_eof().map_err(map_ffmpeg_error)?;
         while transcoder.decoder.receive_frame(&mut decoded).is_ok() {
+            let frame_ms =
+                pts_to_ms(decoded.pts().unwrap_or(0), transcoder.input_time_base);
             transcoder.process_decoded(
                 &mut decoded,
+                frame_ms,
                 &mut octx,
                 ost_time_base,
                 &mut scaled,
@@ -596,6 +634,7 @@ fn create_video_transcoder(
     max_fps: Option<f32>,
     clip_start_ms: u64,
     clip_end_ms: Option<u64>,
+    burn_in_specs: &[crate::types::BurnInOverlay],
 ) -> Result<VideoTranscoder> {
     let global_header = octx
         .format()
@@ -612,8 +651,13 @@ fn create_video_transcoder(
     let src_w = decoder.width();
     let src_h = decoder.height();
     let (out_w, out_h) = scale_dimensions(src_w, src_h, max_w, max_h);
+    let burn_in_active = !burn_in_specs.is_empty();
 
-    let candidates = encoder_candidates_with_hw(codec, prefer_hw);
+    let candidates = if burn_in_active {
+        encoder_candidates_with_hw(codec, false)
+    } else {
+        encoder_candidates_with_hw(codec, prefer_hw)
+    };
     let mut last_err: Option<VideoProcessorError> = None;
     let mut opened_pair: Option<(ffmpeg_next::encoder::Video, usize, String, VtLinkMode)> =
         None;
@@ -634,6 +678,7 @@ fn create_video_transcoder(
             target_bitrate,
             is_hardware_encoder(encoder_name),
             hw_transfer.as_mut(),
+            burn_in_active,
         ) {
             Ok((encoder, ost_idx, vt_mode)) => {
                 opened_pair = Some((encoder, ost_idx, encoder_name.to_string(), vt_mode));
@@ -664,17 +709,20 @@ fn create_video_transcoder(
     };
 
     // MediaCodec encoders are configured on 16-aligned dimensions; scaler output must match.
-    let (out_w, out_h) = if encoder_name.contains("mediacodec") {
+    let (out_w, out_h) = if encoder_name.contains("mediacodec") && !burn_in_active {
         (align_even_16(out_w), align_even_16(out_h))
     } else {
         (out_w, out_h)
     };
 
-    let (enc_pixel, scale_needed) = if vt_link != VtLinkMode::None {
-        (Pixel::VIDEOTOOLBOX, false)
+    let burn_in = OverlayCompositor::new(burn_in_specs, out_w, out_h)?;
+
+    let (enc_pixel, scale_needed, vt_link) = if burn_in_active {
+        (Pixel::YUV420P, true, VtLinkMode::None)
+    } else if vt_link != VtLinkMode::None {
+        (Pixel::VIDEOTOOLBOX, false, vt_link)
     } else if encoder_name.contains("mediacodec") {
-        // Always NV12 + swscale: many devices reject YUV420P for MediaCodec encode.
-        (Pixel::NV12, true)
+        (Pixel::NV12, true, vt_link)
     } else {
         let sw_pixel = hw_transfer
             .as_ref()
@@ -684,6 +732,7 @@ fn create_video_transcoder(
         (
             enc_pixel,
             out_w != src_w || out_h != src_h || sw_pixel != enc_pixel,
+            vt_link,
         )
     };
 
@@ -730,6 +779,7 @@ fn create_video_transcoder(
         clip_start_ms,
         clip_end_ms,
         stop_encoding: false,
+        burn_in,
     })
 }
 
@@ -753,6 +803,7 @@ fn try_open_video_encoder(
     target_bitrate: u64,
     is_hw: bool,
     mut hw: Option<&mut HwFrameTransfer>,
+    disable_vt_pipeline: bool,
 ) -> Result<(ffmpeg_next::encoder::Video, usize, VtLinkMode)> {
     let codec = ffmpeg_next::encoder::find_by_name(encoder_name)
         .ok_or_else(|| VideoProcessorError::UnsupportedCodec(encoder_name.into()))?;
@@ -763,7 +814,9 @@ fn try_open_video_encoder(
     let src_h = decoder.height();
 
     #[cfg(any(target_os = "ios", target_os = "macos"))]
-    let vt_mode = if is_hw
+    let vt_mode = if disable_vt_pipeline {
+        VtLinkMode::None
+    } else if is_hw
         && vt_pipeline::encoder_supports_vt_pipeline(encoder_name)
         && hw.is_some()
     {
