@@ -36,7 +36,7 @@ fi
 
 cd "${APP}"
 if ((${#FLUTTER_ARGS[@]} > 0)); then
-  exec flutter run -d macos --release "${FLUTTER_ARGS[@]}"
+  exec flutter run -d macos "${FLUTTER_ARGS[@]}"
 else
-  exec flutter run -d macos --release
+  exec flutter run -d macos
 fi

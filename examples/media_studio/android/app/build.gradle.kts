@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.mediastudio.media_studio"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -23,6 +23,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Physical devices (e.g. arm64). Add "x86_64" for emulators (needs AVIF workaround).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {

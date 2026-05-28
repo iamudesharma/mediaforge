@@ -47,12 +47,25 @@ echo "==> cargo clean + build --release (video_processor_core, target=${MACOS_TA
 (cd "${RUST}" && cargo clean && cargo build --release --target "${MACOS_TARGET}")
 
 echo "==> Copy newly built dylib to macOS Frameworks and update install name"
-DYLIB="${REPO_ROOT}/packages/video_processor_core/rust/target/${MACOS_TARGET}/release/libvideo_processor_core.dylib"
-if [[ ! -f "${DYLIB}" ]]; then
-  DYLIB="${REPO_ROOT}/packages/video_processor_core/target/release/libvideo_processor_core.dylib"
+DYLIB=""
+for candidate in \
+  "${VP}/target/${MACOS_TARGET}/release/libvideo_processor_core.dylib" \
+  "${RUST}/target/${MACOS_TARGET}/release/libvideo_processor_core.dylib" \
+  "${VP}/target/release/libvideo_processor_core.dylib" \
+  "${RUST}/target/release/libvideo_processor_core.dylib"; do
+  if [[ -f "${candidate}" ]]; then
+    DYLIB="${candidate}"
+    break
+  fi
+done
+if [[ -z "${DYLIB}" ]]; then
+  echo "ERROR: libvideo_processor_core.dylib not found under ${VP}/target or ${RUST}/target" >&2
+  exit 1
 fi
-cp "${DYLIB}" "${REPO_ROOT}/packages/video_processor_core/macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core"
-install_name_tool -id "@rpath/video_processor_core.framework/video_processor_core" "${REPO_ROOT}/packages/video_processor_core/macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core"
+echo "    Using ${DYLIB}"
+FRAMEWORK_BIN="${VP}/macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core"
+cp "${DYLIB}" "${FRAMEWORK_BIN}"
+install_name_tool -id "@rpath/video_processor_core.framework/video_processor_core" "${FRAMEWORK_BIN}"
 
 echo "==> Verify FRB content hash in source"
 DART_HASH=$(grep -m1 'rustContentHash =>' "${VP}/lib/src/frb_generated/frb_generated.dart" | sed -E 's/.*=> *(-?[0-9]+).*/\1/')
@@ -62,6 +75,12 @@ if [[ "${DART_HASH}" != "${RUST_HASH}" ]]; then
   echo "ERROR: Dart/Rust FRB hashes differ — re-run codegen from packages/video_processor_core" >&2
   exit 1
 fi
+
+echo "==> Seed hooks_runner with the same dylib (avoids stale FRB dispatch in app bundle)"
+HOOK_OUT="${REPO_ROOT}/.dart_tool/hooks_runner/shared/video_processor_core/build/rust_hook/${MACOS_TARGET}/release"
+mkdir -p "${HOOK_OUT}"
+cp -f "${DYLIB}" "${HOOK_OUT}/libvideo_processor_core.dylib"
+install_name_tool -id "@rpath/libvideo_processor_core.dylib" "${HOOK_OUT}/libvideo_processor_core.dylib" 2>/dev/null || true
 
 echo "==> flutter clean (media_studio)"
 (cd "${REPO_ROOT}/examples/media_studio" && flutter clean && flutter pub get)

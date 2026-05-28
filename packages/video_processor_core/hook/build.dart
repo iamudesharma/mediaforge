@@ -128,11 +128,19 @@ Future<String?> _findExistingLibrary({
   // only when you intentionally refresh jniLibs; Flutter hook always cargo-builds.
   final candidates = <String>[
     hookOut,
-    if (os == OS.macOS)
+    if (os == OS.macOS) ...[
       p.join(
         packageRoot.toFilePath(),
-        'rust/target/release/libvideo_processor_core.dylib',
+        'target',
+        triple,
+        'release',
+        libFileName,
       ),
+      p.join(
+        packageRoot.toFilePath(),
+        'macos/Frameworks/video_processor_core.framework/Versions/A/video_processor_core',
+      ),
+    ],
     if (os == OS.iOS)
       p.join(
         packageRoot.toFilePath(),

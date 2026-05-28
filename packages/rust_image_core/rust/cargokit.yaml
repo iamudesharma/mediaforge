@@ -1,0 +1,12 @@
+# Android Gradle (build-gradle) only — macOS/iOS use build_pod.sh.
+# AVIF pulls in rav1e (heavy asm + RAM); skip on debug device builds.
+cargo:
+  debug:
+    extra_flags:
+      - --release
+      - --no-default-features
+      - --features=blurhash,gpu
+  release:
+    extra_flags:
+      - --no-default-features
+      - --features=blurhash,gpu,avif

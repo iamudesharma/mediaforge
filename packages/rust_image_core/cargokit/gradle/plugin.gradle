@@ -57,6 +57,35 @@ abstract class CargoKitBuildTask extends DefaultTask {
             throw new GradleException("Property 'libname' must be set on cargokit extension");
         }
 
+        def libFileName = "lib${project.cargokit.libname}.so"
+        def prebuiltBase = new File(project.projectDir, "src/main/jniLibs")
+        def jniAbiDir = { String flutterPlatform ->
+            switch (flutterPlatform) {
+                case "android-arm": return "armeabi-v7a"
+                case "android-arm64": return "arm64-v8a"
+                case "android-x64": return "x86_64"
+                default: return flutterPlatform
+            }
+        }
+        def allPrebuiltPresent = targetPlatforms.every { platform ->
+            new File(prebuiltBase, "${jniAbiDir(platform)}/${libFileName}").exists()
+        }
+        if (allPrebuiltPresent) {
+            println "CargoKit: using prebuilt JNI from ${prebuiltBase} (skipping cargo)"
+            targetPlatforms.each { platform ->
+                def abi = jniAbiDir(platform)
+                def destDir = new File(outputDir, abi)
+                destDir.mkdirs()
+                def src = new File(prebuiltBase, "${abi}/${libFileName}")
+                java.nio.file.Files.copy(
+                    src.toPath(),
+                    new File(destDir, libFileName).toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
+                )
+            }
+            return
+        }
+
         def executableName = Os.isFamily(Os.FAMILY_WINDOWS) ? "run_build_tool.cmd" : "run_build_tool.sh"
         def path = Paths.get(new File(pluginFile).parent, "..", executableName).toString();
 
@@ -85,6 +114,8 @@ abstract class CargoKitBuildTask extends DefaultTask {
             environment "CARGOKIT_MIN_SDK_VERSION", minSdkVersion
             environment "CARGOKIT_TARGET_PLATFORMS", targetPlatforms.join(",")
             environment "CARGOKIT_JAVA_HOME", System.properties['java.home']
+            // rust_image_core + rav1e/wgpu can OOM on laptops when building all ABIs.
+            environment "CARGO_BUILD_JOBS", System.getenv("CARGO_BUILD_JOBS") ?: "2"
         }
     }
 }
@@ -144,11 +175,9 @@ class CargoKitPlugin implements Plugin<Project> {
                 platforms = plugin.getTargetPlatforms().collect()
             }
 
-            // Same thing addFlutterDependencies does in flutter.gradle
-            if (buildType == "debug") {
-                platforms.add("android-x86")
-                platforms.add("android-x64")
-            }
+            // Do not force x86 ABIs here: rav1e (AVIF) asm fails on x86_64-linux-android.
+            // To build for emulators, set ndk { abiFilters "x86_64" } on the app; Flutter
+            // will include those platforms via getTargetPlatforms above.
 
             // The task name depends on plugin properties, which are not available
             // at this point

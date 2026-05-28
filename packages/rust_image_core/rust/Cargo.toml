@@ -29,8 +29,9 @@ image = { version = "0.25", default-features = false, features = [
     "tiff",
 ] }
 fast_image_resize = "5"
-imageproc = "0.25"
-photon-rs = "0.3"
+imageproc = { version = "0.25", default-features = false }
+# photon-rs enables image/default (AVIF → rav1e); too heavy for Android device builds.
+photon-rs = { version = "0.3", default-features = false }
 kamadak-exif = "0.6"
 rayon = "1"
 mozjpeg = "0.10"
