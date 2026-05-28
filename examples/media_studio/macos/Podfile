@@ -37,10 +37,23 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  # Rust/FFmpeg native hooks are arm64-only on Apple Silicon; universal Release
+  # links x86_64 without _frb_get_rust_content_hash when Homebrew rustc is first.
+  exclude_x86_macos = `uname -m`.strip == 'arm64'
+  rust_force_load = [
+    '$(inherited)',
+    '-force_load', '$(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a',
+    '-Wl,-u,_frb_get_rust_content_hash',
+    '-Wl,-u,_rust_image_link_rust_for_frb',
+  ]
+
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
     target.build_configurations.each do |config|
       config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
+      if exclude_x86_macos
+        config.build_settings['EXCLUDED_ARCHS[sdk=macosx*]'] = 'x86_64'
+      end
     end
   end
   installer.aggregate_targets.each do |aggregate_target|
@@ -49,8 +62,35 @@ post_install do |installer|
       target.build_configurations.each do |config|
         config.build_settings['STRIP_STYLE'] = 'non-global'
         config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
+        config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
+        config.build_settings['OTHER_LDFLAGS'] = rust_force_load
+        if exclude_x86_macos
+          config.build_settings['EXCLUDED_ARCHS[sdk=macosx*]'] = 'x86_64'
+        end
       end
     end
     aggregate_target.user_project.save
+  end
+
+  # Static CocoaPods frameworks do not always honor pod OTHER_LDFLAGS force_load;
+  # link the Rust archive when building the app as well.
+  rust_ld_append = ' -force_load $(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a -Wl,-u,_frb_get_rust_content_hash -Wl,-u,_rust_image_link_rust_for_frb'
+  installer.aggregate_targets.each do |aggregate_target|
+    aggregate_target.xcconfigs.each do |config_name, xcconfig|
+      xcconfig_path = aggregate_target.xcconfig_path(config_name)
+      next unless File.exist?(xcconfig_path)
+
+      lines = File.readlines(xcconfig_path)
+      next if lines.any? { |l| l.include?('librust_image_core.a') }
+
+      updated = lines.map do |line|
+        if line.start_with?('OTHER_LDFLAGS =')
+          line.chomp + rust_ld_append + "\n"
+        else
+          line
+        end
+      end
+      File.write(xcconfig_path, updated.join)
+    end
   end
 end
