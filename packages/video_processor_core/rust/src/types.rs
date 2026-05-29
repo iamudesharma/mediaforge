@@ -73,6 +73,10 @@ pub struct MediaInfo {
     pub audio_codec: Option<String>,
     pub bitrate: u64,
     pub file_size: u64,
+    /// True for iPhone / camera Dolby Vision HEVC (preview uses software decode on Apple).
+    pub has_dolby_vision: bool,
+    /// When true, UI should use session RGBA decode (skip VideoToolbox seek on Apple).
+    pub prefer_software_preview: bool,
 }
 
 #[frb]
@@ -97,6 +101,22 @@ pub struct CompressOptions {
     pub end_ms: Option<u64>,
     /// Pre-rasterized overlay PNGs (Flutter) composited on each encoded frame.
     pub burn_in_overlays: Vec<BurnInOverlay>,
+    /// External background audio mixed on export (streaming decode; empty = no added tracks).
+    pub audio_tracks: Vec<AudioTrackInput>,
+    /// When true, omit the source file’s embedded audio from the mix (only added tracks).
+    pub mute_original_audio: bool,
+}
+
+/// Background audio lane for export mux (paths must be local FFmpeg-readable files).
+#[frb]
+#[derive(Clone, Debug, Default)]
+pub struct AudioTrackInput {
+    pub source_path: String,
+    pub source_start_ms: u64,
+    pub duration_ms: u64,
+    pub timeline_start_ms: u64,
+    pub volume: f32,
+    pub muted: bool,
 }
 
 /// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
@@ -208,6 +228,13 @@ pub struct PreviewFramePixelBuffer {
 
 #[frb]
 #[derive(Clone, Debug)]
+pub enum PlaybackFrame {
+    Rgba(PreviewFrameRgba),
+    PixelBuffer(PreviewFramePixelBuffer),
+}
+
+#[frb]
+#[derive(Clone, Debug)]
 pub enum JobResult {
     Compress(CompressResult),
     Empty,
@@ -232,6 +259,8 @@ impl Default for CompressOptions {
             start_ms: None,
             end_ms: None,
             burn_in_overlays: Vec::new(),
+            audio_tracks: Vec::new(),
+            mute_original_audio: false,
         }
     }
 }

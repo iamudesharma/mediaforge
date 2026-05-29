@@ -44,6 +44,39 @@ pub fn encoder_candidates(codec: &VideoCodec) -> Vec<&'static str> {
     }
 }
 
+/// Software encoders only (no HW fallback). Used for burn-in export where frames are CPU YUV420P.
+pub fn encoder_candidates_software_only(codec: &VideoCodec) -> Vec<&'static str> {
+    encoder_candidates(codec)
+        .into_iter()
+        .filter(|name| !is_hardware_encoder(name))
+        .filter(|name| ffmpeg_next::encoder::find_by_name(name).is_some())
+        .collect()
+}
+
+/// Burn-in composites CPU YUV420P then encodes. Prefer libx264/libx265 when linked; on mobile
+/// FFmpeg builds that only ship MediaCodec / VideoToolbox, use those with YUV420P input.
+pub fn encoder_candidates_burn_in(codec: &VideoCodec) -> Vec<&'static str> {
+    let sw = encoder_candidates_software_only(codec);
+    if !sw.is_empty() {
+        return sw;
+    }
+    if matches!(std::env::consts::OS, "android" | "ios") {
+        let hw: Vec<&str> = encoder_candidates(codec)
+            .into_iter()
+            .filter(|n| is_hardware_encoder(n))
+            .filter(|n| ffmpeg_next::encoder::find_by_name(n).is_some())
+            .collect();
+        if !hw.is_empty() {
+            log::warn!(
+                "burn-in export: no software encoder for {codec:?} in this FFmpeg build; \
+                 using hardware encoder with CPU YUV420P overlay composite"
+            );
+            return hw;
+        }
+    }
+    sw
+}
+
 pub fn encoder_candidates_with_hw(codec: &VideoCodec, prefer_hardware: bool) -> Vec<&'static str> {
     let mut list: Vec<&str> = encoder_candidates(codec)
         .into_iter()

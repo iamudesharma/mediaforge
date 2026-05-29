@@ -44,5 +44,30 @@ void main() {
       expect(range!.startMs, 0);
       expect(range.endMs, 60_000);
     });
+
+    test('audio clip does not extend timeline duration', () {
+      expect(controller.durationMs, 60_000);
+      controller.addAudioClip(
+        sourcePath: '/song.mp3',
+        sourceDurationMs: 180_000,
+        videoDurationMs: 60_000,
+      );
+      expect(controller.durationMs, 60_000);
+      final audio = controller.audioClips.single;
+      expect(audio.durationMs, 60_000);
+      expect(audio.timelineStartMs + audio.durationMs, lessThanOrEqualTo(60_000));
+    });
+
+    test('updateAudioClip enforces timeline_start + duration <= video', () {
+      final clip = controller.addAudioClip(
+        sourcePath: '/song.mp3',
+        sourceDurationMs: 120_000,
+        timelineStartMs: 50_000,
+        videoDurationMs: 60_000,
+      );
+      controller.updateAudioClip(clip.copyWith(timelineStartMs: 55_000));
+      final updated = controller.audioClips.single;
+      expect(updated.timelineStartMs + updated.durationMs, lessThanOrEqualTo(60_000));
+    });
   });
 }

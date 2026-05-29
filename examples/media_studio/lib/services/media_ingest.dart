@@ -154,10 +154,95 @@ abstract final class MediaIngest {
     return 'Probe failed: $e';
   }
 
-  static Future<String> _copyToIngest(String sourcePath) async {
+  /// Copy a picked audio file to stable app storage, then probe duration.
+  static Future<MediaIngestResult> ingestLocalAudio(
+    String sourcePath, {
+    void Function(String status)? onStatus,
+  }) async {
+    final trimmed = sourcePath.trim();
+    if (trimmed.isEmpty) {
+      return const MediaIngestResult(
+        phase: MediaIngestPhase.failed,
+        error: 'Empty path',
+      );
+    }
+
+    if (!kIsWeb && !File(trimmed).existsSync()) {
+      return MediaIngestResult(
+        phase: MediaIngestPhase.failed,
+        error: 'File not found: $trimmed',
+      );
+    }
+
+    if (isUnderIngestDir(trimmed)) {
+      onStatus?.call('Already ingested — probing…');
+      return probeOnly(trimmed, onStatus: onStatus, skippedCopy: true);
+    }
+
+    onStatus?.call('Copying audio to app storage…');
+    String stablePath;
+    try {
+      stablePath = await _copyToIngest(trimmed, defaultExt: '.m4a');
+    } catch (e) {
+      return MediaIngestResult(
+        phase: MediaIngestPhase.failed,
+        error: 'Copy failed: $e',
+      );
+    }
+
+    onStatus?.call('Probing audio codec…');
+    final probe = await probeOnly(stablePath, onStatus: null, skippedCopy: false);
+    if (probe.phase != MediaIngestPhase.ready || probe.info == null) {
+      return probe;
+    }
+
+    final codec = probe.info!.audioCodec?.toLowerCase() ?? '';
+    // Normalize anything that isn't native AAC/ALAC (e.g. OPUS, FLAC, VBR MP3)
+    if (codec != 'aac' && codec != 'alac' && codec.isNotEmpty) {
+      onStatus?.call('Normalizing audio to AAC…');
+      try {
+        final dir = await ingestDir();
+        final aacPath = p.join(dir.path, 'norm_${const Uuid().v4()}.m4a');
+        final job = await VideoProcessor.compressJob(
+          input: stablePath,
+          output: aacPath,
+          audioTracks: [
+            AudioTrackInput(
+              sourcePath: stablePath,
+              sourceStartMs: BigInt.zero,
+              durationMs: probe.info!.durationMs,
+              timelineStartMs: BigInt.zero,
+              volume: 1.0,
+              muted: false,
+            )
+          ],
+          muteOriginalAudio: true,
+          includeAudio: true,
+        );
+        await job.result;
+        stablePath = aacPath;
+      } catch (e) {
+        return MediaIngestResult(
+          phase: MediaIngestPhase.failed,
+          error: 'Audio normalize failed: $e',
+        );
+      }
+    }
+
+    return probeOnly(
+      stablePath,
+      onStatus: onStatus,
+      skippedCopy: false,
+    );
+  }
+
+  static Future<String> _copyToIngest(
+    String sourcePath, {
+    String defaultExt = '.mp4',
+  }) async {
     final src = File(sourcePath);
     final ext = p.extension(sourcePath);
-    final safeExt = ext.isNotEmpty ? ext : '.mp4';
+    final safeExt = ext.isNotEmpty ? ext : defaultExt;
     final dir = await ingestDir();
     final dest = p.join(dir.path, '${const Uuid().v4()}$safeExt');
     await src.copy(dest);

@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'error.dart';
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
+import 'pipeline/preview.dart';
 import 'types.dart';
 
 abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
@@ -22,8 +23,35 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     required super.portManager,
   });
 
+  CrossPlatformFinalizerArg
+  get rust_arc_decrement_strong_count_VideoPreviewSessionPtr => wire
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession;
+
   @protected
   AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  VideoPreviewSession
+  dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    dynamic raw,
+  );
+
+  @protected
+  VideoPreviewSession
+  dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    dynamic raw,
+  );
+
+  @protected
+  VideoPreviewSession
+  dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    dynamic raw,
+  );
+
+  @protected
+  RustStreamSink<PlaybackFrame> dco_decode_StreamSink_playback_frame_Sse(
+    dynamic raw,
+  );
 
   @protected
   RustStreamSink<ProgressEvent> dco_decode_StreamSink_progress_event_Sse(
@@ -32,6 +60,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String dco_decode_String(dynamic raw);
+
+  @protected
+  AudioTrackInput dco_decode_audio_track_input(dynamic raw);
 
   @protected
   BatchThumbnailBytesOptions dco_decode_batch_thumbnail_bytes_options(
@@ -71,6 +102,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_32(dynamic raw);
 
   @protected
+  PreviewFramePixelBuffer dco_decode_box_autoadd_preview_frame_pixel_buffer(
+    dynamic raw,
+  );
+
+  @protected
+  PreviewFrameRgba dco_decode_box_autoadd_preview_frame_rgba(dynamic raw);
+
+  @protected
   ThumbnailBytesOptions dco_decode_box_autoadd_thumbnail_bytes_options(
     dynamic raw,
   );
@@ -103,6 +142,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_f_32(dynamic raw);
 
   @protected
+  double dco_decode_f_64(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
@@ -112,6 +154,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String> dco_decode_list_String(dynamic raw);
 
   @protected
+  List<AudioTrackInput> dco_decode_list_audio_track_input(dynamic raw);
+
+  @protected
   List<BurnInOverlay> dco_decode_list_burn_in_overlay(dynamic raw);
 
   @protected
@@ -119,6 +164,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   Uint64List dco_decode_list_prim_u_64_strict(dynamic raw);
+
+  @protected
+  List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -133,6 +181,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double? dco_decode_opt_box_autoadd_f_32(dynamic raw);
 
   @protected
+  PreviewFramePixelBuffer?
+  dco_decode_opt_box_autoadd_preview_frame_pixel_buffer(dynamic raw);
+
+  @protected
+  PreviewFrameRgba? dco_decode_opt_box_autoadd_preview_frame_rgba(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -145,6 +200,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String>? dco_decode_opt_list_String(dynamic raw);
 
   @protected
+  PlaybackFrame dco_decode_playback_frame(dynamic raw);
+
+  @protected
   PreviewFramePixelBuffer dco_decode_preview_frame_pixel_buffer(dynamic raw);
 
   @protected
@@ -155,6 +213,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProgressEvent dco_decode_progress_event(dynamic raw);
+
+  @protected
+  (BigInt, BigInt) dco_decode_record_usize_usize(dynamic raw);
 
   @protected
   ThumbnailBytesOptions dco_decode_thumbnail_bytes_options(dynamic raw);
@@ -178,6 +239,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  BigInt dco_decode_usize(dynamic raw);
+
+  @protected
   VideoCodec dco_decode_video_codec(dynamic raw);
 
   @protected
@@ -190,12 +254,38 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  VideoPreviewSession
+  sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VideoPreviewSession
+  sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VideoPreviewSession
+  sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RustStreamSink<PlaybackFrame> sse_decode_StreamSink_playback_frame_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<ProgressEvent> sse_decode_StreamSink_progress_event_Sse(
     SseDeserializer deserializer,
   );
 
   @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  AudioTrackInput sse_decode_audio_track_input(SseDeserializer deserializer);
 
   @protected
   BatchThumbnailBytesOptions sse_decode_batch_thumbnail_bytes_options(
@@ -245,6 +335,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_box_autoadd_f_32(SseDeserializer deserializer);
 
   @protected
+  PreviewFramePixelBuffer sse_decode_box_autoadd_preview_frame_pixel_buffer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PreviewFrameRgba sse_decode_box_autoadd_preview_frame_rgba(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ThumbnailBytesOptions sse_decode_box_autoadd_thumbnail_bytes_options(
     SseDeserializer deserializer,
   );
@@ -281,6 +381,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_f_32(SseDeserializer deserializer);
 
   @protected
+  double sse_decode_f_64(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
@@ -288,6 +391,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AudioTrackInput> sse_decode_list_audio_track_input(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<BurnInOverlay> sse_decode_list_burn_in_overlay(
@@ -303,6 +411,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint64List sse_decode_list_prim_u_64_strict(SseDeserializer deserializer);
 
   @protected
+  List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
@@ -313,6 +424,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? sse_decode_opt_box_autoadd_f_32(SseDeserializer deserializer);
+
+  @protected
+  PreviewFramePixelBuffer?
+  sse_decode_opt_box_autoadd_preview_frame_pixel_buffer(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PreviewFrameRgba? sse_decode_opt_box_autoadd_preview_frame_rgba(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
@@ -327,6 +449,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
 
   @protected
+  PlaybackFrame sse_decode_playback_frame(SseDeserializer deserializer);
+
+  @protected
   PreviewFramePixelBuffer sse_decode_preview_frame_pixel_buffer(
     SseDeserializer deserializer,
   );
@@ -339,6 +464,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ProgressEvent sse_decode_progress_event(SseDeserializer deserializer);
+
+  @protected
+  (BigInt, BigInt) sse_decode_record_usize_usize(SseDeserializer deserializer);
 
   @protected
   ThumbnailBytesOptions sse_decode_thumbnail_bytes_options(
@@ -364,6 +492,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
   VideoCodec sse_decode_video_codec(SseDeserializer deserializer);
 
   @protected
@@ -381,6 +512,33 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void
+  sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    VideoPreviewSession self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    VideoPreviewSession self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void
+  sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    VideoPreviewSession self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_playback_frame_Sse(
+    RustStreamSink<PlaybackFrame> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_StreamSink_progress_event_Sse(
     RustStreamSink<ProgressEvent> self,
     SseSerializer serializer,
@@ -388,6 +546,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_audio_track_input(
+    AudioTrackInput self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_batch_thumbnail_bytes_options(
@@ -444,6 +608,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_preview_frame_pixel_buffer(
+    PreviewFramePixelBuffer self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_preview_frame_rgba(
+    PreviewFrameRgba self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_thumbnail_bytes_options(
     ThumbnailBytesOptions self,
     SseSerializer serializer,
@@ -489,6 +665,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_f_64(double self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
@@ -496,6 +675,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_audio_track_input(
+    List<AudioTrackInput> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_burn_in_overlay(
@@ -516,6 +701,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -531,6 +719,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_box_autoadd_f_32(double? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_preview_frame_pixel_buffer(
+    PreviewFramePixelBuffer? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_preview_frame_rgba(
+    PreviewFrameRgba? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
@@ -541,6 +741,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_playback_frame(PlaybackFrame self, SseSerializer serializer);
 
   @protected
   void sse_encode_preview_frame_pixel_buffer(
@@ -562,6 +765,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_progress_event(ProgressEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_usize_usize(
+    (BigInt, BigInt) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_thumbnail_bytes_options(
@@ -594,6 +803,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer);
+
+  @protected
   void sse_encode_video_codec(VideoCodec self, SseSerializer serializer);
 
   @protected
@@ -610,6 +822,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
 class RustLibWire implements BaseWire {
   RustLibWire.fromExternalLibrary(ExternalLibrary lib);
+
+  void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+        ptr,
+      );
+
+  void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    int ptr,
+  ) => wasmModule
+      .rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+        ptr,
+      );
 }
 
 @JS('wasm_bindgen')
@@ -617,4 +845,14 @@ external RustLibWasmModule get wasmModule;
 
 @JS()
 @anonymous
-extension type RustLibWasmModule._(JSObject _) implements JSObject {}
+extension type RustLibWasmModule._(JSObject _) implements JSObject {
+  external void
+  rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    int ptr,
+  );
+
+  external void
+  rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerVideoPreviewSession(
+    int ptr,
+  );
+}

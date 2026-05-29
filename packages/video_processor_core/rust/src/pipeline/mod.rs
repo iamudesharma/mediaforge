@@ -1,3 +1,4 @@
+pub mod audio_mix;
 pub mod compress;
 pub mod metadata;
 pub mod overlay_burn;

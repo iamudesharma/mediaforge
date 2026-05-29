@@ -8,6 +8,46 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'types.freezed.dart';
 
+/// Background audio lane for export mux (paths must be local FFmpeg-readable files).
+class AudioTrackInput {
+  final String sourcePath;
+  final BigInt sourceStartMs;
+  final BigInt durationMs;
+  final BigInt timelineStartMs;
+  final double volume;
+  final bool muted;
+
+  const AudioTrackInput({
+    required this.sourcePath,
+    required this.sourceStartMs,
+    required this.durationMs,
+    required this.timelineStartMs,
+    required this.volume,
+    required this.muted,
+  });
+
+  @override
+  int get hashCode =>
+      sourcePath.hashCode ^
+      sourceStartMs.hashCode ^
+      durationMs.hashCode ^
+      timelineStartMs.hashCode ^
+      volume.hashCode ^
+      muted.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AudioTrackInput &&
+          runtimeType == other.runtimeType &&
+          sourcePath == other.sourcePath &&
+          sourceStartMs == other.sourceStartMs &&
+          durationMs == other.durationMs &&
+          timelineStartMs == other.timelineStartMs &&
+          volume == other.volume &&
+          muted == other.muted;
+}
+
 /// Batch in-memory thumbnails for UI previews (filmstrip, scrubber fallback).
 class BatchThumbnailBytesOptions {
   final String inputPath;
@@ -194,6 +234,12 @@ class CompressOptions {
   /// Pre-rasterized overlay PNGs (Flutter) composited on each encoded frame.
   final List<BurnInOverlay> burnInOverlays;
 
+  /// External background audio mixed on export (streaming decode; empty = no added tracks).
+  final List<AudioTrackInput> audioTracks;
+
+  /// When true, omit the source file’s embedded audio from the mix (only added tracks).
+  final bool muteOriginalAudio;
+
   const CompressOptions({
     required this.inputPath,
     this.outputPath,
@@ -211,6 +257,8 @@ class CompressOptions {
     this.startMs,
     this.endMs,
     required this.burnInOverlays,
+    required this.audioTracks,
+    required this.muteOriginalAudio,
   });
 
   @override
@@ -230,7 +278,9 @@ class CompressOptions {
       preferHardwareEncoder.hashCode ^
       startMs.hashCode ^
       endMs.hashCode ^
-      burnInOverlays.hashCode;
+      burnInOverlays.hashCode ^
+      audioTracks.hashCode ^
+      muteOriginalAudio.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -252,7 +302,9 @@ class CompressOptions {
           preferHardwareEncoder == other.preferHardwareEncoder &&
           startMs == other.startMs &&
           endMs == other.endMs &&
-          burnInOverlays == other.burnInOverlays;
+          burnInOverlays == other.burnInOverlays &&
+          audioTracks == other.audioTracks &&
+          muteOriginalAudio == other.muteOriginalAudio;
 }
 
 class CompressResult {
@@ -315,6 +367,12 @@ class MediaInfo {
   final BigInt bitrate;
   final BigInt fileSize;
 
+  /// True for iPhone / camera Dolby Vision HEVC (preview uses software decode on Apple).
+  final bool hasDolbyVision;
+
+  /// When true, UI should use session RGBA decode (skip VideoToolbox seek on Apple).
+  final bool preferSoftwarePreview;
+
   const MediaInfo({
     required this.durationMs,
     required this.width,
@@ -325,6 +383,8 @@ class MediaInfo {
     this.audioCodec,
     required this.bitrate,
     required this.fileSize,
+    required this.hasDolbyVision,
+    required this.preferSoftwarePreview,
   });
 
   @override
@@ -337,7 +397,9 @@ class MediaInfo {
       videoCodec.hashCode ^
       audioCodec.hashCode ^
       bitrate.hashCode ^
-      fileSize.hashCode;
+      fileSize.hashCode ^
+      hasDolbyVision.hashCode ^
+      preferSoftwarePreview.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -352,7 +414,19 @@ class MediaInfo {
           videoCodec == other.videoCodec &&
           audioCodec == other.audioCodec &&
           bitrate == other.bitrate &&
-          fileSize == other.fileSize;
+          fileSize == other.fileSize &&
+          hasDolbyVision == other.hasDolbyVision &&
+          preferSoftwarePreview == other.preferSoftwarePreview;
+}
+
+@freezed
+sealed class PlaybackFrame with _$PlaybackFrame {
+  const PlaybackFrame._();
+
+  const factory PlaybackFrame.rgba(PreviewFrameRgba field0) =
+      PlaybackFrame_Rgba;
+  const factory PlaybackFrame.pixelBuffer(PreviewFramePixelBuffer field0) =
+      PlaybackFrame_PixelBuffer;
 }
 
 /// Apple HW preview frame: BGRA `CVPixelBuffer` pointer for zero-copy texture present (V1.4).

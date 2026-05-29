@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'media_runtime.dart';
-import 'media_runtime_metrics.dart';
 
 /// ROADMAP perf matrix targets for Sprint V1.7.
 abstract final class MediaRuntimePerfTargets {
@@ -135,8 +134,8 @@ abstract final class MediaRuntimePerf {
       details: {
         'frames': '$frames',
         'avg_fps': avgFps.toStringAsFixed(1),
-        'min_fps': '${snap.playbackFpsMin?.toStringAsFixed(1) ?? "—"}',
-        'max_fps': '${snap.playbackFpsMax?.toStringAsFixed(1) ?? "—"}',
+        'min_fps': snap.playbackFpsMin?.toStringAsFixed(1) ?? "—",
+        'max_fps': snap.playbackFpsMax?.toStringAsFixed(1) ?? "—",
         'preview_path': snap.previewPathLabel,
       },
     );

@@ -72,6 +72,8 @@ pub fn probe_mp4_fast(path: &Path) -> Result<Option<MediaInfo>> {
             0
         },
         file_size,
+        has_dolby_vision: false,
+        prefer_software_preview: false,
     }))
 }
 

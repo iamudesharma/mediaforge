@@ -8,9 +8,9 @@ A new monorepo example app that showcases editing photos (using `rust_image_edit
 - **Video Creator Flow**:
   - Ingestion and probing (`getMediaInfo`).
   - Batch-cached timeline thumbnails (`batchThumbnailPathsCached`).
-  - Interactive trimming and live preview via `MediaRuntime` + `VideoCompositorCanvas`.
-  - Adding overlay texts and emojis.
-  - Video compression using quality presets (`compressJob`) with progress and cancellation.
+  - **Hybrid preview:** smooth playback via `NativePlaybackController` + `NativeVideoCanvas` (AVPlayer on Apple, ExoPlayer on Android).
+  - **Rust processing:** thumbnails, frame extract, overlay burn-in, and export via `VideoProcessor` / `compressJob`.
+  - Interactive trimming, overlay texts/emojis, and compression presets with progress and cancellation.
 - **Photo Editor Flow**:
   - Full-screen `RustImageEditorWidget` with cropping, rotation, adjustments, filters, drawing, and face beauty operations.
 - **Poster Frame Bridge**:
@@ -37,8 +37,30 @@ Ensure that you have completed native builds for both packages first.
 
 ### Android
 
-Use the root script to compile both NDK libraries and run:
+Use the root script to compile both NDK libraries and run on a **physical arm64** device (or arm64 emulator if you build all ABIs):
+
 ```bash
 ./scripts/run-media-studio-android.sh
+# Optional: flutter run -d <device_id>
 ```
-*(Note: First-time Android compile of both engines takes a few minutes.)*
+
+*(First-time Android compile of both engines takes a few minutes.)*
+
+**Permissions:** `READ_MEDIA_VIDEO` + `INTERNET` are declared in `android/app/src/main/AndroidManifest.xml` for gallery pick and network samples.
+
+### Testing checklist (Android)
+
+| Test | Expected |
+|------|----------|
+| HEVC / camera video playback | Smooth; HUD shows `ExoPlayer` |
+| Scrub + trim | Seek works; stops at trim end |
+| Overlays on preview | Visible during playback |
+| Export without overlays | HW or SW encode per toggle |
+| Export with overlays | Software encode; HW toggle ignored |
+| Poster frame bridge | Rust thumbnail → photo editor |
+
+Record device model, Android version, and sample codec when reporting issues.
+
+### Preview engines (package example)
+
+[`flutter_video_processor` example](../../packages/flutter_video_processor/example/) can switch **Native** vs **Rust MediaRuntime** preview (menu on the studio page). Media Studio uses **native-only** preview, matching the macOS/iOS creator app.

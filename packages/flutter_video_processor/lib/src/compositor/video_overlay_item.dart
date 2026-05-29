@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'video_text_overlay_content.dart';
+import 'video_text_overlay_style.dart';
+
 /// Timeline-aligned overlay metadata (V1.5 / Sprint 20 — Flutter compositor).
 final class VideoOverlayItem {
   const VideoOverlayItem({
@@ -8,6 +11,7 @@ final class VideoOverlayItem {
     required this.endMs,
     required this.anchor,
     required this.child,
+    this.textSpec,
     this.fadeInMs = 0,
     this.fadeOutMs = 0,
   })  : assert(startMs >= 0),
@@ -28,6 +32,9 @@ final class VideoOverlayItem {
 
   final Widget child;
 
+  /// When set, this overlay is a styled text caption ([child] should match [textSpec]).
+  final VideoTextOverlaySpec? textSpec;
+
   /// Fade-in duration from [startMs] (Sprint 20).
   final int fadeInMs;
 
@@ -35,6 +42,17 @@ final class VideoOverlayItem {
   final int fadeOutMs;
 
   int get durationMs => endMs - startMs;
+
+  bool get isTextOverlay => textSpec != null || id.startsWith('text:');
+
+  /// Resolves [textSpec] for legacy overlays created before styling metadata existed.
+  VideoTextOverlaySpec? get resolvedTextSpec {
+    if (textSpec != null) return textSpec;
+    if (!id.startsWith('text:')) return null;
+    final parts = id.split(':');
+    final label = parts.length > 1 ? parts[1] : 'Text';
+    return VideoTextOverlaySpec(label: label);
+  }
 
   /// Whether [playheadMs] falls inside this overlay's visible range.
   bool isVisibleAt(int playheadMs) =>
@@ -66,17 +84,31 @@ final class VideoOverlayItem {
     int? endMs,
     Offset? anchor,
     Widget? child,
+    VideoTextOverlaySpec? textSpec,
     int? fadeInMs,
     int? fadeOutMs,
   }) {
+    final nextSpec = textSpec ?? this.textSpec;
     return VideoOverlayItem(
       id: id ?? this.id,
       startMs: startMs ?? this.startMs,
       endMs: endMs ?? this.endMs,
       anchor: anchor ?? this.anchor,
-      child: child ?? this.child,
+      child: child ??
+          (nextSpec != null
+              ? VideoTextOverlayContent(spec: nextSpec)
+              : this.child),
+      textSpec: nextSpec,
       fadeInMs: fadeInMs ?? this.fadeInMs,
       fadeOutMs: fadeOutMs ?? this.fadeOutMs,
+    );
+  }
+
+  /// Updates text label/style and rebuilds [child].
+  VideoOverlayItem withTextSpec(VideoTextOverlaySpec spec) {
+    return copyWith(
+      textSpec: spec,
+      child: VideoTextOverlayContent(spec: spec),
     );
   }
 
@@ -86,11 +118,11 @@ final class VideoOverlayItem {
     required int endMs,
     required Offset anchor,
     required String label,
-    TextStyle? style,
-    EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    VideoTextOverlayStyle style = VideoTextOverlayStyle.defaults,
     int fadeInMs = 0,
     int fadeOutMs = 0,
   }) {
+    final spec = VideoTextOverlaySpec(label: label, style: style);
     return VideoOverlayItem(
       id: id,
       startMs: startMs,
@@ -98,25 +130,8 @@ final class VideoOverlayItem {
       anchor: anchor,
       fadeInMs: fadeInMs,
       fadeOutMs: fadeOutMs,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Padding(
-          padding: padding,
-          child: Text(
-            label,
-            style: style ??
-                const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  shadows: [Shadow(blurRadius: 4, color: Colors.black)],
-                ),
-          ),
-        ),
-      ),
+      textSpec: spec,
+      child: VideoTextOverlayContent(spec: spec),
     );
   }
 

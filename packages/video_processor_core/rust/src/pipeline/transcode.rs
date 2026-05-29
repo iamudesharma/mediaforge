@@ -8,7 +8,9 @@ use ffmpeg_next::util::frame::video::Video;
 use ffmpeg_next::{media, picture, Dictionary, Packet, Rational};
 
 use crate::error::{Result, VideoProcessorError};
-use crate::ffmpeg::hw::{encoder_candidates_with_hw, is_hardware_encoder};
+use crate::ffmpeg::hw::{
+    encoder_candidates_burn_in, encoder_candidates_with_hw, is_hardware_encoder,
+};
 use crate::ffmpeg::{
     apply_video_decoder_threading, ensure_ffmpeg_initialized, ensure_input_accessible,
     is_remote_input, map_ffmpeg_error, open_input, open_video_decoder, HwFrameTransfer,
@@ -18,6 +20,7 @@ use crate::ffmpeg::{
 use crate::ffmpeg::vt_pipeline::{self, VtScaler};
 use crate::jobs::progress::ProgressReporter;
 use crate::jobs::registry::CancellationToken;
+use crate::pipeline::audio_mix;
 use crate::pipeline::overlay_burn::OverlayCompositor;
 use crate::pipeline::streaming::movflags;
 use crate::types::{CompressOptions, CompressResult, VideoCodec};
@@ -66,6 +69,9 @@ struct VideoTranscoder {
     clip_end_ms: Option<u64>,
     stop_encoding: bool,
     burn_in: Option<OverlayCompositor>,
+    /// After CPU overlay burn (YUV420P), convert to encoder pixel format (e.g. NV12 for MediaCodec).
+    burn_submit_scaler: Option<ScalerContext>,
+    burn_submit_frame: Video,
 }
 
 fn describe_pipeline_mode(
@@ -154,6 +160,19 @@ impl VideoTranscoder {
         Ok(())
     }
 
+    fn ensure_scaled_frame(&self, scaled: &mut Video) -> Result<()> {
+        if scaled.width() == self.out_w
+            && scaled.height() == self.out_h
+            && scaled.format() == self.enc_pixel
+        {
+            return Ok(());
+        }
+        unsafe {
+            scaled.alloc(self.enc_pixel, self.out_w, self.out_h);
+        }
+        Ok(())
+    }
+
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     fn send_vt_gpu_scaled(
         &mut self,
@@ -190,6 +209,7 @@ impl VideoTranscoder {
 
         if self.scale_needed {
             self.ensure_scaler(src)?;
+            self.ensure_scaled_frame(scaled)?;
             let s = self.scaler.as_mut().expect("scaler");
             s.run(src, scaled).map_err(map_ffmpeg_error)?;
             scaled.set_pts(pts);
@@ -197,12 +217,36 @@ impl VideoTranscoder {
             if let Some(comp) = &mut self.burn_in {
                 comp.apply_on_yuv420(scaled, frame_ms)?;
             }
-            self.encoder.send_frame(scaled).map_err(map_ffmpeg_error)?;
+            self.send_yuv420_to_encoder(scaled, octx, ost_time_base, packet_pool)?;
         } else {
             if let Some(comp) = &mut self.burn_in {
                 comp.apply_on_yuv420(src, frame_ms)?;
             }
-            self.encoder.send_frame(src).map_err(map_ffmpeg_error)?;
+            self.send_yuv420_to_encoder(src, octx, ost_time_base, packet_pool)?;
+        }
+        Ok(())
+    }
+
+    /// Submit a YUV420P frame (after optional overlay burn) to the encoder, converting pixel
+    /// format when the encoder expects NV12 (Android MediaCodec).
+    fn send_yuv420_to_encoder(
+        &mut self,
+        yuv420: &mut Video,
+        octx: &mut format::context::Output,
+        ost_time_base: Rational,
+        packet_pool: &mut PacketPool,
+    ) -> Result<()> {
+        if let Some(s) = &mut self.burn_submit_scaler {
+            s.run(yuv420, &mut self.burn_submit_frame)
+                .map_err(map_ffmpeg_error)?;
+            let pts = yuv420.timestamp();
+            self.burn_submit_frame.set_pts(pts);
+            self.burn_submit_frame.set_kind(picture::Type::None);
+            self.encoder
+                .send_frame(&mut self.burn_submit_frame)
+                .map_err(map_ffmpeg_error)?;
+        } else {
+            self.encoder.send_frame(yuv420).map_err(map_ffmpeg_error)?;
         }
         self.drain_encoder(octx, ost_time_base, packet_pool)
     }
@@ -344,11 +388,14 @@ fn run_compress_inner(
     // iPhone .mov files often have AAC + Apple spatial audio (apac) + metadata tracks.
     // Only process the primary video/audio streams FFmpeg can decode and mux.
     let best_video_index = ictx.streams().best(media::Type::Video).map(|s| s.index());
-    let best_audio_index = if options.include_audio {
+    let use_mixed_audio = !options.audio_tracks.is_empty();
+    let stream_copy_audio = options.include_audio && !use_mixed_audio;
+    let best_audio_index = if stream_copy_audio {
         ictx.streams().best(media::Type::Audio).map(|s| s.index())
     } else {
         None
     };
+    let mut mixed_audio_output: Option<audio_mix::MixedAudioOutput> = None;
 
     for (ist_index, ist) in ictx.streams().enumerate() {
         let medium = ist.parameters().medium();
@@ -415,8 +462,12 @@ fn run_compress_inner(
         ost_index += 1;
     }
 
-    if transcoders.is_empty() {
-        return Err(VideoProcessorError::InvalidInput("no video stream".into()));
+    if transcoders.is_empty() && best_audio_index.is_none() && options.audio_tracks.is_empty() {
+        return Err(VideoProcessorError::InvalidInput("no video or audio streams".into()));
+    }
+
+    if use_mixed_audio {
+        mixed_audio_output = Some(audio_mix::add_aac_output_stream(&mut octx)?);
     }
 
     if clip_start_ms > 0 {
@@ -575,6 +626,29 @@ fn run_compress_inner(
         transcoder.drain_encoder(&mut octx, ost_time_base, &mut packet_pool)?;
     }
 
+    if let Some(mixed_audio) = mixed_audio_output.as_mut() {
+        progress.emit(
+            crate::types::ProcessingPhase::Encoding,
+            0.96,
+            0,
+            0.0,
+            0,
+            true,
+        );
+        let include_original =
+            options.include_audio && !options.mute_original_audio;
+        audio_mix::write_mixed_audio(
+            &mut octx,
+            mixed_audio,
+            input,
+            clip_start_ms,
+            encode_span_ms,
+            include_original,
+            &options.audio_tracks,
+            &interrupt,
+        )?;
+    }
+
     progress.emit(
         crate::types::ProcessingPhase::Muxing,
         0.98,
@@ -641,9 +715,11 @@ fn create_video_transcoder(
         .flags()
         .contains(format::flag::Flags::GLOBAL_HEADER);
 
-    // MediaCodec decode + encode in one process is fragile; use SW decode on Android.
-    let prefer_hw_decode =
-        prefer_hw && crate::ffmpeg::hw_decode::prefer_hw_decode_with_encode();
+    // Burn-in composites CPU YUV420P; HW decode/encode paths are unreliable for that pipeline.
+    let burn_in_active = !burn_in_specs.is_empty();
+    let prefer_hw_decode = !burn_in_active
+        && prefer_hw
+        && crate::ffmpeg::hw_decode::prefer_hw_decode_with_encode();
     let (mut decoder, mut hw_transfer) =
         open_video_decoder(ist.parameters(), prefer_hw_decode)?;
     let hw_decode = hw_transfer.is_some();
@@ -651,10 +727,15 @@ fn create_video_transcoder(
     let src_w = decoder.width();
     let src_h = decoder.height();
     let (out_w, out_h) = scale_dimensions(src_w, src_h, max_w, max_h);
-    let burn_in_active = !burn_in_specs.is_empty();
 
     let candidates = if burn_in_active {
-        encoder_candidates_with_hw(codec, false)
+        let list = encoder_candidates_burn_in(codec);
+        if list.is_empty() {
+            return Err(VideoProcessorError::UnsupportedCodec(format!(
+                "burn-in export needs libx264/libx265 or a mobile hardware encoder (MediaCodec / VideoToolbox) for {codec:?}"
+            )));
+        }
+        list
     } else {
         encoder_candidates_with_hw(codec, prefer_hw)
     };
@@ -709,13 +790,16 @@ fn create_video_transcoder(
     };
 
     // MediaCodec encoders are configured on 16-aligned dimensions; scaler output must match.
-    let (out_w, out_h) = if encoder_name.contains("mediacodec") && !burn_in_active {
+    let (out_w, out_h) = if encoder_name.contains("mediacodec") {
         (align_even_16(out_w), align_even_16(out_h))
     } else {
         (out_w, out_h)
     };
 
     let burn_in = OverlayCompositor::new(burn_in_specs, out_w, out_h)?;
+
+    let (burn_submit_scaler, burn_submit_frame) =
+        setup_burn_in_submit_buffer(burn_in.as_ref(), &encoder, out_w, out_h)?;
 
     let (enc_pixel, scale_needed, vt_link) = if burn_in_active {
         (Pixel::YUV420P, true, VtLinkMode::None)
@@ -780,7 +864,44 @@ fn create_video_transcoder(
         clip_end_ms,
         stop_encoding: false,
         burn_in,
+        burn_submit_scaler,
+        burn_submit_frame,
     })
+}
+
+/// Overlay burn runs on YUV420P; MediaCodec encoders on Android expect NV12.
+fn setup_burn_in_submit_buffer(
+    burn_in: Option<&OverlayCompositor>,
+    encoder: &ffmpeg_next::encoder::Video,
+    out_w: u32,
+    out_h: u32,
+) -> Result<(Option<ScalerContext>, Video)> {
+    if burn_in.is_none() {
+        return Ok((None, Video::empty()));
+    }
+    let encoder_pix = encoder.format();
+    if encoder_pix == Pixel::YUV420P {
+        return Ok((None, Video::empty()));
+    }
+    log::info!(
+        "burn-in submit: converting YUV420P → {:?} for encoder ({out_w}x{out_h})",
+        encoder_pix
+    );
+    let mut submit = Video::empty();
+    unsafe {
+        submit.alloc(encoder_pix, out_w, out_h);
+    }
+    let scaler = ScalerContext::get(
+        Pixel::YUV420P,
+        out_w,
+        out_h,
+        encoder_pix,
+        out_w,
+        out_h,
+        Flags::FAST_BILINEAR,
+    )
+    .map_err(map_ffmpeg_error)?;
+    Ok((Some(scaler), submit))
 }
 
 fn align_even_16(v: u32) -> u32 {

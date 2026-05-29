@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:rust_gpu_texture/rust_gpu_texture.dart';
 
+import '../playback/compositor_layout.dart';
 import '../runtime/media_runtime.dart';
 import '../widgets/rgba_preview_image.dart';
+import 'draggable_video_overlays.dart';
 import 'video_overlay_item.dart';
 
 /// Letterboxed video preview with timeline-filtered Flutter overlays (Sprint V1.5).
@@ -16,6 +18,9 @@ class VideoCompositorCanvas extends StatelessWidget {
     this.overlays = const [],
     /// Master timeline position for overlay visibility (defaults to [MediaRuntime.ptsMs]).
     this.timelinePlayheadMs,
+    this.selectedOverlayId,
+    this.onOverlayChanged,
+    this.onSelectOverlay,
     this.fit = BoxFit.contain,
     this.backgroundColor = Colors.black,
     this.loadingBuilder,
@@ -25,6 +30,9 @@ class VideoCompositorCanvas extends StatelessWidget {
   final MediaRuntime runtime;
   final List<VideoOverlayItem> overlays;
   final int? timelinePlayheadMs;
+  final String? selectedOverlayId;
+  final ValueChanged<VideoOverlayItem>? onOverlayChanged;
+  final ValueChanged<String?>? onSelectOverlay;
   final BoxFit fit;
   final Color backgroundColor;
   final WidgetBuilder? loadingBuilder;
@@ -46,10 +54,29 @@ class VideoCompositorCanvas extends StatelessWidget {
         builder: (context, _) => LayoutBuilder(
           builder: (context, constraints) {
             final max = Size(constraints.maxWidth, constraints.maxHeight);
-            final frame = _containedSize(max, runtime.aspectRatio);
+            final frame = containedVideoFrameSize(max, runtime.aspectRatio);
             final playhead = timelinePlayheadMs ?? runtime.ptsMs;
-            final visible =
-                overlays.where((o) => o.isVisibleAt(playhead)).toList();
+            final overlayLayer = onOverlayChanged != null || onSelectOverlay != null
+                ? DraggableVideoOverlays(
+                    frameSize: frame,
+                    overlays: overlays,
+                    playheadMs: playhead,
+                    selectedOverlayId: selectedOverlayId,
+                    onOverlayChanged: onOverlayChanged,
+                    onSelectOverlay: onSelectOverlay,
+                  )
+                : Stack(
+                    clipBehavior: Clip.none,
+                    fit: StackFit.expand,
+                    children: [
+                      for (final overlay in overlays.where((o) => o.isVisibleAt(playhead)))
+                        VideoOverlayPositioned(
+                          anchor: overlay.anchor,
+                          opacity: overlay.opacityAt(playhead),
+                          child: overlay.child,
+                        ),
+                    ],
+                  );
 
             return Center(
               child: SizedBox(
@@ -64,12 +91,7 @@ class VideoCompositorCanvas extends StatelessWidget {
                       fit: fit,
                       loadingBuilder: loadingBuilder,
                     ),
-                    for (final overlay in visible)
-                      _OverlayPositioned(
-                        anchor: overlay.anchor,
-                        opacity: overlay.opacityAt(playhead),
-                        child: overlay.child,
-                      ),
+                    overlayLayer,
                   ],
                 ),
               ),
@@ -80,18 +102,6 @@ class VideoCompositorCanvas extends StatelessWidget {
     );
   }
 
-  static Size _containedSize(Size max, double aspectRatio) {
-    if (max.width <= 0 || max.height <= 0 || aspectRatio <= 0) {
-      return Size.zero;
-    }
-    final containerAspect = max.width / max.height;
-    if (containerAspect > aspectRatio) {
-      final h = max.height;
-      return Size(h * aspectRatio, h);
-    }
-    final w = max.width;
-    return Size(w, w / aspectRatio);
-  }
 }
 
 /// Video pixels only (no letterbox wrapper) for use inside [VideoCompositorCanvas].
@@ -150,26 +160,3 @@ class _VideoFrameLayer extends StatelessWidget {
   }
 }
 
-class _OverlayPositioned extends StatelessWidget {
-  const _OverlayPositioned({
-    required this.anchor,
-    required this.opacity,
-    required this.child,
-  });
-
-  final Offset anchor;
-  final double opacity;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final ax = anchor.dx.clamp(0.0, 1.0);
-    final ay = anchor.dy.clamp(0.0, 1.0);
-    return Positioned.fill(
-      child: Align(
-        alignment: Alignment(ax * 2 - 1, ay * 2 - 1),
-        child: Opacity(opacity: opacity, child: child),
-      ),
-    );
-  }
-}
