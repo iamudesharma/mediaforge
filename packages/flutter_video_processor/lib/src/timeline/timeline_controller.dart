@@ -27,19 +27,19 @@ class TimelineController extends ChangeNotifier {
   String? get selectedAudioClipId => _selectedAudioClipId;
   String? get selectedOverlayId => _selectedOverlayId;
 
+  /// Master timeline length (video + overlays). Audio never extends this.
   int get durationMs {
     var maxMs = _sourceDurationMs;
     for (final c in _videoClips) {
       if (c.timelineEndMs > maxMs) maxMs = c.timelineEndMs;
-    }
-    for (final a in _audioClips) {
-      if (a.timelineEndMs > maxMs) maxMs = a.timelineEndMs;
     }
     for (final o in _overlays) {
       if (o.endMs > maxMs) maxMs = o.endMs;
     }
     return maxMs;
   }
+
+  int get videoDurationMs => durationMs;
 
   bool get hasVideoClips => _videoClips.isNotEmpty;
 
@@ -210,17 +210,27 @@ class TimelineController extends ChangeNotifier {
 
   AudioTimelineClip addAudioClip({
     required String sourcePath,
-    required int durationMs,
+    required int sourceDurationMs,
     int? timelineStartMs,
+    int? videoDurationMs,
     double volume = 1.0,
   }) {
+    final videoMs = videoDurationMs ?? durationMs;
+    final fullMs = sourceDurationMs > 0 ? sourceDurationMs : 1;
+    final windowMs = fullMs < videoMs ? fullMs : videoMs;
+    final start = timelineStartMs ?? 0;
     final id = 'audio_${DateTime.now().millisecondsSinceEpoch}';
-    final clip = AudioTimelineClip(
-      id: id,
-      sourcePath: sourcePath,
-      timelineStartMs: timelineStartMs ?? 0,
-      durationMs: durationMs,
-      volume: volume,
+    final clip = AudioTimelineClip.clamped(
+      AudioTimelineClip(
+        id: id,
+        sourcePath: sourcePath,
+        timelineStartMs: start,
+        sourceDurationMs: fullMs,
+        sourceStartMs: 0,
+        durationMs: windowMs.clamp(1, videoMs),
+        volume: volume,
+      ),
+      videoDurationMs: videoMs,
     );
     _audioClips.add(clip);
     _selectedAudioClipId = id;
@@ -231,7 +241,23 @@ class TimelineController extends ChangeNotifier {
   void updateAudioClip(AudioTimelineClip clip) {
     final i = _audioClips.indexWhere((c) => c.id == clip.id);
     if (i < 0) return;
-    _audioClips[i] = clip;
+    _audioClips[i] = AudioTimelineClip.clamped(
+      clip,
+      videoDurationMs: videoDurationMs,
+    );
+    notifyListeners();
+  }
+
+  /// Re-clamp all audio clips after video trim or duration change.
+  void clampAudioClipsToVideo() {
+    if (_audioClips.isEmpty) return;
+    final videoMs = videoDurationMs;
+    for (var i = 0; i < _audioClips.length; i++) {
+      _audioClips[i] = AudioTimelineClip.clamped(
+        _audioClips[i],
+        videoDurationMs: videoMs,
+      );
+    }
     notifyListeners();
   }
 

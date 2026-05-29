@@ -58,6 +58,27 @@
 
 ---
 
+## Hybrid preview (editor apps — V2)
+
+**Media Studio** and mobile-first editors use a **two-layer** split (same on macOS, iOS, and Android):
+
+| Layer | API | Role |
+|-------|-----|------|
+| **Playback** | `NativePlaybackController` + `NativeVideoCanvas` | Watch / scrub / timeline play via `video_player` → **AVPlayer** (Apple) or **ExoPlayer** (Android) |
+| **Processing** | `VideoProcessor`, `OverlayRasterExporter`, `compressJob` | Thumbnails, frame extract, overlay burn-in, export |
+
+Synchronization is **time-only** (playhead ms ↔ timeline). No decoded frames are shared between layers.
+
+**`MediaRuntime`** remains for:
+
+- `flutter_video_processor` **example** studio (toggle: Native vs Rust texture)
+- Benchmarks / perf pages (`MediaRuntimePerf`)
+- Apple **CVPixelBuffer** zero-copy and Android **MediaCodec → SurfaceTexture** texture paths
+
+See [`packages/flutter_video_processor/README.md`](../packages/flutter_video_processor/README.md).
+
+---
+
 ## 1. MediaRuntime layer
 
 **Purpose:** One object owns the lifecycle of an open video asset so UI widgets do not call FRB or texture APIs directly.
@@ -100,15 +121,21 @@ runtime.pause();
 
 **Problem:** UI `Timer.periodic` drifts from real media time; A/V and trim export disagree with preview.
 
-**V1.3 approach:** **Decoder clock** = monotonic media timeline driven by decoded frame PTS, not wall clock alone.
+**V1.3+ approach:** **Dual clocks** during playback:
+
+| Clock | Field | Role |
+|-------|--------|------|
+| Wall playhead | `PlaybackClock.mediaTimeMs` | UI timeline / scrubber; advances on presenter tick from `play()` origin + elapsed × `rate` |
+| Presented PTS | `PlaybackClock.lastPresentedPtsMs` | PTS of the last texture upload; used for stale-frame cutoff |
 
 | Component | Role |
 |-----------|------|
-| `PlaybackClock` | Holds `mediaTimeMs`, `rate`, `state` (idle / playing / paused) |
-| Decode loop (Rust or Dart isolate) | Produces `(ptsMs, frame)` into queue |
-| Clock advance | On each displayed frame: `mediaTimeMs = ptsMs`; UI notified |
-| Catch-up | If queue empty: hold last frame or drop to next keyframe; never spin UI faster than decode |
-| Scrub | `seekTo(ms)` flushes queue, resets clock, enqueues single frame |
+| `PlaybackClock` | Holds `mediaTimeMs`, `lastPresentedPtsMs`, `rate`, `state` |
+| Rust preview worker | Sequential decode; **drops or seeks** when frame PTS is behind wall target; then pushes to Dart |
+| Dart `FrameQueue` | Rejects / flushes when `pts < wallPlayhead − margin` or drift > threshold |
+| Presenter (~30 Hz) | Advances wall playhead every tick; presents newest queued frame when available |
+| Catch-up | Queue empty → **hold** last texture; playhead still moves; decode skips to newest PTS |
+| Scrub | `seekTo(ms)` flushes queue; **both** clocks snap to seek target; frame PTS follows decode |
 
 **Not V1:** Sample-accurate audio render — see [§7 Audio sync](#7-audio-sync-roadmap). V1.3 may play **video-only** with silent clock or optional `video_player` audio bridge behind a flag.
 
@@ -133,6 +160,8 @@ runtime.pause();
 
 **Android zero-copy (V1.6):** When longest edge ≤ `previewMaxEdge`, `GpuTextureRegistry.decodePreviewToSurface` uses **MediaCodec** + **MediaExtractor** to render into the Flutter `SurfaceTexture` (no RGBA upload). Larger sources or `VFP_DISABLE_HW_PREVIEW=1` fall back to FFmpeg RGBA. Implementation: `rust_gpu_texture` Kotlin (`AndroidPreviewDecoder.kt`), not Rust FFmpeg decode+encode.
 
+**Dolby Vision / iPhone HEVC (2026):** Photos and camera exports often use **Dolby Vision HEVC** in `.mov` with auxiliary tracks (`apac` spatial audio). VideoToolbox HW decode is unreliable after backward seek (`Could not find ref with POC`, `videotoolbox_vld` + `swscale`). `video_processor_core` probes `MediaInfo.hasDolbyVision` and opens preview with **software decode** (thumbnail-style settings). `MediaRuntime` skips `seekAndDecodePixelBuffer` when that flag is set. Compress/transcode may still use VideoToolbox encode; only **preview** avoids HW for DV.
+
 ---
 
 ## 4. Frame queue architecture
@@ -149,9 +178,10 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 
 | Policy | Value |
 |--------|--------|
-| Max depth | 3 (tune on device) |
+| Max depth | 3–6 scrub; **2** during SW/DV playback (restore on pause) |
 | Scrub | Flush queue; single in-flight decode; coalesce rapid seeks (280 ms debounce, match studio) |
-| Play | Fill queue ahead; drop stale frames if `pts < clock.mediaTimeMs` |
+| Play | Drop if `pts < wallPlayhead − 80ms` or drift > 100 ms (latest-only flush); Rust skips decode before send when behind |
+| Playback resolution | `playbackPreviewMaxEdge` (default 360) + adaptive tiers `[360, 270, 240]` for CPU-bound assets |
 | Frame payload V1.1 | `PreviewFrame { ptsMs, width, height, rgba }` |
 | Frame payload V1.4 | `HwPreviewFrame { ptsMs, bufferHandle }` on Apple |
 | Frame payload V1.6 | `PreviewFrame.presentedToSurface` on Android (MediaCodec → pool SurfaceTexture) |

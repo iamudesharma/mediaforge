@@ -22,14 +22,37 @@ pub fn ensure_ffmpeg_initialized() -> Result<()> {
 }
 
 pub fn map_ffmpeg_error(err: FfmpegError) -> VideoProcessorError {
-    let mut msg = err.to_string();
-    if msg.is_empty() {
-        msg = format!("{:?}", err);
-    }
+    let mut msg = ffmpeg_error_message(&err);
     if let Some(hint) = remote_error_hint(&err) {
         msg = format!("{msg} — {hint}");
     }
     VideoProcessorError::FfmpegError(msg)
+}
+
+fn ffmpeg_error_message(err: &FfmpegError) -> String {
+    let s = err.to_string();
+    if !s.is_empty() && s != "Unknown error occurred" {
+        return s;
+    }
+    match err {
+        FfmpegError::InvalidData => "invalid data (corrupt packet or unsupported pixel format)".into(),
+        FfmpegError::EncoderNotFound => "encoder not found".into(),
+        FfmpegError::DecoderNotFound => "decoder not found".into(),
+        FfmpegError::External => {
+            #[cfg(target_os = "android")]
+            {
+                return "MediaCodec/JNI failure (often pixel-format mismatch; ensure native lib is rebuilt)"
+                    .into();
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                return "external library failure".into();
+            }
+        }
+        FfmpegError::Eof => "unexpected end of stream".into(),
+        FfmpegError::Other { errno } => format!("ffmpeg/os errno {errno}"),
+        _ => format!("{err:?}"),
+    }
 }
 
 fn remote_error_hint(err: &FfmpegError) -> Option<&'static str> {

@@ -24,9 +24,11 @@ use rayon::prelude::*;
 
 use crate::error::{Result, VideoProcessorError};
 use crate::ffmpeg::{
-    apply_thumbnail_decoder_settings, ensure_ffmpeg_initialized, ensure_input_accessible,
-    flush_video_decoder, input_duration_ms, input::output_stem_from_input, map_ffmpeg_error,
-    ms_to_stream_ts, open_input, seek_stream_backward, use_segmented_thumbnail_seek,
+    apply_preview_scrub_decoder_settings, apply_thumbnail_decoder_settings,
+    ensure_ffmpeg_initialized, ensure_input_accessible, flush_video_decoder, input_duration_ms,
+    log::PreviewLogScope,
+    input::output_stem_from_input, map_ffmpeg_error, ms_to_stream_ts, open_input,
+    open_input_for_preview, seek_stream_backward, use_segmented_thumbnail_seek,
 };
 use crate::ffmpeg::interrupt::attach_interrupt;
 use crate::jobs::registry::CancellationToken;
@@ -143,6 +145,7 @@ pub fn extract_batch_thumbnails(
         options.height,
         Some(&options.format),
         token,
+        false,
     )?;
 
     let mut paths = vec![String::new(); n];
@@ -193,6 +196,7 @@ pub fn extract_batch_thumbnail_bytes(
         options.height,
         Some(&options.format),
         token,
+        false,
     )?;
 
     let mut frames = vec![Vec::new(); n];
@@ -246,6 +250,18 @@ pub(crate) fn decode_rgb_frame_at(
     max_h: Option<u32>,
     token: CancellationToken,
 ) -> Result<RgbFrame> {
+    decode_scrub_rgb_frame_at(input, position_ms, max_w, max_h, token)
+}
+
+/// Optimized single-frame scrub: video-only demuxer, segmented seek, tight GOP window.
+pub(crate) fn decode_scrub_rgb_frame_at(
+    input: &str,
+    position_ms: u64,
+    max_w: Option<u32>,
+    max_h: Option<u32>,
+    token: CancellationToken,
+) -> Result<RgbFrame> {
+    let _log = PreviewLogScope::quiet();
     let mut target = BatchTarget {
         index: 0,
         position_ms,
@@ -259,6 +275,7 @@ pub(crate) fn decode_rgb_frame_at(
         max_h,
         None,
         token,
+        true,
     )?;
     target.rgb.ok_or_else(|| {
         VideoProcessorError::InvalidInput("could not decode frame at position".into())
@@ -273,6 +290,7 @@ fn decode_batch_frames(
     max_h: Option<u32>,
     encode_format: Option<&ThumbnailFormat>,
     token: CancellationToken,
+    preview_scrub: bool,
 ) -> Result<()> {
     if targets.is_empty() {
         return Ok(());
@@ -285,7 +303,11 @@ fn decode_batch_frames(
 
     targets.sort_by_key(|t| t.position_ms);
 
-    let mut ictx = open_input(input)?;
+    let mut ictx = if preview_scrub {
+        open_input_for_preview(input)?
+    } else {
+        open_input(input)?
+    };
     attach_interrupt(&mut ictx, token.clone());
 
     let stream = ictx
@@ -298,11 +320,17 @@ fn decode_batch_frames(
     let duration_ms = input_duration_ms(&ictx);
 
     let mut dec_ctx = CodecContext::from_parameters(params).map_err(map_ffmpeg_error)?;
-    apply_thumbnail_decoder_settings(&mut dec_ctx);
+    if preview_scrub {
+        apply_preview_scrub_decoder_settings(&mut dec_ctx);
+    } else {
+        apply_thumbnail_decoder_settings(&mut dec_ctx);
+    }
     let mut decoder = dec_ctx.decoder().video().map_err(map_ffmpeg_error)?;
 
     let positions: Vec<u64> = targets.iter().map(|t| t.position_ms).collect();
-    if use_segmented_thumbnail_seek(&positions, duration_ms) {
+    let use_segmented = use_segmented_thumbnail_seek(&positions, duration_ms)
+        || (preview_scrub && targets.len() == 1);
+    if use_segmented {
         let first = positions[0];
         let last = *positions.last().unwrap();
         log::info!(
@@ -321,6 +349,7 @@ fn decode_batch_frames(
             max_w,
             max_h,
             &token,
+            segmented_gop_approach_ms(preview_scrub, targets.len()),
         )?;
     } else {
         log::debug!(
@@ -349,6 +378,23 @@ fn decode_batch_frames(
 /// How long before the target timestamp we switch from NonKey discard to full decode (A3).
 const GOP_APPROACH_MS: u64 = 900;
 
+/// Tight window for interactive scrub (decode only near the target frame).
+const SCRUB_GOP_APPROACH_MS: u64 = 280;
+
+/// Single-frame scrub at arbitrary playhead (Edit Frame): wide enough for 2–4s GOP UHD HEVC.
+const SINGLE_FRAME_SCRUB_GOP_MS: u64 = 1500;
+
+/// GOP discard window for segmented thumbnail / scrub decode.
+pub(crate) fn segmented_gop_approach_ms(preview_scrub: bool, target_count: usize) -> u64 {
+    if preview_scrub && target_count == 1 {
+        SINGLE_FRAME_SCRUB_GOP_MS
+    } else if preview_scrub {
+        SCRUB_GOP_APPROACH_MS
+    } else {
+        GOP_APPROACH_MS
+    }
+}
+
 /// One forward demux + decode between the first and last position (best for short spans).
 fn decode_batch_sequential(
     ictx: &mut Input,
@@ -373,7 +419,7 @@ fn decode_batch_sequential(
 
     let mut frame = Video::empty();
     let mut color_scaler: Option<ScalerContext> = None;
-    let mut color_src_key: Option<(u32, u32, Pixel)> = None;
+    let mut color_src_key: Option<(u32, u32, Pixel, u32, u32)> = None;
     let mut last_rgb: Option<RgbFrame> = None;
     let mut next = 0usize;
 
@@ -449,9 +495,10 @@ fn decode_batch_segmented(
     max_w: Option<u32>,
     max_h: Option<u32>,
     token: &CancellationToken,
+    gop_approach_ms: u64,
 ) -> Result<()> {
     let mut color_scaler: Option<ScalerContext> = None;
-    let mut color_src_key: Option<(u32, u32, Pixel)> = None;
+    let mut color_src_key: Option<(u32, u32, Pixel, u32, u32)> = None;
 
     for t in targets.iter_mut() {
         if token.is_cancelled() {
@@ -459,47 +506,41 @@ fn decode_batch_segmented(
         }
 
         let target_ms = t.position_ms;
-        let seek_ts = ms_to_stream_ts(target_ms, tb);
-        if seek_stream_backward(ictx, stream_idx, seek_ts).is_err() && target_ms > 0 {
-            log::warn!("thumbnail segmented seek to {target_ms}ms failed; trying from start");
-            let _ = seek_stream_backward(ictx, stream_idx, 0);
-        }
-        flush_video_decoder(decoder);
-        decoder.skip_frame(Discard::NonKey);
+        let mut captured = decode_one_segmented_target(
+            ictx,
+            stream_idx,
+            tb,
+            decoder,
+            t,
+            max_w,
+            max_h,
+            token,
+            gop_approach_ms,
+            target_ms,
+            target_ms,
+            &mut color_scaler,
+            &mut color_src_key,
+        )?;
 
-        let mut frame = Video::empty();
-        let mut captured = false;
-
-        for (s, packet) in ictx.packets() {
-            if token.is_cancelled() {
-                decoder.skip_frame(Discard::None);
-                return Err(VideoProcessorError::Cancelled);
-            }
-            if s.index() != stream_idx {
-                continue;
-            }
-            decoder.send_packet(&packet).map_err(map_ffmpeg_error)?;
-
-            while decoder.receive_frame(&mut frame).is_ok() {
-                let pts_ms = frame_pts_ms(&frame, tb);
-                apply_skip_until_target(decoder, pts_ms, target_ms);
-
-                if pts_ms >= target_ms {
-                    capture_target_frame(
-                        &frame,
-                        t,
-                        max_w,
-                        max_h,
-                        &mut color_scaler,
-                        &mut color_src_key,
-                    )?;
-                    captured = true;
-                    break;
-                }
-            }
-            if captured {
-                break;
-            }
+        if !captured {
+            log::warn!(
+                "thumbnail segmented decode at {target_ms}ms failed; retry from start"
+            );
+            captured = decode_one_segmented_target(
+                ictx,
+                stream_idx,
+                tb,
+                decoder,
+                t,
+                max_w,
+                max_h,
+                token,
+                target_ms,
+                0,
+                target_ms,
+                &mut color_scaler,
+                &mut color_src_key,
+            )?;
         }
 
         decoder.skip_frame(Discard::None);
@@ -513,8 +554,79 @@ fn decode_batch_segmented(
     Ok(())
 }
 
-fn apply_skip_until_target(decoder: &mut DecoderVideo, pts_ms: u64, target_ms: u64) {
-    let approach = target_ms.saturating_sub(GOP_APPROACH_MS);
+/// Seek near [seek_ms] and decode until a frame at/after [target_ms] is captured.
+fn decode_one_segmented_target(
+    ictx: &mut Input,
+    stream_idx: usize,
+    tb: Rational,
+    decoder: &mut DecoderVideo,
+    target: &mut BatchTarget,
+    max_w: Option<u32>,
+    max_h: Option<u32>,
+    token: &CancellationToken,
+    gop_approach_ms: u64,
+    seek_ms: u64,
+    target_ms: u64,
+    color_scaler: &mut Option<ScalerContext>,
+    color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
+) -> Result<bool> {
+    if token.is_cancelled() {
+        return Err(VideoProcessorError::Cancelled);
+    }
+
+    let seek_ts = ms_to_stream_ts(seek_ms, tb);
+    if seek_stream_backward(ictx, stream_idx, seek_ts).is_err() && seek_ms > 0 {
+        log::warn!("thumbnail segmented seek to {seek_ms}ms failed; trying from start");
+        let _ = seek_stream_backward(ictx, stream_idx, 0);
+    }
+    flush_video_decoder(decoder);
+    decoder.skip_frame(Discard::NonKey);
+
+    let mut frame = Video::empty();
+    let mut captured = false;
+
+    for (s, packet) in ictx.packets() {
+        if token.is_cancelled() {
+            decoder.skip_frame(Discard::None);
+            return Err(VideoProcessorError::Cancelled);
+        }
+        if s.index() != stream_idx {
+            continue;
+        }
+        decoder.send_packet(&packet).map_err(map_ffmpeg_error)?;
+
+        while decoder.receive_frame(&mut frame).is_ok() {
+            let pts_ms = frame_pts_ms(&frame, tb);
+            apply_skip_until_target(decoder, pts_ms, target_ms, gop_approach_ms);
+
+            if pts_ms >= target_ms {
+                capture_target_frame(
+                    &frame,
+                    target,
+                    max_w,
+                    max_h,
+                    color_scaler,
+                    color_src_key,
+                )?;
+                captured = true;
+                break;
+            }
+        }
+        if captured {
+            break;
+        }
+    }
+
+    Ok(captured)
+}
+
+fn apply_skip_until_target(
+    decoder: &mut DecoderVideo,
+    pts_ms: u64,
+    target_ms: u64,
+    gop_approach_ms: u64,
+) {
+    let approach = target_ms.saturating_sub(gop_approach_ms);
     if pts_ms < approach {
         decoder.skip_frame(Discard::NonKey);
     } else {
@@ -528,7 +640,7 @@ fn capture_target_frame(
     max_w: Option<u32>,
     max_h: Option<u32>,
     color_scaler: &mut Option<ScalerContext>,
-    color_src_key: &mut Option<(u32, u32, Pixel)>,
+    color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
 ) -> Result<()> {
     target.rgb = Some(video_to_rgb(
         frame,
@@ -550,10 +662,10 @@ fn apply_frame_to_batch_targets(
     max_w: Option<u32>,
     max_h: Option<u32>,
     color_scaler: &mut Option<ScalerContext>,
-    color_src_key: &mut Option<(u32, u32, Pixel)>,
+    color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
     last_rgb: &mut Option<RgbFrame>,
 ) -> Result<()> {
-    apply_skip_until_target(decoder, pts_ms, targets[*next].position_ms);
+    apply_skip_until_target(decoder, pts_ms, targets[*next].position_ms, GOP_APPROACH_MS);
 
     let rgb = video_to_rgb(frame, max_w, max_h, color_scaler, color_src_key)?;
     *last_rgb = Some(rgb.clone());
@@ -562,7 +674,7 @@ fn apply_frame_to_batch_targets(
         targets[*next].rgb = Some(rgb.clone());
         *next += 1;
         if *next < targets.len() {
-            apply_skip_until_target(decoder, pts_ms, targets[*next].position_ms);
+            apply_skip_until_target(decoder, pts_ms, targets[*next].position_ms, GOP_APPROACH_MS);
         }
     }
     Ok(())
@@ -655,23 +767,24 @@ pub(crate) fn thumb_dimensions(
     }
 }
 
-fn video_to_rgb(
+pub(crate) fn video_to_rgb(
     frame: &Video,
     max_w: Option<u32>,
     max_h: Option<u32>,
     color_scaler: &mut Option<ScalerContext>,
-    color_src_key: &mut Option<(u32, u32, Pixel)>,
+    color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
 ) -> Result<RgbFrame> {
     let src_w = frame.width();
     let src_h = frame.height();
     let (out_w, out_h) = thumb_dimensions(src_w, src_h, max_w, max_h);
 
-    let src_rgb = convert_frame_to_rgb24(frame, color_scaler, color_src_key)?;
-    let data = if src_w == out_w && src_h == out_h {
-        src_rgb
-    } else {
-        downscale_rgb24(src_rgb, src_w, src_h, out_w, out_h)?
-    };
+    let data = convert_frame_to_rgb24(
+        frame,
+        out_w,
+        out_h,
+        color_scaler,
+        color_src_key,
+    )?;
 
     Ok(RgbFrame {
         width: out_w,
@@ -680,16 +793,23 @@ fn video_to_rgb(
     })
 }
 
-/// YUV (or other FFmpeg pixel format) → packed RGB24 at **source** resolution.
+/// YUV (or other FFmpeg pixel format) → packed RGB24, scaled to `(out_w, out_h)` in one pass.
 fn convert_frame_to_rgb24(
     frame: &Video,
+    out_w: u32,
+    out_h: u32,
     color_scaler: &mut Option<ScalerContext>,
-    color_src_key: &mut Option<(u32, u32, Pixel)>,
+    color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
 ) -> Result<Vec<u8>> {
     let src_w = frame.width();
     let src_h = frame.height();
     let fmt = frame.format();
-    let key = (src_w, src_h, fmt);
+    if crate::ffmpeg::hw_decode::is_hw_pixel_format(fmt) {
+        return Err(VideoProcessorError::Internal(
+            "cannot swscale hardware-decoded frame; transfer to system memory or use pixel-buffer preview path".into(),
+        ));
+    }
+    let key = (src_w, src_h, fmt, out_w, out_h);
     if color_scaler.is_none() || *color_src_key != Some(key) {
         *color_scaler = Some(
             ScalerContext::get(
@@ -697,8 +817,8 @@ fn convert_frame_to_rgb24(
                 src_w,
                 src_h,
                 Pixel::RGB24,
-                src_w,
-                src_h,
+                out_w,
+                out_h,
                 Flags::FAST_BILINEAR,
             )
             .map_err(map_ffmpeg_error)?,
@@ -826,4 +946,34 @@ fn resolve_thumb_path(
     let dir = default_thumb_dir();
     std::fs::create_dir_all(&dir).map_err(map_io_err)?;
     Ok(dir.join(format!("{stem}_thumb.{ext}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn segmented_gop_approach_single_scrub_is_wide() {
+        assert_eq!(
+            segmented_gop_approach_ms(true, 1),
+            SINGLE_FRAME_SCRUB_GOP_MS
+        );
+        assert!(segmented_gop_approach_ms(true, 1) > SCRUB_GOP_APPROACH_MS);
+    }
+
+    #[test]
+    fn segmented_gop_approach_multi_scrub_stays_tight() {
+        assert_eq!(
+            segmented_gop_approach_ms(true, 3),
+            SCRUB_GOP_APPROACH_MS
+        );
+    }
+
+    #[test]
+    fn segmented_gop_approach_thumbnail_batch_uses_default() {
+        assert_eq!(
+            segmented_gop_approach_ms(false, 10),
+            GOP_APPROACH_MS
+        );
+    }
 }

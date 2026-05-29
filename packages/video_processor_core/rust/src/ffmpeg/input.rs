@@ -53,15 +53,57 @@ pub fn ensure_input_accessible(input: &str) -> Result<()> {
 }
 
 /// Open a local path or remote URL with FFmpeg (HTTP options applied for network inputs).
+///
+/// For local MOV/MP4 files, sets `analyzeduration` and `probesize` to handle
+/// complex containers (e.g. iPhone Dolby Vision HEVC with `apac` audio) that
+/// need deeper probing before codec parameters are resolved.
 pub fn open_input(input: &str) -> Result<Input> {
     if is_remote_input(input) {
         let url = normalize_remote_input(input);
-        let mut dict = remote_input_dictionary();
+        let dict = remote_input_dictionary();
         format::input_with_dictionary(&url, dict)
             .map_err(crate::ffmpeg::map_ffmpeg_error)
     } else {
-        format::input(input).map_err(crate::ffmpeg::map_ffmpeg_error)
+        let dict = local_probe_dictionary(input);
+        format::input_with_dictionary(input, dict)
+            .map_err(crate::ffmpeg::map_ffmpeg_error)
     }
+}
+
+/// Faster open for video-only preview/scrub (skips probing unknown iPhone `apac` audio).
+pub fn open_input_for_preview(input: &str) -> Result<Input> {
+    if is_remote_input(input) {
+        return open_input(input);
+    }
+    let mut dict = preview_probe_dictionary(input);
+    dict.set("an", "1");
+    format::input_with_dictionary(input, dict).map_err(crate::ffmpeg::map_ffmpeg_error)
+}
+
+/// Minimal probe for preview — full [local_probe_dictionary] is for metadata/export.
+fn preview_probe_dictionary(input: &str) -> Dictionary<'static> {
+    let mut dict = Dictionary::new();
+    let lower = input.to_ascii_lowercase();
+    if lower.ends_with(".mov") || lower.ends_with(".mp4") || lower.ends_with(".m4v") {
+        dict.set("analyzeduration", "500000");
+        dict.set("probesize", "1000000");
+    }
+    dict
+}
+
+/// Extra probe options for local files that commonly confuse FFmpeg probing.
+///
+/// iPhone MOV files with Dolby Vision HEVC + Apple spatial audio (`apac`) often
+/// trigger "Could not find codec parameters for stream 2" because the default
+/// probe size / analysis duration is insufficient for the auxiliary audio track.
+fn local_probe_dictionary(input: &str) -> Dictionary<'static> {
+    let mut dict = Dictionary::new();
+    let lower = input.to_ascii_lowercase();
+    if lower.ends_with(".mov") || lower.ends_with(".mp4") || lower.ends_with(".m4v") {
+        dict.set("analyzeduration", "5000000");
+        dict.set("probesize", "20000000");
+    }
+    dict
 }
 
 fn remote_input_dictionary() -> Dictionary<'static> {

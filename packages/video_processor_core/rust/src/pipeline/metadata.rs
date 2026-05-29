@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::error::{Result, VideoProcessorError};
 use crate::ffmpeg::{
     ensure_ffmpeg_initialized, ensure_input_accessible, is_remote_input, map_ffmpeg_error,
-    open_input,
+    open_input, prefer_software_preview, stream_has_dolby_vision,
 };
 use crate::ffmpeg::large_file::probe_mp4_fast;
 use crate::ffmpeg::probe_cache::{get as probe_cache_get, insert as probe_cache_insert};
@@ -21,13 +21,21 @@ pub fn probe_media_info(path: &str) -> Result<MediaInfo> {
 
     let path = Path::new(trimmed);
     if !is_remote_input(trimmed) {
-        let file_size = std::fs::metadata(path)
-            .map(|m| m.len())
-            .unwrap_or(0);
-        if let Ok(Some(fast)) = probe_mp4_fast(path) {
-            if fast.width > 0 && fast.duration_ms > 0 && !fast_probe_suspicious(&fast, file_size)
-            {
-                return Ok(fast);
+        let lower = trimmed.to_ascii_lowercase();
+        // Camera / editor assets need full FFmpeg probe (codec, DV, apac).
+        let skip_fast_probe = lower.ends_with(".mov")
+            || lower.ends_with(".m4v")
+            || (lower.ends_with(".mp4")
+                && cfg!(any(target_os = "ios", target_os = "macos")));
+        if !skip_fast_probe {
+            let file_size = std::fs::metadata(path)
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if let Ok(Some(fast)) = probe_mp4_fast(path) {
+                if fast.width > 0 && fast.duration_ms > 0 && !fast_probe_suspicious(&fast, file_size)
+                {
+                    return Ok(fast);
+                }
             }
         }
     }
@@ -77,11 +85,15 @@ fn probe_with_ffmpeg(input: &str) -> Result<MediaInfo> {
     let mut video_codec = String::new();
     let mut audio_codec = None;
     let mut bitrate = 0u64;
+    let mut has_dolby_vision = false;
+    let mut prefer_sw_preview = false;
 
     for stream in ictx.streams() {
         let medium = stream.parameters().medium();
         if medium == ffmpeg_next::media::Type::Video && width == 0 {
             let params = stream.parameters();
+            has_dolby_vision = stream_has_dolby_vision(&params, Some(input));
+            prefer_sw_preview = prefer_software_preview(&params, input);
             if let Ok(ctx) = ffmpeg_next::codec::context::Context::from_parameters(params) {
                 if let Ok(decoder) = ctx.decoder().video() {
                     width = decoder.width();
@@ -112,6 +124,8 @@ fn probe_with_ffmpeg(input: &str) -> Result<MediaInfo> {
         audio_codec,
         bitrate,
         file_size,
+        has_dolby_vision,
+        prefer_software_preview: prefer_sw_preview,
     })
 }
 

@@ -21,3 +21,9 @@ export 'src/editor/services/filter_descriptor.dart';
 export 'src/editor/services/image_export_saver.dart';
 export 'src/editor/services/rust_worker.dart';
 export 'src/editor/theme/app_theme.dart';
+export 'src/editor/models/overlay_layer.dart'
+    show TextBackgroundStyle, TextFillMode;
+export 'src/editor/models/text_style_draft.dart';
+export 'src/editor/widgets/control_widgets.dart';
+export 'src/editor/widgets/lumina_color_picker.dart';
+export 'src/editor/widgets/text_style_controls.dart';

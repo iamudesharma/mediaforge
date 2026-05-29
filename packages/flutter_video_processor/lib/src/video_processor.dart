@@ -14,6 +14,7 @@ export 'package:video_processor_core/video_processor_core.dart'
         MediaInfo,
         PreviewFrameRgba,
         PreviewFramePixelBuffer,
+        VideoPreviewSession,
         ProgressEvent,
         ProcessingPhase,
         VideoCodec,
@@ -27,7 +28,13 @@ export 'package:video_processor_core/video_processor_core.dart'
         ThumbnailBytesOptions,
         ThumbnailOptions,
         JobResult_Compress,
-        JobResult_Empty;
+        JobResult_Empty,
+        bufferPoolRelease,
+        bufferPoolAcquire,
+        bufferPoolStats,
+        PlaybackFrame,
+        PlaybackFrame_Rgba,
+        PlaybackFrame_PixelBuffer;
 
 /// High-performance video processing powered by Rust + FFmpeg.
 abstract final class VideoProcessor {
@@ -164,6 +171,8 @@ abstract final class VideoProcessor {
     int? startMs,
     int? endMs,
     List<BurnInOverlay> burnInOverlays = const [],
+    List<AudioTrackInput> audioTracks = const [],
+    bool muteOriginalAudio = false,
   }) async {
     await initialize();
 
@@ -184,6 +193,8 @@ abstract final class VideoProcessor {
       startMs: startMs,
       endMs: endMs,
       burnInOverlays: burnInOverlays,
+      audioTracks: audioTracks,
+      muteOriginalAudio: muteOriginalAudio,
     ).build();
 
     final progressStream = core.startCompress(options: options);
@@ -253,6 +264,11 @@ abstract final class VideoProcessor {
     core.releasePreviewPixelBuffer(
       pixelBufferPtr: BigInt.from(pixelBufferPtr),
     );
+  }
+
+  /// Release a native RGBA buffer back to the video processor's native pool.
+  static void releaseBuffer(Uint8List buffer) {
+    core.bufferPoolRelease(buf: buffer);
   }
 
   /// JPEG/WebP bytes for a single frame — no file write (UI previews).

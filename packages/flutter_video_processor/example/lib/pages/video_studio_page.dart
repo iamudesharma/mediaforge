@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_video_processor/flutter_video_processor.dart';
 import 'package:path/path.dart' as p;
@@ -8,6 +9,15 @@ import 'package:path/path.dart' as p;
 import '../demo_session.dart';
 import '../output_paths.dart';
 import '../widgets/filmstrip_trimmer.dart';
+
+/// Preview engine for the example studio (Media Studio uses native-only).
+enum StudioPreviewEngine {
+  /// [NativePlaybackController] — AVPlayer / ExoPlayer via `video_player`.
+  native,
+
+  /// [MediaRuntime] — Rust decode + GPU texture (CVPixelBuffer / MediaCodec surface).
+  rustTexture,
+}
 
 /// Live-style editor: filmstrip selection (our batch thumbnails) + compress export.
 ///
@@ -28,6 +38,8 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
 
   StreamSubscription<ProgressEvent>? _progressSub;
   MediaRuntime? _runtime;
+  NativePlaybackController? _player;
+  StudioPreviewEngine _previewEngine = StudioPreviewEngine.rustTexture;
 
   List<String> _filmstripPaths = [];
   List<VideoOverlayItem> _overlays = [];
@@ -43,11 +55,36 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
 
   DemoSession get _s => widget.session;
 
+  bool get _useNativePreview => _previewEngine == StudioPreviewEngine.native;
+
+  bool get _previewIsOpen =>
+      _useNativePreview ? (_player?.isOpen ?? false) : (_runtime?.isOpen ?? false);
+
+  bool get _previewIsPlaying =>
+      _useNativePreview ? (_player?.isPlaying ?? false) : (_runtime?.isPlaying ?? false);
+
+  Listenable get _previewListenable =>
+      _useNativePreview ? (_player ?? Listenable.merge(const [])) : (_runtime ?? Listenable.merge(const []));
+
+  @override
+  void initState() {
+    super.initState();
+    if (!kIsWeb &&
+        (Platform.isIOS || Platform.isAndroid || Platform.isMacOS)) {
+      _previewEngine = StudioPreviewEngine.native;
+    }
+  }
+
   @override
   void dispose() {
     _progressSub?.cancel();
-    unawaited(_tearDownRuntime());
+    unawaited(_tearDownPreview());
     super.dispose();
+  }
+
+  Future<void> _tearDownPreview() async {
+    await _tearDownRuntime();
+    await _tearDownPlayer();
   }
 
   Future<void> _tearDownRuntime() async {
@@ -58,6 +95,35 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
     runtime.pause();
     await runtime.close();
     runtime.dispose();
+  }
+
+  Future<void> _tearDownPlayer() async {
+    final player = _player;
+    if (player == null) return;
+    player.removeListener(_onPlayerUpdated);
+    _player = null;
+    player.pause();
+    await player.close();
+    player.dispose();
+  }
+
+  void _onPlayerUpdated() {
+    final player = _player;
+    if (player == null || !mounted) return;
+    final sec = player.positionMs / 1000.0;
+    if ((sec - _playheadSec).abs() > 0.001 || player.isPlaying) {
+      setState(() {
+        _playheadSec = _safeClamp(sec, _startSec, _endSec);
+      });
+    }
+    if (player.isPlaying) {
+      final info = player.mediaInfo;
+      if (info != null) {
+        _s.status =
+            'Playing · ${nativePlaybackEngineLabel()} · ${info.width}×${info.height}';
+        _s.touch();
+      }
+    }
   }
 
   void _onRuntimeUpdated() {
@@ -86,7 +152,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
 
     OutputPaths.clearCache();
     _filmstripPaths = [];
-    await _tearDownRuntime();
+    await _tearDownPreview();
 
     if (!_s.initialized) {
       await _s.initialize();
@@ -100,37 +166,57 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   Future<void> _loadVideo(String path) async {
     _s.setBusy(status: 'Loading video…');
     try {
-      await _tearDownRuntime();
-      _runtime = MediaRuntime(previewMaxEdge: 720, targetPreviewFps: 30);
-      _runtime!.addListener(_onRuntimeUpdated);
-      await _runtime!.open(path);
+      await _tearDownPreview();
+      MediaInfo info;
+      if (_useNativePreview) {
+        _player = NativePlaybackController(loopPlayback: false);
+        _player!.addListener(_onPlayerUpdated);
+        await _player!.open(path);
+        info = _player!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
+      } else {
+        _runtime = MediaRuntime(previewMaxEdge: 720, targetPreviewFps: 30);
+        _runtime!.addListener(_onRuntimeUpdated);
+        await _runtime!.open(path);
+        info = _runtime!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
+      }
 
-      // Authoritative duration for trim/filmstrip (fixes short fast-probe on phone MOV).
-      final info = _runtime!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
       _s.info = info;
       final dur = info.durationMs.toInt() / 1000.0;
       _startSec = 0;
       _endSec = dur > 0 ? dur : 1;
       _playheadSec = _startSec;
 
-      _runtime!.setTrimRange(
-        startMs: (_startSec * 1000).round(),
-        endMs: (_endSec * 1000).round(),
-      );
-      await _runtime!.seekTo(
-        Duration(milliseconds: (_playheadSec * 1000).round()),
-      );
+      final trimStart = (_startSec * 1000).round();
+      final trimEnd = (_endSec * 1000).round();
+      if (_useNativePreview) {
+        _player!.setTrimRange(startMs: trimStart, endMs: trimEnd);
+        await _player!.seekTo(Duration(milliseconds: trimStart));
+      } else {
+        _runtime!.setTrimRange(startMs: trimStart, endMs: trimEnd);
+        await _runtime!.seekTo(Duration(milliseconds: trimStart));
+      }
 
       await _buildFilmstrip();
       _rebuildDemoOverlays(_endSec - _startSec);
-      final metrics = _runtime!.metricsSnapshot.toStatusLine();
+      final engine = _useNativePreview
+          ? nativePlaybackEngineLabel()
+          : 'MediaRuntime texture';
+      final metrics = _useNativePreview
+          ? ''
+          : '\n${_runtime!.metricsSnapshot.toStatusLine()}';
       _s.setIdle(
         status:
-            'Ready · ${info.width}×${info.height} · ${info.videoCodec} · overlays:${_overlays.length}\n$metrics',
+            'Ready · $engine · ${info.width}×${info.height} · ${info.videoCodec} · overlays:${_overlays.length}$metrics',
       );
     } catch (e) {
       _s.setIdle(status: 'Load failed: $e');
     }
+  }
+
+  Future<void> _switchPreviewEngine(StudioPreviewEngine engine) async {
+    if (_previewEngine == engine || _s.selectedInput == null) return;
+    setState(() => _previewEngine = engine);
+    await _loadVideo(_s.selectedInput!);
   }
 
   List<Duration> _evenlySpacedPositions(int count, double durationSec) {
@@ -165,10 +251,31 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   }
 
   void _schedulePreviewSync(double seconds) {
-    if (_runtime?.isPlaying ?? false) return;
-    _runtime?.scheduleScrub(
-      Duration(milliseconds: (seconds * 1000).round()),
-    );
+    if (_previewIsPlaying) return;
+    final pos = Duration(milliseconds: (seconds * 1000).round());
+    if (_useNativePreview) {
+      unawaited(_player?.seekTo(pos));
+    } else {
+      _runtime?.scheduleScrub(pos);
+    }
+  }
+
+  void _pausePreview() {
+    if (_useNativePreview) {
+      _player?.pause();
+    } else {
+      _runtime?.pause();
+    }
+  }
+
+  void _setTrimRange() {
+    final startMs = (_startSec * 1000).round();
+    final endMs = (_endSec * 1000).round();
+    if (_useNativePreview) {
+      _player?.setTrimRange(startMs: startMs, endMs: endMs);
+    } else {
+      _runtime?.setTrimRange(startMs: startMs, endMs: endMs);
+    }
   }
 
   static double _safeClamp(double value, double lower, double upper) {
@@ -191,10 +298,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
       _playheadSec = _safeClamp(_playheadSec, s, e);
       _rebuildDemoOverlays(_endSec - _startSec);
     });
-    _runtime?.setTrimRange(
-      startMs: (_startSec * 1000).round(),
-      endMs: (_endSec * 1000).round(),
-    );
+    _setTrimRange();
     _schedulePreviewSync(_playheadSec);
   }
 
@@ -222,16 +326,19 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   }
 
   Future<void> _togglePlayback() async {
-    final runtime = _runtime;
-    if (runtime == null || !runtime.isOpen || _s.busy) return;
-    if (runtime.isPlaying) {
-      runtime.pause();
+    if (!_previewIsOpen || _s.busy) return;
+    if (_previewIsPlaying) {
+      _pausePreview();
     } else {
-      runtime.setTrimRange(
-        startMs: (_startSec * 1000).round(),
-        endMs: (_endSec * 1000).round(),
-      );
-      await runtime.play();
+      _setTrimRange();
+      if (_useNativePreview) {
+        await _player!.seekTo(
+          Duration(milliseconds: (_playheadSec * 1000).round()),
+        );
+        await _player!.play();
+      } else {
+        await _runtime!.play();
+      }
     }
     if (mounted) setState(() {});
   }
@@ -358,7 +465,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
                         ? null
                         : () {
                             final previous = _s.selectedInput;
-                            unawaited(_tearDownRuntime());
+                            unawaited(_tearDownPreview());
                             _s.selectedInput = null;
                             _s.selectedName = null;
                             _s.info = null;
@@ -385,6 +492,27 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
                       height: 22,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                     ),
+                  PopupMenuButton<StudioPreviewEngine>(
+                    tooltip: 'Preview engine',
+                    icon: const Icon(Icons.tune, color: Colors.white70),
+                    onSelected: _s.busy
+                        ? null
+                        : (e) => unawaited(_switchPreviewEngine(e)),
+                    itemBuilder: (context) => [
+                      CheckedPopupMenuItem(
+                        value: StudioPreviewEngine.native,
+                        checked: _useNativePreview,
+                        child: Text(
+                          'Native (${nativePlaybackEngineLabel()})',
+                        ),
+                      ),
+                      CheckedPopupMenuItem(
+                        value: StudioPreviewEngine.rustTexture,
+                        checked: !_useNativePreview,
+                        child: const Text('Rust MediaRuntime (texture)'),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -442,7 +570,7 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
                     onChanged: _s.busy
                         ? null
                         : (v) {
-                            _runtime?.pause();
+                            _pausePreview();
                             setState(() => _playheadSec = v);
                             _schedulePreviewSync(v);
                           },
@@ -453,9 +581,9 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: ListenableBuilder(
-                listenable: _runtime ?? Listenable.merge(const []),
+                listenable: _previewListenable,
                 builder: (context, _) {
-                  final playing = _runtime?.isPlaying ?? false;
+                  final playing = _previewIsPlaying;
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -501,12 +629,24 @@ class _VideoStudioPageState extends State<VideoStudioPage> {
   }
 
   Widget _buildPreview(BuildContext context) {
-    final runtime = _runtime;
-    if (runtime != null && runtime.isOpen) {
-      return VideoCompositorCanvas(
-        runtime: runtime,
-        overlays: _overlays,
-      );
+    if (_useNativePreview) {
+      final player = _player;
+      if (player != null && player.isOpen) {
+        return NativeVideoCanvas(
+          controller: player,
+          overlays: _overlays,
+          timelinePlayheadMs: (_playheadSec * 1000).round(),
+        );
+      }
+    } else {
+      final runtime = _runtime;
+      if (runtime != null && runtime.isOpen) {
+        return VideoCompositorCanvas(
+          runtime: runtime,
+          overlays: _overlays,
+          timelinePlayheadMs: (_playheadSec * 1000).round(),
+        );
+      }
     }
     return const Center(
       child: Icon(Icons.videocam_outlined, size: 64, color: Colors.white24),

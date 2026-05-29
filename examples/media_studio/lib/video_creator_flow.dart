@@ -1,17 +1,19 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_video_processor/flutter_video_processor.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:video_player/video_player.dart';
-
+import 'services/media_ingest.dart';
+import 'services/preview_playback_mux.dart';
 import 'services/output_paths.dart';
 import 'widgets/filmstrip_trimmer.dart';
 import 'widgets/send_to_chat_sheet.dart';
+import 'widgets/video_text_overlay_edit_sheet.dart';
 import 'photo_editor_flow.dart';
 
 class VideoExportResult {
@@ -47,13 +49,13 @@ class VideoCreatorFlow extends StatefulWidget {
 class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   static const _filmstripFrames = 10;
   static const _filmstripThumbWidth = 160;
-
-  MediaRuntime? _runtime;
+  NativePlaybackController? _player;
   StreamSubscription<ProgressEvent>? _progressSub;
 
   List<String> _filmstripPaths = [];
   final TimelineController _timeline = TimelineController();
-  VideoPlayerController? _audioPreview;
+  String? _currentPlaybackPath;
+  bool _playbackUsesMux = false;
   bool _loadingFilmstrip = false;
   bool _busy = false;
   String _statusLine = 'Initializing player…';
@@ -68,7 +70,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   CompressionPreset _exportPreset = CompressionPreset.instagram;
   bool _preferHw = true;
   bool _toolsExpanded = false;
-  final _textOverlayController = TextEditingController();
+  bool _muteOriginalAudio = false;
 
   @override
   void initState() {
@@ -82,9 +84,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     _progressSub?.cancel();
     _timeline.removeListener(_onTimelineUpdated);
     _playheadNotifier.dispose();
-    _textOverlayController.dispose();
-    _stopAudioPreview();
-    _tearDownRuntime();
+    _tearDownPlayer();
     super.dispose();
   }
 
@@ -92,22 +92,24 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _tearDownRuntime() async {
-    final runtime = _runtime;
-    if (runtime == null) return;
-    runtime.removeListener(_onRuntimeUpdated);
-    _runtime = null;
-    runtime.pause();
-    await runtime.close();
-    runtime.dispose();
+  void _invalidatePreviewMux() {
+    PreviewPlaybackMux.invalidate();
   }
 
-  void _onRuntimeUpdated() {
-    final runtime = _runtime;
-    if (runtime == null || !mounted) return;
-    // During playback the wall-clock drives [mediaTimeMs]; [ptsMs] only updates per decode (~12–15 fps).
-    final sourceMs =
-        runtime.isPlaying ? runtime.mediaTimeMs : runtime.ptsMs;
+  Future<void> _tearDownPlayer() async {
+    final player = _player;
+    if (player == null) return;
+    player.removeListener(_onPlayerUpdated);
+    _player = null;
+    player.pause();
+    await player.close();
+    player.dispose();
+  }
+
+  void _onPlayerUpdated() {
+    final player = _player;
+    if (player == null || !mounted) return;
+    final sourceMs = player.positionMs;
     final timelineSec = _timelineSecFromSourcePts(sourceMs);
     final clampedSec = _safeClamp(
       timelineSec,
@@ -119,25 +121,35 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     _playheadSec = clampedSec;
     _playheadNotifier.value = clampedSec;
 
-    if (runtime.isPlaying) {
+    if (player.isPlaying) {
       unawaited(_advancePastClipEndIfNeeded(sourceMs));
     }
 
     // Throttle heavy full-screen rebuilds (Timeline, overlays, tools panel) during playback
     final now = DateTime.now();
     final lastRebuild = _lastTimelineRebuild;
-    final shouldRebuild = !runtime.isPlaying ||
+    final shouldRebuild = !player.isPlaying ||
         lastRebuild == null ||
-        now.difference(lastRebuild).inMilliseconds >= 120; // ~8 fps timeline updates save 85% CPU load
+        now.difference(lastRebuild).inMilliseconds >= 120;
 
     if (shouldRebuild) {
       _lastTimelineRebuild = now;
       setState(() {
-        if (runtime.isPlaying) {
-          _metricsLine = runtime.metricsSnapshot.toStatusLine();
+        if (player.isPlaying) {
+          _updateNativeHud(player);
         }
       });
     }
+  }
+
+  void _updateNativeHud(NativePlaybackController player) {
+    final info = player.mediaInfo;
+    if (info == null) {
+      _metricsLine = 'native playback';
+      return;
+    }
+    _metricsLine =
+        'native ${nativePlaybackEngineLabel()} · ${info.width}×${info.height} · ${info.videoCodec}';
   }
 
   Future<void> _loadVideo(String path) async {
@@ -147,16 +159,12 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     });
 
     try {
-      await _tearDownRuntime();
-      _runtime = MediaRuntime(
-        previewMaxEdge: 480,
-        targetPreviewFps: 24,
-        loopPlayback: false,
-      );
-      _runtime!.addListener(_onRuntimeUpdated);
-      await _runtime!.open(path);
+      await _tearDownPlayer();
+      _player = NativePlaybackController(loopPlayback: false);
+      _player!.addListener(_onPlayerUpdated);
+      await _player!.open(path);
 
-      final info = _runtime!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
+      final info = _player!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
       final dur = info.durationMs.toInt() / 1000.0;
       
       final durationMs = info.durationMs.toInt();
@@ -173,7 +181,11 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
         _busy = false;
       });
 
-      _runtime!.setTrimRange(
+      _currentPlaybackPath = path;
+      _playbackUsesMux = false;
+      _invalidatePreviewMux();
+      _updateNativeHud(_player!);
+      _player!.setTrimRange(
         startMs: (_startSec * 1000).round(),
         endMs: (_endSec * 1000).round(),
       );
@@ -191,7 +203,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   Future<void> _buildFilmstrip() async {
     setState(() => _loadingFilmstrip = true);
     try {
-      final duration = _runtime?.mediaInfo?.durationMs.toInt() ?? 0;
+      final duration = _player?.mediaInfo?.durationMs.toInt() ?? 0;
       final durationSeconds = duration / 1000.0;
       final positions = _evenlySpacedPositions(_filmstripFrames, durationSeconds);
       
@@ -239,14 +251,23 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   int get _playheadTimelineMs => (_playheadSec * 1000).round();
 
   double _timelineSecFromSourcePts(int sourcePtsMs) {
-    for (final clip in _timeline.videoClips) {
-      if (clip.sourcePath != widget.initialPath) continue;
-      if (sourcePtsMs >= clip.sourceStartMs && sourcePtsMs < clip.sourceEndMs) {
-        return (clip.timelineStartMs + (sourcePtsMs - clip.sourceStartMs)) /
-            1000.0;
-      }
+    if (_playbackUsesMux) {
+      return _startSec + sourcePtsMs / 1000.0;
     }
-    return sourcePtsMs / 1000.0;
+    return timelineSecFromSourcePts(
+      sourcePtsMs: sourcePtsMs,
+      sourcePath: widget.initialPath,
+      clips: _timeline.videoClips
+          .map(
+            (c) => TimelineClipMapping(
+              sourcePath: c.sourcePath,
+              sourceStartMs: c.sourceStartMs,
+              sourceEndMs: c.sourceEndMs,
+              timelineStartMs: c.timelineStartMs,
+            ),
+          )
+          .toList(),
+    );
   }
 
   void _syncFilmstripToSingleClip() {
@@ -261,23 +282,34 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   Future<void> _applySeekFromTimelineMs(int timelineMs) async {
-    final runtime = _runtime;
+    final player = _player;
+    if (player == null || !player.isOpen) return;
+
+    if (_playbackUsesMux) {
+      final trimStartMs = (_startSec * 1000).round();
+      final muxDur = player.durationMs > 0 ? player.durationMs : 1;
+      final offsetMs =
+          (timelineMs - trimStartMs).clamp(0, muxDur);
+      await player.seekTo(Duration(milliseconds: offsetMs));
+      return;
+    }
+
     final target = _timeline.seekTargetAt(timelineMs);
-    if (runtime == null || target == null) return;
+    if (target == null) return;
 
     final clip = _timeline.clipById(target.clipId);
     if (clip != null) {
-      runtime.setTrimRange(
+      player.setTrimRange(
         startMs: clip.sourceStartMs,
         endMs: clip.sourceEndMs,
       );
     }
-    await runtime.seekTo(Duration(milliseconds: target.sourceMs));
+    await player.seekTo(Duration(milliseconds: target.sourceMs));
   }
 
   Future<void> _advancePastClipEndIfNeeded(int sourcePtsMs) async {
-    final runtime = _runtime;
-    if (runtime == null || !runtime.isPlaying) return;
+    final player = _player;
+    if (player == null || !player.isPlaying) return;
 
     final clip = _timeline.clipAtTimelineMs(_playheadTimelineMs);
     if (clip == null) return;
@@ -285,14 +317,15 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
 
     final index = _timeline.videoClips.indexWhere((c) => c.id == clip.id);
     if (index < 0 || index >= _timeline.videoClips.length - 1) {
-      runtime.pause();
+      player.pause();
+      await player.setEmbeddedAudioMuted(_muteOriginalAudio);
       return;
     }
     final next = _timeline.videoClips[index + 1];
     setState(() => _playheadSec = next.timelineStartMs / 1000.0);
     await _applySeekFromTimelineMs(next.timelineStartMs);
-    if (runtime.isOpen && !runtime.isPlaying) {
-      await runtime.play();
+    if (player.isOpen && !player.isPlaying) {
+      await player.play();
     }
   }
 
@@ -317,56 +350,142 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     );
     if (result == null || result.files.isEmpty) return;
     final path = result.files.single.path;
-    if (path == null || !File(path).existsSync()) return;
-
-    try {
-      final info = await VideoProcessor.getMediaInfo(path);
-      final durationMs = info.durationMs.toInt();
-      _timeline.addAudioClip(
-        sourcePath: path,
-        durationMs: durationMs > 0 ? durationMs : 1000,
-        timelineStartMs: _playheadTimelineMs,
-      );
+    if (path == null) {
       if (mounted) {
-        setState(() {
-          _statusLine =
-              'Audio track added · ${p.basename(path)} (${_formatDuration(durationMs)})';
-        });
+        setState(() => _statusLine = 'Audio import failed: no file path');
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _statusLine = 'Audio import failed: $e');
-      }
-    }
-  }
-
-  Future<void> _stopAudioPreview() async {
-    final controller = _audioPreview;
-    _audioPreview = null;
-    if (controller == null) return;
-    await controller.pause();
-    await controller.dispose();
-  }
-
-  Future<void> _syncAudioPreview(bool videoPlaying) async {
-    final tracks = _timeline.audioClips.where((c) => !c.muted);
-    if (!videoPlaying || tracks.isEmpty) {
-      await _stopAudioPreview();
       return;
     }
-    final track = tracks.first;
-    if (_audioPreview?.dataSource != track.sourcePath) {
-      await _stopAudioPreview();
-      _audioPreview = VideoPlayerController.file(File(track.sourcePath));
-      await _audioPreview!.initialize();
-      await _audioPreview!.setVolume(track.volume);
+
+    setState(() => _statusLine = 'Importing audio…');
+    final ingested = await MediaIngest.ingestLocalAudio(
+      path,
+      onStatus: (s) {
+        if (mounted) setState(() => _statusLine = s);
+      },
+    );
+    if (ingested.phase != MediaIngestPhase.ready ||
+        ingested.stablePath == null ||
+        ingested.info == null) {
+      if (mounted) {
+        setState(() => _statusLine = ingested.error ?? 'Audio import failed');
+      }
+      return;
     }
-    final offsetMs = _playheadTimelineMs - track.timelineStartMs;
-    if (offsetMs >= 0 && offsetMs < track.durationMs) {
-      await _audioPreview!.seekTo(
-        Duration(milliseconds: track.sourceStartMs + offsetMs),
+
+    final stablePath = ingested.stablePath!;
+    final sourceDurationMs = ingested.info!.durationMs.toInt();
+    // Always start audio at timeline 0 — background music should cover the
+    // whole video (like CapCut / Instagram / TikTok).  Using _playheadTimelineMs
+    // would cause clamping to ~1 ms when the playhead is near the end of a
+    // short video.
+    _timeline.addAudioClip(
+      sourcePath: stablePath,
+      sourceDurationMs: sourceDurationMs > 0 ? sourceDurationMs : 1000,
+      timelineStartMs: 0,
+      videoDurationMs: _timeline.videoDurationMs,
+    );
+    _invalidatePreviewMux();
+    if (mounted) {
+      setState(() {
+        _statusLine =
+            'Audio track added · ${p.basename(stablePath)} '
+            '(${_formatDuration(sourceDurationMs)})';
+      });
+    }
+  }
+
+  /// Re-open the native player on [path] (original video or FFmpeg preview mux).
+  Future<void> _reopenPlayerAtPath(
+    String path, {
+    required bool muxed,
+    bool playAfterOpen = false,
+  }) async {
+    final wasPlaying = _player?.isPlaying ?? false;
+    final playhead = _playheadSec;
+    await _tearDownPlayer();
+    _player = NativePlaybackController(loopPlayback: false);
+    _player!.addListener(_onPlayerUpdated);
+    _currentPlaybackPath = path;
+    _playbackUsesMux = muxed;
+    await _player!.open(path);
+    if (!_player!.isOpen) {
+      throw StateError('Failed to open playback: $path');
+    }
+    if (muxed) {
+      final dur = _player!.durationMs;
+      _player!.setTrimRange(startMs: 0, endMs: dur > 0 ? dur : 1);
+    } else {
+      _player!.setTrimRange(
+        startMs: (_startSec * 1000).round(),
+        endMs: (_endSec * 1000).round(),
       );
-      await _audioPreview!.play();
+    }
+    await _player!.setEmbeddedAudioMuted(
+      muxed ? false : _muteOriginalAudio,
+    );
+    _playheadSec = playhead;
+    await _applySeekFromTimelineMs(_playheadTimelineMs);
+    debugPrint(
+      '[PreviewMux] opened muxed=$muxed path=$path '
+      'isOpen=${_player!.isOpen} duration=${_player!.durationMs}ms '
+      'playAfterOpen=$playAfterOpen',
+    );
+    if ((playAfterOpen || wasPlaying) && _player!.isOpen) {
+      await _player!.play();
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Builds a single mixed preview file when overlay audio exists (CapCut-style).
+  Future<bool> _ensurePreviewPlaybackReady({bool playAfterOpen = false}) async {
+    final tracks = _exportAudioTracks();
+    if (tracks.isEmpty) {
+      if (_playbackUsesMux) {
+        await _reopenPlayerAtPath(
+          widget.initialPath,
+          muxed: false,
+          playAfterOpen: playAfterOpen,
+        );
+      }
+      return true;
+    }
+
+    final (startMs, endMs) = _exportTrimMs();
+    try {
+      final path = await PreviewPlaybackMux.ensure(
+        videoPath: widget.initialPath,
+        startMs: startMs,
+        endMs: endMs,
+        audioTracks: tracks,
+        muteOriginalAudio: _muteOriginalAudio,
+        onStatus: (s) {
+          if (mounted) setState(() => _statusLine = s);
+        },
+      );
+      final needsReopen =
+          !_playbackUsesMux || path != _currentPlaybackPath;
+      debugPrint(
+        '[PreviewMux] ensure ready path=$path current=$_currentPlaybackPath '
+        'usesMux=$_playbackUsesMux needsReopen=$needsReopen',
+      );
+      if (needsReopen) {
+        await _reopenPlayerAtPath(
+          path,
+          muxed: true,
+          playAfterOpen: playAfterOpen,
+        );
+      } else if (playAfterOpen) {
+        await _applySeekFromTimelineMs(_playheadTimelineMs);
+        await _player?.play();
+      }
+      return true;
+    } catch (e, st) {
+      debugPrint('[PreviewMux] failed: $e\n$st');
+      if (mounted) {
+        setState(() => _statusLine = 'Preview mix failed: $e');
+      }
+      return false;
     }
   }
 
@@ -380,7 +499,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   void _onRangeChanged(double start, double end) {
-    final dur = (_runtime?.mediaInfo?.durationMs.toInt() ?? 0) / 1000.0;
+    final dur = (_player?.mediaInfo?.durationMs.toInt() ?? 0) / 1000.0;
     final gap = dur > 0 ? (dur * 0.05).clamp(0.01, 0.25) : 0.01;
     var s = start.clamp(0.0, dur);
     var e = end.clamp(0.0, dur);
@@ -394,81 +513,121 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       _playheadSec = _safeClamp(_playheadSec, s, e);
     });
     _syncFilmstripToSingleClip();
-    _runtime?.setTrimRange(
-      startMs: (_startSec * 1000).round(),
-      endMs: (_endSec * 1000).round(),
-    );
+    _invalidatePreviewMux();
+    if (!_playbackUsesMux) {
+      _player?.setTrimRange(
+        startMs: (_startSec * 1000).round(),
+        endMs: (_endSec * 1000).round(),
+      );
+    }
+    _timeline.clampAudioClipsToVideo();
     _schedulePreviewSync(_playheadSec);
   }
 
+  List<AudioTrackInput> _exportAudioTracks() {
+    return _timeline.audioClips
+        .where((c) => !c.muted)
+        .map(
+          (c) => AudioTrackInput(
+            sourcePath: c.sourcePath,
+            sourceStartMs: BigInt.from(c.sourceStartMs),
+            durationMs: BigInt.from(c.durationMs),
+            timelineStartMs: BigInt.from(c.timelineStartMs),
+            volume: c.volume,
+            muted: c.muted,
+          ),
+        )
+        .toList();
+  }
+
   void _schedulePreviewSync(double timelineSeconds) {
-    if (_runtime?.isPlaying ?? false) return;
+    if (_player?.isPlaying ?? false) return;
     unawaited(_applySeekFromTimelineMs((timelineSeconds * 1000).round()));
   }
 
   Future<void> _togglePlayback() async {
-    final runtime = _runtime;
-    if (runtime == null || !runtime.isOpen || _busy) return;
-    if (runtime.isPlaying) {
-      runtime.pause();
-      await _stopAudioPreview();
-    } else {
-      await _applySeekFromTimelineMs(_playheadTimelineMs);
-      await runtime.play();
-      await _syncAudioPreview(true);
+    final player = _player;
+    if (player == null || !player.isOpen || _busy) return;
+    if (player.isPlaying) {
+      player.pause();
+      if (mounted) setState(() {});
+      return;
     }
-    if (mounted) setState(() {});
+
+    setState(() => _busy = true);
+    try {
+      final ready = await _ensurePreviewPlaybackReady(playAfterOpen: true);
+      if (!mounted || !ready) return;
+      final active = _player;
+      if (active == null || !active.isOpen) {
+        if (mounted) {
+          setState(() => _statusLine = 'Preview player failed to open');
+        }
+        return;
+      }
+      if (!active.isPlaying) {
+        await _applySeekFromTimelineMs(_playheadTimelineMs);
+        await active.play();
+      }
+      if (mounted) {
+        setState(() => _statusLine = _exportAudioTracks().isEmpty
+            ? 'Playing'
+            : 'Playing preview mix');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
-  void _addTextOverlay() {
-    final controller = TextEditingController();
-    showDialog<void>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text('Add Text Overlay', style: TextStyle(color: Colors.white)),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              hintText: 'Enter overlay text',
-              hintStyle: TextStyle(color: Colors.white30),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                final label = controller.text.trim();
-                if (label.isNotEmpty) {
-                  final duration = _timeline.durationMs;
-                  final startMs = _playheadTimelineMs;
-                  final endMs = (startMs + 5000).clamp(0, duration);
-                  
-                  final overlay = VideoOverlayItem.text(
-                    id: 'text:$label:${DateTime.now().millisecondsSinceEpoch}',
-                    startMs: startMs,
-                    endMs: endMs,
-                    anchor: const Offset(0.3, 0.4),
-                    label: label,
-                  );
-                  
-                  _timeline.addOverlay(overlay);
-                  setState(() {});
-                }
-                Navigator.pop(ctx);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
+  Future<void> _addTextOverlay() async {
+    final spec = await VideoTextOverlayEditSheet.show(
+      context,
+      initialSpec: const VideoTextOverlaySpec(label: ''),
+      title: 'Add text overlay',
     );
+    if (spec == null || !mounted) return;
+
+    final duration = _timeline.durationMs;
+    final startMs = _playheadTimelineMs;
+    final endMs = (startMs + 5000).clamp(0, duration);
+    final overlay = VideoOverlayItem.text(
+      id: 'text:${spec.label}:${DateTime.now().millisecondsSinceEpoch}',
+      startMs: startMs,
+      endMs: endMs,
+      anchor: const Offset(0.3, 0.4),
+      label: spec.label,
+      style: spec.style,
+    );
+    _timeline.addOverlay(overlay);
+    setState(() {});
+  }
+
+  void _updateTextOverlay(String id, VideoTextOverlaySpec spec) {
+    final i = _timeline.overlays.indexWhere((o) => o.id == id);
+    if (i < 0) return;
+    _timeline.updateOverlay(_timeline.overlays[i].withTextSpec(spec));
+  }
+
+  Future<void> _editTextOverlay(VideoOverlayItem overlay) async {
+    final initial = overlay.resolvedTextSpec;
+    if (initial == null) return;
+    final spec = await VideoTextOverlayEditSheet.show(
+      context,
+      initialSpec: initial,
+      title: 'Edit text',
+    );
+    if (spec == null || !mounted) return;
+    _updateTextOverlay(overlay.id, spec);
+    setState(() {});
+  }
+
+  VideoOverlayItem? _selectedOverlay() {
+    final id = _timeline.selectedOverlayId;
+    if (id == null) return null;
+    for (final o in _timeline.overlays) {
+      if (o.id == id) return o;
+    }
+    return null;
   }
 
   void _addEmojiOverlay() {
@@ -530,34 +689,93 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     );
   }
 
+  /// JPEG/PNG bytes at [seekMs] with seek retries and Apple RGBA preview fallback.
+  Future<Uint8List> _extractPosterFrameBytes(int seekMs) async {
+    final attempts = <int>{
+      seekMs,
+      math.max(0, seekMs - 2000),
+      0,
+    };
+    Object? lastError;
+    for (final ms in attempts) {
+      try {
+        return await VideoProcessor.thumbnailBytes(
+          input: widget.initialPath,
+          position: Duration(milliseconds: ms),
+          width: 1080,
+        );
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (Platform.isMacOS || Platform.isIOS) {
+      try {
+        final frame = await VideoProcessor.decodePreviewFrameRgba(
+          inputPath: widget.initialPath,
+          positionMs: seekMs,
+          maxEdge: 1080,
+        );
+        try {
+          return await _rgba8888ToPngBytes(
+            frame.rgba,
+            frame.width,
+            frame.height,
+          );
+        } finally {
+          VideoProcessor.releaseBuffer(frame.rgba);
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    throw lastError ?? StateError('poster frame extraction failed');
+  }
+
+  static Future<Uint8List> _rgba8888ToPngBytes(
+    Uint8List rgba,
+    int width,
+    int height,
+  ) async {
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      rgba,
+      width,
+      height,
+      ui.PixelFormat.rgba8888,
+      completer.complete,
+    );
+    final image = await completer.future;
+    try {
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        throw StateError('RGBA preview encode to PNG failed');
+      }
+      return byteData.buffer.asUint8List();
+    } finally {
+      image.dispose();
+    }
+  }
+
   Future<void> _runPosterFrameBridge() async {
     if (_busy) return;
-    
+
     setState(() {
       _busy = true;
       _statusLine = 'Extracting frame at playhead…';
     });
 
     try {
-      final tempDir = await getTemporaryDirectory();
-      final outPath = p.join(tempDir.path, 'bridge_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      
-      final duration = _runtime?.mediaInfo?.durationMs.toInt() ?? 0;
+      final duration = _player?.mediaInfo?.durationMs.toInt() ?? 0;
       final requestedMs = (_playheadSec * 1000).round();
       final seekMs = duration > 100
           ? requestedMs.clamp(0, duration - 100)
           : requestedMs;
 
-      // Extract high quality thumbnail at playhead
-      final thumbPath = await VideoProcessor.thumbnail(
-        input: widget.initialPath,
-        position: Duration(milliseconds: seekMs),
-        output: outPath,
-        width: 1080,
-      );
+      final bytes = await _extractPosterFrameBytes(seekMs);
 
-      final bytes = await File(thumbPath).readAsBytes();
-      
       if (!mounted) return;
       setState(() {
         _busy = false;
@@ -574,10 +792,12 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
         ),
       );
 
+      if (!mounted) return;
+
       if (editedPath != null && File(editedPath).existsSync()) {
-        final duration = _runtime?.mediaInfo?.durationMs.toInt() ?? 1000;
+        final clipDuration = _player?.mediaInfo?.durationMs.toInt() ?? 1000;
         final startMs = (_playheadSec * 1000).round();
-        final endMs = (startMs + 6000).clamp(0, duration);
+        final endMs = (startMs + 6000).clamp(0, clipDuration);
 
         final overlay = VideoOverlayItem(
           id: 'poster:Edited Frame:${DateTime.now().millisecondsSinceEpoch}',
@@ -613,10 +833,15 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
         });
       }
     } catch (e) {
-      setState(() {
-        _statusLine = 'Poster frame failed: $e';
-        _busy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _statusLine = 'Poster frame failed: $e';
+        });
+      }
+    } finally {
+      if (mounted && _busy) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -626,12 +851,11 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   Future<void> _exportVideo() async {
-    final runtime = _runtime;
-    if (runtime == null || _busy) return;
+    final player = _player;
+    if (player == null || _busy) return;
 
-    // Pause playback before exporting
-    if (runtime.isPlaying) {
-      runtime.pause();
+    if (player.isPlaying) {
+      player.pause();
     }
 
     setState(() {
@@ -644,7 +868,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     List<BurnInOverlay> burnInOverlays = const [];
     try {
       if (_timeline.overlays.isNotEmpty) {
-        final info = runtime.mediaInfo ??
+        final info = player.mediaInfo ??
             await VideoProcessor.getMediaInfo(widget.initialPath);
         burnInOverlays = await OverlayRasterExporter.rasterizeForExport(
           overlays: _timeline.overlays,
@@ -681,8 +905,15 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
 
     double exportProgress = 0;
     String exportStatus = 'Preparing job…';
+    String? exportErrorDetail;
     VideoJob? activeJob;
     bool exportCancelled = false;
+    var muteOriginalAudio = _muteOriginalAudio;
+    var exportStarted = false;
+    final exportAudioTracks = _exportAudioTracks();
+    if (exportAudioTracks.isEmpty) {
+      exportStarted = true;
+    }
 
     if (!mounted) return;
 
@@ -690,21 +921,33 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       context: context,
       isDismissible: false,
       enableDrag: false,
+      isScrollControlled: true,
       backgroundColor: const Color(0xFF1C1C1E),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setBottomSheetState) {
-            if (activeJob == null && !exportCancelled) {
+            void setExportFailure(Object e) {
+              setBottomSheetState(() {
+                exportErrorDetail = e.toString();
+                exportStatus = 'Export failed';
+              });
+            }
+
+            if (activeJob == null && !exportCancelled && exportStarted) {
               // Initiate compressJob
               final sw = Stopwatch()..start();
               VideoProcessor.compressJob(
                 input: widget.initialPath,
                 output: outPath,
                 quality: _exportPreset.quality,
-                preferHardwareEncoder: _preferHw,
+                // Burn-in uses CPU YUV420P compositing; software encode is required.
+                preferHardwareEncoder:
+                    burnInOverlays.isEmpty && _preferHw,
                 startMs: startMs,
                 endMs: endMs > startMs ? endMs : null,
                 burnInOverlays: burnInOverlays,
+                audioTracks: exportAudioTracks,
+                muteOriginalAudio: muteOriginalAudio,
               ).then((job) {
                 activeJob = job;
                 _progressSub = job.progress.listen((event) {
@@ -712,11 +955,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                     exportProgress = event.percent;
                     exportStatus = '${_phaseLabel(event.phase)} ${(event.percent * 100).toStringAsFixed(0)}%';
                   });
-                }, onError: (e) {
-                  setBottomSheetState(() {
-                    exportStatus = 'Failed: $e';
-                  });
-                });
+                }, onError: setExportFailure);
 
                 job.result.then((result) async {
                   final duration = sw.elapsed;
@@ -744,58 +983,151 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                   if (context.mounted) {
                     Navigator.pop(context, exportResult);
                   }
-                }).catchError((e) {
+                }).catchError((Object e) {
                   if (!exportCancelled) {
-                    setBottomSheetState(() {
-                      exportStatus = 'Failed: $e';
-                    });
+                    setExportFailure(e);
                   }
                 });
-              }).catchError((e) {
-                setBottomSheetState(() {
-                  exportStatus = 'Launch failed: $e';
-                });
-              });
+              }, onError: setExportFailure);
             }
 
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Text(
-                    'Exporting Video',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  if (burnInOverlays.isNotEmpty)
-                    Text(
-                      'Burning in ${burnInOverlays.length} overlay(s) with trim and compression.',
-                      style: const TextStyle(color: Colors.white54, fontSize: 12),
-                    ),
-                  const SizedBox(height: 16),
-                  LinearProgressIndicator(value: exportProgress),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          exportStatus,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+            final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.55;
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxSheetHeight),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text(
+                          'Exporting Video',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${(exportProgress * 100).toStringAsFixed(0)}%',
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
+                        const SizedBox(height: 8),
+                        if (burnInOverlays.isNotEmpty) ...[
+                          Text(
+                            'Burning in ${burnInOverlays.length} overlay(s) with trim and compression.',
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                          const Text(
+                            'Overlay export uses CPU burn-in then encode (libx264 on desktop, '
+                            'or MediaCodec on Android when software encoders are unavailable). '
+                            'HW Encode toggle is ignored.',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
+                          ),
+                        ],
+                        if (!exportStarted && exportAudioTracks.isNotEmpty) ...[
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Mute original video audio',
+                              style: TextStyle(color: Colors.white70, fontSize: 13),
+                            ),
+                            subtitle: const Text(
+                              'Off: mix background track with the video’s audio',
+                              style: TextStyle(color: Colors.white38, fontSize: 11),
+                            ),
+                            value: muteOriginalAudio,
+                            onChanged: (v) {
+                              setBottomSheetState(() => muteOriginalAudio = v);
+                              setState(() {
+                                _muteOriginalAudio = v;
+                              });
+                              _invalidatePreviewMux();
+                              if (_exportAudioTracks().isEmpty &&
+                                  !_playbackUsesMux) {
+                                _player?.setEmbeddedAudioMuted(v);
+                              }
+                            },
+                          ),
+                          FilledButton(
+                            onPressed: () {
+                              setBottomSheetState(() => exportStarted = true);
+                            },
+                            child: Text(
+                              'Export with ${exportAudioTracks.length} audio track(s)',
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                        const SizedBox(height: 16),
+                        LinearProgressIndicator(value: exportStarted ? exportProgress : 0),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                exportStatus,
+                                style: TextStyle(
+                                  color: exportErrorDetail != null
+                                      ? Colors.redAccent
+                                      : Colors.white70,
+                                  fontSize: 13,
+                                  fontWeight: exportErrorDetail != null
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                            Text(
+                              '${(exportProgress * 100).toStringAsFixed(0)}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (exportErrorDetail != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _shortExportError(exportErrorDetail!),
+                            style: const TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                          if (_overlayExportHint(exportErrorDetail!) != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _overlayExportHint(exportErrorDetail!)!,
+                              style: const TextStyle(
+                                color: Colors.amberAccent,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 120),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2A),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(8),
+                                child: SelectableText(
+                                  exportErrorDetail!,
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 10,
+                                    fontFamily: 'monospace',
+                                    height: 1.3,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                        OutlinedButton(
                           onPressed: () async {
                             exportCancelled = true;
                             if (activeJob != null) {
@@ -806,12 +1138,14 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                               Navigator.pop(context, null);
                             }
                           },
-                          child: const Text('Cancel Export'),
+                          child: Text(
+                            exportErrorDetail != null ? 'Close' : 'Cancel Export',
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ),
             );
           },
@@ -897,7 +1231,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isLoaded = _runtime != null && _runtime!.isOpen;
+    final isLoaded = _player != null && _player!.isOpen;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -938,15 +1272,55 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                   child: isLoaded
                       ? Stack(
                           children: [
-                            ValueListenableBuilder<double>(
-                              valueListenable: _playheadNotifier,
-                              builder: (context, playheadSec, _) {
-                                return VideoCompositorCanvas(
-                                  runtime: _runtime!,
-                                  overlays: _timeline.overlays,
-                                  timelinePlayheadMs: (playheadSec * 1000).round(),
+                            ListenableBuilder(
+                              listenable: _timeline,
+                              builder: (context, _) {
+                                return ValueListenableBuilder<double>(
+                                  valueListenable: _playheadNotifier,
+                                  builder: (context, playheadSec, _) {
+                                    return NativeVideoCanvas(
+                                      key: ValueKey(_currentPlaybackPath),
+                                      controller: _player!,
+                                      overlays: _timeline.overlays,
+                                      timelinePlayheadMs:
+                                          (playheadSec * 1000).round(),
+                                      selectedOverlayId:
+                                          _timeline.selectedOverlayId,
+                                      onSelectOverlay: (id) {
+                                        _timeline.selectOverlay(id);
+                                        setState(() {});
+                                      },
+                                      onOverlayChanged: (item) {
+                                        _timeline.updateOverlay(item);
+                                        setState(() {});
+                                      },
+                                    );
+                                  },
                                 );
                               },
+                            ),
+                            // Play Button Overlay
+                            Positioned.fill(
+                              child: ListenableBuilder(
+                                listenable: _player!,
+                                builder: (context, _) {
+                                  final playing = _player?.isPlaying ?? false;
+                                  if (playing) return const SizedBox.shrink();
+                                  return Center(
+                                    child: GestureDetector(
+                                      onTap: _togglePlayback,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black54,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(Icons.play_arrow, size: 64, color: Colors.white),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                             if (_metricsLine.isNotEmpty)
                               Positioned(
@@ -1022,6 +1396,30 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              Card(
+                                color: const Color(0xFF141414),
+                                margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                                child: SwitchListTile(
+                                  title: const Text(
+                                    'Mute Original Video Audio',
+                                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                  ),
+                                  subtitle: const Text(
+                                    'Toggle original audio playback during preview',
+                                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                                  ),
+                                  value: _muteOriginalAudio,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _muteOriginalAudio = v;
+                                    });
+                                    _invalidatePreviewMux();
+                                    if (_exportAudioTracks().isEmpty) {
+                                      _player?.setEmbeddedAudioMuted(v);
+                                    }
+                                  },
+                                ),
+                              ),
                               TimelineEditorPanel(
                                 controller: _timeline,
                                 playheadMs: _playheadTimelineMs,
@@ -1056,7 +1454,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                           icon: const Icon(Icons.keyboard_arrow_up, size: 18),
                           label: const Text('Show Editing Tools', style: TextStyle(fontSize: 12)),
                         ),
-                        _buildCompactPlaybackButton(),
+                        const SizedBox(width: 8),
                         if (_timeline.overlays.isNotEmpty)
                           TextButton.icon(
                             onPressed: _clearOverlays,
@@ -1085,9 +1483,8 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: ListenableBuilder(
-        listenable: _runtime!,
+        listenable: _player!,
         builder: (context, _) {
-          final playing = _runtime?.isPlaying ?? false;
           return Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1096,13 +1493,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                 onPressed: _buildFilmstrip,
                 tooltip: 'Regenerate Filmstrip',
               ),
-              const SizedBox(width: 16),
-              IconButton.filled(
-                onPressed: _togglePlayback,
-                iconSize: 32,
-                icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-              ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 32),
               IconButton(
                 icon: const Icon(Icons.layers_clear_outlined, color: Colors.white),
                 onPressed: _timeline.overlays.isEmpty ? null : _clearOverlays,
@@ -1112,20 +1503,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
           );
         },
       ),
-    );
-  }
-
-  Widget _buildCompactPlaybackButton() {
-    return ListenableBuilder(
-      listenable: _runtime!,
-      builder: (context, _) {
-        final playing = _runtime?.isPlaying ?? false;
-        return IconButton.filled(
-          onPressed: _togglePlayback,
-          iconSize: 28,
-          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
-        );
-      },
     );
   }
 
@@ -1152,7 +1529,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                   activeColor: theme.colorScheme.primary,
                   inactiveColor: Colors.white24,
                   onChanged: (v) {
-                    _runtime?.pause();
+                    _player?.pause();
                     _playheadSec = v;
                     _playheadNotifier.value = v;
                     _schedulePreviewSync(v);
@@ -1213,61 +1590,29 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   Widget _buildOverlaysTab(ThemeData theme) {
+    final selected = _selectedOverlay();
+    final selectedTextSpec = selected?.resolvedTextSpec;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Add Text row
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 36,
-                  child: TextField(
-                    controller: _textOverlayController,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                    decoration: InputDecoration(
-                      hintText: 'Type text overlay...',
-                      hintStyle: const TextStyle(color: Colors.white38),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      filled: true,
-                      fillColor: const Color(0xFF1E1E1E),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
+          SizedBox(
+            height: 36,
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _addTextOverlay,
+              icon: const Icon(Icons.title, size: 16, color: Colors.white),
+              label: const Text(
+                'Add styled text…',
+                style: TextStyle(color: Colors.white, fontSize: 12),
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 36,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    final label = _textOverlayController.text.trim();
-                    if (label.isNotEmpty) {
-                      final duration = _timeline.durationMs;
-                      final startMs = _playheadTimelineMs;
-                      final endMs = (startMs + 5000).clamp(0, duration);
-                      final overlay = VideoOverlayItem.text(
-                        id: 'text:$label:${DateTime.now().millisecondsSinceEpoch}',
-                        startMs: startMs,
-                        endMs: endMs,
-                        anchor: const Offset(0.3, 0.4),
-                        label: label,
-                      );
-                      _timeline.addOverlay(overlay);
-                      _textOverlayController.clear();
-                      setState(() {});
-                    }
-                  },
-                  icon: const Icon(Icons.add, size: 14),
-                  label: const Text('Add', style: TextStyle(fontSize: 12)),
-                ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Colors.white24),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
           // Emoji quick grid
@@ -1302,7 +1647,12 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
               );
             }).toList(),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          const Text(
+            'Drag overlay on preview to reposition.',
+            style: TextStyle(color: Colors.white38, fontSize: 10),
+          ),
+          const SizedBox(height: 8),
           // Active overlays list with delete buttons
           if (_timeline.overlays.isNotEmpty) ...[
             Row(
@@ -1334,12 +1684,26 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                 icon = Icons.portrait;
               }
 
-              return Container(
+              final selected = o.id == _timeline.selectedOverlayId;
+              return Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    _timeline.selectOverlay(o.id);
+                    setState(() {});
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
                 margin: const EdgeInsets.symmetric(vertical: 2),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF161616),
+                  color: selected
+                      ? const Color(0xFF2A3A35)
+                      : const Color(0xFF161616),
                   borderRadius: BorderRadius.circular(4),
+                  border: selected
+                      ? Border.all(color: const Color(0xFF00D4AA), width: 1)
+                      : null,
                 ),
                 child: Row(
                   children: [
@@ -1357,7 +1721,16 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                       '${_formatDuration(o.startMs)} - ${_formatDuration(o.endMs)}',
                       style: const TextStyle(color: Colors.white38, fontSize: 10),
                     ),
-                    const SizedBox(width: 8),
+                    if (isText) ...[
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 14, color: Colors.white54),
+                        onPressed: () => _editTextOverlay(o),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        tooltip: 'Edit style',
+                      ),
+                    ],
+                    const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 14, color: Colors.redAccent),
                       onPressed: () {
@@ -1369,8 +1742,23 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                     ),
                   ],
                 ),
+              ),
+                ),
               );
             }),
+          ],
+          if (selected != null &&
+              selectedTextSpec != null &&
+              _timeline.selectedOverlayId != null) ...[
+            const SizedBox(height: 8),
+            VideoTextOverlayEditPanel(
+              key: ValueKey(_timeline.selectedOverlayId),
+              spec: selectedTextSpec,
+              onChanged: (spec) {
+                _updateTextOverlay(_timeline.selectedOverlayId!, spec);
+                setState(() {});
+              },
+            ),
           ],
         ],
       ),
@@ -1381,7 +1769,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     final selectionLabel =
         '${_formatDuration((_startSec * 1000).round())} → '
         '${_formatDuration((_endSec * 1000).round())}';
-    final durationSec = (_runtime?.mediaInfo?.durationMs.toInt() ?? 0) / 1000.0;
+    final durationSec = (_player?.mediaInfo?.durationMs.toInt() ?? 0) / 1000.0;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
@@ -1424,6 +1812,36 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     final s = ms ~/ 1000;
     final m = s ~/ 60;
     return '${m.toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}';
+  }
+
+  static String? _overlayExportHint(String raw) {
+    final lower = raw.toLowerCase();
+    if (!lower.contains('burn-in') &&
+        !lower.contains('libx264') &&
+        !lower.contains('libx265') &&
+        !lower.contains('software encoder')) {
+      return null;
+    }
+    return 'Tip: rebuild the app after updating native libs '
+        '(./scripts/run-media-studio-android.sh). '
+        'If this persists, try export without overlays.';
+  }
+
+  /// One-line summary for the export sheet (avoids layout overflow from Rust backtraces).
+  static String _shortExportError(String raw) {
+    var line = raw.split('\n').first.trim();
+    final bt = line.indexOf('Stack backtrace');
+    if (bt > 0) {
+      line = line.substring(0, bt).trim();
+    }
+    if (line.startsWith('AnyhowException(') && line.endsWith(')')) {
+      line = line.substring('AnyhowException('.length, line.length - 1);
+    }
+    line = line.replaceAll(RegExp(r'\s+'), ' ');
+    if (line.length > 200) {
+      return '${line.substring(0, 197)}...';
+    }
+    return line;
   }
 }
 

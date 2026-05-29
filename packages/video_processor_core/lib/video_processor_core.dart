@@ -5,4 +5,5 @@ export 'src/frb_generated/api.dart';
 export 'src/frb_generated/error.dart';
 export 'src/frb_generated/frb_generated.dart' show RustLib, RustLibApi;
 export 'src/frb_generated/types.dart';
+export 'src/frb_generated/pipeline/preview.dart';
 export 'src/native_bindings.dart';

@@ -6,6 +6,7 @@ pub mod ffmpeg;
 pub mod jobs;
 pub mod pipeline;
 pub mod platform;
+pub mod pool;
 pub mod types;
 
 pub use api::*;

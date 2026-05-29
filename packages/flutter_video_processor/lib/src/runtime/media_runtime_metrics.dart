@@ -34,6 +34,15 @@ class MediaRuntimeMetrics {
   PreviewDeliveryPath lastPreviewPath = PreviewDeliveryPath.none;
   int lastTextureId = 0;
 
+  // Performance and Diagnostic Metrics (Sprint 1)
+  int decodeMs = 0;
+  int uploadMs = 0;
+  int queueDepth = 0;
+  int droppedFrames = 0;
+  int frameAgeMs = 0;
+  int playbackDriftMs = 0;
+  int textureReuseHits = 0;
+
   void reset() {
     scrubCompleted = 0;
     scrubLatenciesMs.clear();
@@ -47,6 +56,13 @@ class MediaRuntimeMetrics {
     textureLeaksOnClose = 0;
     lastPreviewPath = PreviewDeliveryPath.none;
     lastTextureId = 0;
+    decodeMs = 0;
+    uploadMs = 0;
+    queueDepth = 0;
+    droppedFrames = 0;
+    frameAgeMs = 0;
+    playbackDriftMs = 0;
+    textureReuseHits = 0;
   }
 
   void recordScrubComplete(int latencyMs) {
@@ -86,6 +102,30 @@ class MediaRuntimeMetrics {
     }
   }
 
+  void recordDroppedFrames(int count) {
+    if (count > 0) {
+      droppedFrames += count;
+    }
+  }
+
+  void recordPerformance({
+    int? decodeMs,
+    int? uploadMs,
+    int? queueDepth,
+    int? droppedFrames,
+    int? frameAgeMs,
+    int? playbackDriftMs,
+    int? textureReuseHits,
+  }) {
+    if (decodeMs != null) this.decodeMs = decodeMs;
+    if (uploadMs != null) this.uploadMs = uploadMs;
+    if (queueDepth != null) this.queueDepth = queueDepth;
+    if (droppedFrames != null) this.droppedFrames = droppedFrames;
+    if (frameAgeMs != null) this.frameAgeMs = frameAgeMs;
+    if (playbackDriftMs != null) this.playbackDriftMs = playbackDriftMs;
+    if (textureReuseHits != null) this.textureReuseHits = textureReuseHits;
+  }
+
   /// Immutable snapshot for UI / perf matrix export.
   MediaRuntimeMetricsSnapshot snapshot() {
     return MediaRuntimeMetricsSnapshot(
@@ -101,6 +141,13 @@ class MediaRuntimeMetrics {
       textureLeaksOnClose: textureLeaksOnClose,
       previewPath: lastPreviewPath,
       lastTextureId: lastTextureId,
+      decodeMs: decodeMs,
+      uploadMs: uploadMs,
+      queueDepth: queueDepth,
+      droppedFrames: droppedFrames,
+      frameAgeMs: frameAgeMs,
+      playbackDriftMs: playbackDriftMs,
+      textureReuseHits: textureReuseHits,
     );
   }
 
@@ -128,6 +175,13 @@ class MediaRuntimeMetricsSnapshot {
     required this.textureLeaksOnClose,
     required this.previewPath,
     required this.lastTextureId,
+    required this.decodeMs,
+    required this.uploadMs,
+    required this.queueDepth,
+    required this.droppedFrames,
+    required this.frameAgeMs,
+    required this.playbackDriftMs,
+    required this.textureReuseHits,
   });
 
   final int scrubCompleted;
@@ -142,6 +196,15 @@ class MediaRuntimeMetricsSnapshot {
   final int textureLeaksOnClose;
   final PreviewDeliveryPath previewPath;
   final int lastTextureId;
+
+  // Performance and Diagnostic Metrics
+  final int decodeMs;
+  final int uploadMs;
+  final int queueDepth;
+  final int droppedFrames;
+  final int frameAgeMs;
+  final int playbackDriftMs;
+  final int textureReuseHits;
 
   String get previewPathLabel => switch (previewPath) {
         PreviewDeliveryPath.none => 'none',
@@ -165,6 +228,7 @@ class MediaRuntimeMetricsSnapshot {
     final fps = playbackFps != null
         ? 'fps=${playbackFps!.toStringAsFixed(1)}'
         : 'fps=—';
-    return '$scrub · $fps · path=$previewPathLabel · tex=$lastTextureId · leaks=$textureLeaksOnClose';
+    final perf = 'dec=${decodeMs}ms q=$queueDepth drop=$droppedFrames drift=${playbackDriftMs}ms';
+    return '$scrub · $fps · path=$previewPathLabel · tex=$lastTextureId · $perf · leaks=$textureLeaksOnClose';
   }
 }

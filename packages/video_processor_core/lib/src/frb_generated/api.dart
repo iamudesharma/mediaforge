@@ -85,3 +85,15 @@ Future<int> activeJobCount() => RustLib.instance.api.crateApiActiveJobCount();
 /// Cleanup completed job state.
 Future<void> cleanupJob({required String jobId}) =>
     RustLib.instance.api.crateApiCleanupJob(jobId: jobId);
+
+/// Releases a buffer back to the video processor's native pool.
+void bufferPoolRelease({required List<int> buf}) =>
+    RustLib.instance.api.crateApiBufferPoolRelease(buf: buf);
+
+/// Acquires a buffer from the video processor's native pool with a minimum capacity.
+Uint8List bufferPoolAcquire({required int minCapacity}) =>
+    RustLib.instance.api.crateApiBufferPoolAcquire(minCapacity: minCapacity);
+
+/// Returns the current statistics of the video processor's buffer pool (count, total bytes).
+(BigInt, BigInt) bufferPoolStats() =>
+    RustLib.instance.api.crateApiBufferPoolStats();

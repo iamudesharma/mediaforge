@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import '../../timeline/timeline_controller.dart';
 import '../../timeline/timeline_format.dart';
 import '../../timeline/timeline_models.dart';
+import 'audio_range_scrubber.dart';
 
-/// Background audio tracks: volume, offset, mute (Sprint 20 — preview in host app).
+/// Background audio tracks: volume, source range, timeline offset (Sprint 20).
 class AudioMixerPanel extends StatelessWidget {
   const AudioMixerPanel({
     super.key,
@@ -20,7 +21,7 @@ class AudioMixerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final clips = controller.audioClips;
-    final duration = controller.durationMs.clamp(1, 1 << 30);
+    final duration = controller.videoDurationMs.clamp(1, 1 << 30);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -57,30 +58,23 @@ class AudioMixerPanel extends StatelessWidget {
             ),
           )
         else
-          SizedBox(
-            height: height,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: clips.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final clip = clips[index];
-                final selected = clip.id == controller.selectedAudioClipId;
-                final widthFactor = clip.durationMs / duration;
-                return SizedBox(
-                  width: (MediaQuery.sizeOf(context).width * 0.55 * widthFactor)
-                      .clamp(120.0, 280.0),
-                  child: _AudioClipCard(
-                    clip: clip,
-                    selected: selected,
-                    durationMs: duration,
-                    onSelect: () => controller.selectAudioClip(clip.id),
-                    onChanged: controller.updateAudioClip,
-                    onRemove: () => controller.removeAudioClip(clip.id),
-                  ),
-                );
-              },
-            ),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: clips.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final clip = clips[index];
+              final selected = clip.id == controller.selectedAudioClipId;
+              return _AudioClipCard(
+                clip: clip,
+                selected: selected,
+                videoDurationMs: duration,
+                onSelect: () => controller.selectAudioClip(clip.id),
+                onChanged: controller.updateAudioClip,
+                onRemove: () => controller.removeAudioClip(clip.id),
+              );
+            },
           ),
       ],
     );
@@ -91,7 +85,7 @@ class _AudioClipCard extends StatelessWidget {
   const _AudioClipCard({
     required this.clip,
     required this.selected,
-    required this.durationMs,
+    required this.videoDurationMs,
     required this.onSelect,
     required this.onChanged,
     required this.onRemove,
@@ -99,13 +93,16 @@ class _AudioClipCard extends StatelessWidget {
 
   final AudioTimelineClip clip;
   final bool selected;
-  final int durationMs;
+  final int videoDurationMs;
   final VoidCallback onSelect;
   final ValueChanged<AudioTimelineClip> onChanged;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
+    final maxTimelineStart =
+        (videoDurationMs - clip.durationMs).clamp(0, videoDurationMs);
+
     return Material(
       color: selected ? const Color(0xFF2E7D32) : const Color(0xFF1B3D1F),
       borderRadius: BorderRadius.circular(8),
@@ -140,10 +137,28 @@ class _AudioClipCard extends StatelessWidget {
                 ],
               ),
               Text(
-                'Start ${TimelineFormat.clock(clip.timelineStartMs)} · '
-                '${TimelineFormat.ms(clip.durationMs)}',
+                'Clip ${TimelineFormat.ms(clip.durationMs)} · '
+                'source ${TimelineFormat.clock(clip.sourceStartMs)}–'
+                '${TimelineFormat.clock(clip.sourceEndMs)} / '
+                '${TimelineFormat.clock(clip.sourceDurationMs)}',
                 style: const TextStyle(color: Colors.white54, fontSize: 10),
               ),
+              if (clip.sourceDurationMs > clip.durationMs) ...[
+                const SizedBox(height: 6),
+                const Text(
+                  'Drag window — which part of the track plays',
+                  style: TextStyle(color: Colors.white38, fontSize: 9),
+                ),
+                const SizedBox(height: 4),
+                AudioRangeScrubber(
+                  sourceDurationMs: clip.sourceDurationMs,
+                  windowDurationMs: clip.durationMs,
+                  sourceStartMs: clip.sourceStartMs,
+                  onSourceStartChanged: (ms) {
+                    onChanged(clip.copyWith(sourceStartMs: ms));
+                  },
+                ),
+              ],
               Row(
                 children: [
                   Icon(
@@ -161,18 +176,20 @@ class _AudioClipCard extends StatelessWidget {
                   ),
                 ],
               ),
-              Slider(
-                value: clip.timelineStartMs.toDouble(),
-                min: 0,
-                max: (durationMs - clip.durationMs).clamp(0, durationMs).toDouble(),
-                onChanged: (v) {
-                  onChanged(clip.copyWith(timelineStartMs: v.round()));
-                },
-              ),
-              const Text(
-                'Timeline offset',
-                style: TextStyle(color: Colors.white38, fontSize: 9),
-              ),
+              if (maxTimelineStart > 0) ...[
+                Slider(
+                  value: clip.timelineStartMs.toDouble(),
+                  min: 0,
+                  max: maxTimelineStart.toDouble(),
+                  onChanged: (v) {
+                    onChanged(clip.copyWith(timelineStartMs: v.round()));
+                  },
+                ),
+                const Text(
+                  'Start on video timeline',
+                  style: TextStyle(color: Colors.white38, fontSize: 9),
+                ),
+              ],
             ],
           ),
         ),

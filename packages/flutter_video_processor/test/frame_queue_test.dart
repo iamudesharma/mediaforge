@@ -52,5 +52,71 @@ void main() {
       expect(q.length, 1);
       expect(q.peekLatest()!.ptsMs, 0);
     });
+
+    test('enqueuePlayback drops stale queued frames', () {
+      final q = FrameQueue(maxDepth: 4);
+      q.enqueue(_frame(100, 1));
+      q.enqueue(_frame(200, 2));
+      final r = q.enqueuePlayback(_frame(500, 3), minPtsMs: 400);
+      expect(r.accepted, isTrue);
+      expect(r.dropped.length, 2);
+      expect(q.length, 1);
+      expect(q.peekLatest()!.ptsMs, 500);
+    });
+
+    test('enqueuePlayback rejects incoming stale frame', () {
+      final q = FrameQueue(maxDepth: 4);
+      final r = q.enqueuePlayback(_frame(100, 1), minPtsMs: 500);
+      expect(r.accepted, isFalse);
+      expect(r.rejectedIncoming, isTrue);
+      expect(q.isEmpty, isTrue);
+    });
+
+    test('enqueuePlayback latestOnlyWhenFull replaces queue', () {
+      final q = FrameQueue(maxDepth: 2);
+      q.enqueuePlayback(_frame(0, 1), minPtsMs: 0);
+      q.enqueuePlayback(_frame(100, 2), minPtsMs: 0);
+      final r = q.enqueuePlayback(_frame(300, 3), minPtsMs: 0);
+      expect(r.dropped.length, 2);
+      expect(q.length, 1);
+      expect(q.peekLatest()!.ptsMs, 300);
+    });
+
+    test('takeLatestForPlayback returns dropped intermediates', () {
+      final q = FrameQueue(maxDepth: 4);
+      q.enqueue(_frame(0, 1));
+      q.enqueue(_frame(100, 2));
+      q.enqueue(_frame(200, 3));
+      final snap = q.takeLatestForPlayback();
+      expect(snap.dropped.length, 2);
+      expect(snap.frame!.ptsMs, 200);
+      expect(q.isEmpty, isTrue);
+    });
+
+    test('enqueuePlayback uses wall playhead for stale reject', () {
+      final q = FrameQueue(maxDepth: 4);
+      final r = q.enqueuePlayback(
+        _frame(100, 1),
+        minPtsMs: 0,
+        wallPlayheadMs: 200,
+      );
+      expect(r.accepted, isFalse);
+      expect(r.rejectedIncoming, isTrue);
+    });
+
+    test('enqueuePlayback flushes queue when behind wall playhead', () {
+      final q = FrameQueue(maxDepth: 4);
+      q.enqueuePlayback(_frame(100, 1), minPtsMs: 0, wallPlayheadMs: 100);
+      final r = q.enqueuePlayback(
+        _frame(250, 2),
+        minPtsMs: 0,
+        wallPlayheadMs: 400,
+        driftCatchUpThresholdMs: 100,
+      );
+      expect(r.accepted, isTrue);
+      expect(r.dropped.length, 1);
+      expect(q.length, 1);
+      expect(q.peekLatest()!.ptsMs, 250);
+    });
   });
 }
