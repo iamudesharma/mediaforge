@@ -30,6 +30,9 @@ abstract class PlaybackBackend extends ChangeNotifier {
   /// Mute or restore embedded video audio.
   Future<void> setEmbeddedAudioMuted(bool muted);
 
+  /// Set playback rate (speed).
+  Future<void> setPlaybackRate(double rate);
+
   // ── Read-only state ──
 
   bool get isOpen;

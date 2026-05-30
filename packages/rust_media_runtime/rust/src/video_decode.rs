@@ -283,6 +283,7 @@ pub fn push_vt_pixel_frame(
     out_w: u32,
     out_h: u32,
     frame_queue: &FrameQueue<MediaVideoFrame>,
+    seek_generation: u64,
 ) -> bool {
     if !vt_hw_decode::is_hw_pixel_format(decoded.format()) {
         return false;
@@ -297,6 +298,7 @@ pub fn push_vt_pixel_frame(
                 height: out_h,
                 pixels: Vec::new(),
                 pixel_buffer_ptr: ptr,
+                seek_generation,
             };
             let _ = frame_queue.enqueue_video(vf);
             true
@@ -320,6 +322,7 @@ pub fn push_vt_pixel_frame(
     _out_w: u32,
     _out_h: u32,
     _frame_queue: &FrameQueue<MediaVideoFrame>,
+    _seek_generation: u64,
 ) -> bool {
     false
 }
@@ -332,6 +335,7 @@ pub fn push_rgba_frame(
     out_h: u32,
     tb: Rational,
     frame_queue: &FrameQueue<MediaVideoFrame>,
+    seek_generation: u64,
 ) {
     let frame_pts_ms = pts_ms_from_frame(decoded, pts_ms, tb);
     let mut rgba_frame = MediaVideoFrameImpl::empty();
@@ -345,6 +349,7 @@ pub fn push_rgba_frame(
         height: out_h,
         pixels,
         pixel_buffer_ptr: 0,
+        seek_generation,
     };
     let _ = frame_queue.enqueue_video(vf);
 }

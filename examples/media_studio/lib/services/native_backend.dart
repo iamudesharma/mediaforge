@@ -9,7 +9,7 @@ import 'playback_backend.dart';
 ///
 /// This preserves the current behavior exactly — no logic changes.
 class NativeBackend extends PlaybackBackend {
-  NativeBackend({this.loopPlayback = false});
+  NativeBackend({this.loopPlayback = true});
 
   final bool loopPlayback;
 
@@ -67,6 +67,11 @@ class NativeBackend extends PlaybackBackend {
   @override
   Future<void> setEmbeddedAudioMuted(bool muted) async {
     await _controller?.setEmbeddedAudioMuted(muted);
+  }
+
+  @override
+  Future<void> setPlaybackRate(double rate) async {
+    await _controller?.setPlaybackRate(rate);
   }
 
   @override

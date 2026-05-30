@@ -30,13 +30,57 @@ pub const DEFAULT_PREVIEW_MAX_EDGE: u32 = 1080;
 /// When audio clock leads latest decoded video PTS by more than this, enter catch-up.
 pub const AV_LAG_THRESHOLD_MS: u64 = 500;
 /// Cap on decoded RGBA frames waiting for the UI.
+/// Larger previews (4K) need a deeper queue to avoid frame drops during bursts.
 pub const VIDEO_FRAME_QUEUE_CAP: usize = 32;
+pub const VIDEO_FRAME_QUEUE_CAP_LARGE: usize = 64;
+
+fn video_frame_queue_capacity(preview_max_edge: u32) -> usize {
+    if preview_max_edge >= 1080 {
+        VIDEO_FRAME_QUEUE_CAP_LARGE
+    } else {
+        VIDEO_FRAME_QUEUE_CAP
+    }
+}
+/// Timeout for seek recovery to avoid hanging.
+pub const RECOVERY_TIMEOUT_MS: u64 = 2000;
+/// Frame count limit for seek recovery.
+pub const RECOVERY_MAX_FRAMES: u32 = 150;
 
 fn hw_decode_enabled() -> bool {
     !matches!(
         std::env::var("VFP_DISABLE_HW_DECODE").as_deref(),
         Ok("1") | Ok("true") | Ok("yes")
     )
+}
+
+/// Select the best *decodable* audio stream, skipping unknown/spatial codecs.
+/// FFmpeg's `best()` can pick an undecodable stream (e.g. Apple `apac`) because it
+/// has more channels or higher bitrate; this helper prefers known codecs.
+fn find_best_audio_stream(ictx: &ffmpeg_next::format::context::Input) -> Option<ffmpeg_next::format::stream::Stream> {
+    let known_codecs: &[&str] = &["aac", "mp3", "flac", "opus", "vorbis", "pcm_s16le", "pcm_s24le", "pcm_f32le"];
+    let mut fallback = None;
+    for stream in ictx.streams() {
+        if stream.parameters().medium() != ffmpeg_next::media::Type::Audio {
+            continue;
+        }
+        let codec_id = stream.parameters().id();
+        let codec_name = ffmpeg_next::codec::decoder::find(codec_id)
+            .map(|c| c.name().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+        let is_known = known_codecs.iter().any(|&k| codec_name.contains(k));
+        if is_known {
+            runtime_log!("[StreamSelect] Selected audio stream {} codec={} (known)", stream.index(), codec_name);
+            return Some(stream);
+        }
+        if fallback.is_none() && codec_name != "none" && !codec_name.is_empty() {
+            fallback = Some((stream, codec_name));
+        }
+    }
+    if let Some((stream, codec_name)) = fallback {
+        runtime_log!("[StreamSelect] Fallback audio stream {} codec={}", stream.index(), codec_name);
+        return Some(stream);
+    }
+    None
 }
 
 /// Phase 0 diagnostic: which decoders exist in the **linked** FFmpeg build.
@@ -138,6 +182,15 @@ pub enum PlaybackState {
     Ended,
 }
 
+/// State of the decoder recovery process.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecoderRecoveryState {
+    Idle,
+    Seeking,
+    Recovering,
+    Ready,
+}
+
 struct PlaybackClockInner {
     state: PlaybackState,
     media_time_ms: u64,
@@ -204,10 +257,11 @@ impl PlaybackClock {
         inner.last_presented_pts_ms = to_ms;
     }
 
-    /// Called when the seek is complete — resumes the appropriate playback state.
-    pub fn seek_complete(&self, was_playing: bool) {
+    /// Called when the seek is complete — resumes the appropriate playback state and aligns clock to presented frame PTS.
+    pub fn seek_complete(&self, was_playing: bool, presented_pts_ms: u64) {
         let mut inner = self.inner.write();
         if inner.state == PlaybackState::Seeking {
+            inner.media_time_ms = presented_pts_ms;
             if was_playing {
                 inner.state = PlaybackState::Playing;
                 inner.last_updated_instant = Some(Instant::now());
@@ -282,10 +336,10 @@ pub struct MediaPacket {
 
 /// Queue packet item that supports both simulated and real FFmpeg packets.
 pub enum QueuePacket {
-    Real(ffmpeg_next::Packet, u64), // Packet, pts_ms
+    Real(ffmpeg_next::Packet, u64, u64), // Packet, pts_ms, seek_generation
     Simulated(MediaPacket),
     /// Flush sentinel: tells decoder threads to drain and reset their codec context.
-    Flush,
+    Flush(u64, u64), // seek_generation, target_ms
 }
 
 struct PacketQueueInner {
@@ -529,7 +583,7 @@ impl FrameQueue<MediaVideoFrame> {
 ///
 /// **RGBA path:** [pixels] is `width × height × 4`, [pixel_buffer_ptr] is 0.
 /// **Apple HW path:** [pixel_buffer_ptr] is a retained BGRA `CVPixelBuffer*`; [pixels] is empty.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[frb(non_opaque)]
 pub struct MediaVideoFrame {
     pub pts_ms: u64,
@@ -537,6 +591,7 @@ pub struct MediaVideoFrame {
     pub height: u32,
     pub pixels: Vec<u8>,
     pub pixel_buffer_ptr: u64,
+    pub seek_generation: u64,
 }
 
 /// Hand off `CVPixelBuffer` to Flutter without releasing on [MediaVideoFrame] drop.
@@ -546,6 +601,7 @@ pub struct PixelBufferHandoff {
     pub width: u32,
     pub height: u32,
     pub pixel_buffer_ptr: u64,
+    pub seek_generation: u64,
 }
 
 pub fn media_video_frame_into_pixel_buffer_handoff(
@@ -559,6 +615,7 @@ pub fn media_video_frame_into_pixel_buffer_handoff(
         width: frame.width,
         height: frame.height,
         pixel_buffer_ptr: frame.pixel_buffer_ptr,
+        seek_generation: frame.seek_generation,
     };
     frame.pixel_buffer_ptr = 0;
     Some(handoff)
@@ -571,6 +628,402 @@ pub struct AudioFrame {
     pub sample_rate: u32,
     pub channels: u32,
     pub samples: Vec<f32>,
+    pub seek_generation: u64,
+}
+
+// ── Overlay audio tracks ──────────────────────────────────────────────
+
+/// Lightweight shared state for one overlay track inside the cpal callback.
+/// Updated by the overlay's decoder thread; read by the cpal mixer.
+#[frb(ignore)]
+pub struct OverlayAudioState {
+    pub frame_queue: Arc<FrameQueue<AudioFrame>>,
+    pub current_frame: Option<AudioFrame>,
+    pub sample_idx: usize,
+    pub volume: Arc<AtomicU32>,       // stored as (volume * 1000) for atomic u32
+    pub timeline_start_ms: u64,
+    pub duration_ms: u64,
+    pub source_start_ms: u64,
+    pub is_running: Arc<AtomicBool>,
+    pub was_in_bounds: bool,
+}
+
+impl OverlayAudioState {
+    /// Volume as f32 (0.0 .. 1.0).
+    pub fn volume_f32(&self) -> f32 {
+        self.volume.load(Ordering::Relaxed) as f32 / 1000.0
+    }
+}
+
+/// One overlay audio track: owns its demuxer + decoder threads.
+#[frb(ignore)]
+pub(crate) struct OverlayAudioTrack {
+    pub id: u64,
+    pub path: String,
+    pub shared: Arc<Mutex<OverlayAudioState>>,
+    demuxer_handle: Mutex<Option<thread::JoinHandle<()>>>,
+    decoder_handle: Mutex<Option<thread::JoinHandle<()>>>,
+    is_running: Arc<AtomicBool>,
+    pub packet_queue: Arc<PacketQueue>,
+}
+
+impl OverlayAudioTrack {
+    /// Open an overlay audio file, start demuxer + decoder threads.
+    pub fn open(
+        id: u64,
+        path: String,
+        volume: f32,
+        timeline_start_ms: u64,
+        duration_ms: u64,
+        source_start_ms: u64,
+        audio_clock_ms: Arc<AtomicU64>,
+        _clock: Arc<PlaybackClock>,
+        output_sample_rate: u32,
+        output_channels: usize,
+        seek_generation: Arc<AtomicU64>,
+    ) -> anyhow::Result<Self> {
+        let is_running = Arc::new(AtomicBool::new(true));
+
+        let packet_queue = Arc::new(PacketQueue::new(512));
+        let frame_queue = Arc::new(FrameQueue::new(32));
+
+        let shared = Arc::new(Mutex::new(OverlayAudioState {
+            frame_queue: frame_queue.clone(),
+            current_frame: None,
+            sample_idx: 0,
+            volume: Arc::new(AtomicU32::new((volume * 1000.0) as u32)),
+            timeline_start_ms,
+            duration_ms,
+            source_start_ms,
+            is_running: is_running.clone(),
+            was_in_bounds: false,
+        }));
+
+        // ── Demuxer thread ──
+        let pq = packet_queue.clone();
+        let is_running_demux = is_running.clone();
+        let path_clone = path.clone();
+        let seek_gen_demux = seek_generation.clone();
+        let audio_clock_demux = audio_clock_ms.clone();
+        let demuxer_handle = thread::spawn(move || {
+            runtime_log!("[OverlayDemuxer] id={} started path={}", id, path_clone);
+            let mut ictx = match ffmpeg_next::format::input(&path_clone) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    runtime_log!("[OverlayDemuxer] id={} open failed: {}", id, e);
+                    return;
+                }
+            };
+
+            let audio_idx = find_best_audio_stream(&ictx).map(|s| s.index());
+
+            // Initial seek on open to match current playhead
+            let current_clock_ms = audio_clock_demux.load(Ordering::Relaxed);
+            let initial_seek_ms = if current_clock_ms >= timeline_start_ms {
+                let offset = current_clock_ms - timeline_start_ms;
+                if offset < duration_ms {
+                    source_start_ms + offset
+                } else {
+                    source_start_ms + duration_ms
+                }
+            } else {
+                source_start_ms
+            };
+
+            if initial_seek_ms > 0 {
+                let seek_ts = (initial_seek_ms as i64) * 1000;
+                let seek_result = unsafe {
+                    ffmpeg_next::ffi::avformat_seek_file(
+                        ictx.as_mut_ptr(),
+                        -1,
+                        i64::MIN,
+                        seek_ts,
+                        seek_ts,
+                        ffmpeg_next::ffi::AVSEEK_FLAG_BACKWARD as i32,
+                    )
+                };
+                if seek_result < 0 {
+                    runtime_log!("[OverlayDemuxer] id={} initial seek to {}ms failed: {}", id, initial_seek_ms, seek_result);
+                } else {
+                    runtime_log!("[OverlayDemuxer] id={} initial seek to {}ms succeeded (master={}ms)", id, initial_seek_ms, current_clock_ms);
+                }
+            }
+
+            let mut count = 0u64;
+            let mut last_gen = seek_gen_demux.load(Ordering::Relaxed);
+            loop {
+                if !is_running_demux.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                // Check for a pending seek
+                let current_gen = seek_gen_demux.load(Ordering::Relaxed);
+                if current_gen != last_gen {
+                    last_gen = current_gen;
+                    let target_ms = audio_clock_demux.load(Ordering::Relaxed);
+                    let file_seek_ms = if target_ms >= timeline_start_ms {
+                        let offset = target_ms - timeline_start_ms;
+                        if offset < duration_ms {
+                            source_start_ms + offset
+                        } else {
+                            source_start_ms + duration_ms
+                        }
+                    } else {
+                        source_start_ms
+                    };
+
+                    runtime_log!(
+                        "[OverlayDemuxer] id={} seeking to file position {}ms (master={}ms gen={})",
+                        id, file_seek_ms, target_ms, current_gen
+                    );
+
+                    let seek_ts = (file_seek_ms as i64) * 1000;
+                    let seek_result = unsafe {
+                        ffmpeg_next::ffi::avformat_seek_file(
+                            ictx.as_mut_ptr(),
+                            -1,
+                            i64::MIN,
+                            seek_ts,
+                            seek_ts,
+                            ffmpeg_next::ffi::AVSEEK_FLAG_BACKWARD as i32,
+                        )
+                    };
+                    if seek_result < 0 {
+                        runtime_log!("[OverlayDemuxer] id={} seek failed: {}", id, seek_result);
+                    } else {
+                        pq.flush();
+                        let _ = pq.push(QueuePacket::Flush(current_gen, file_seek_ms));
+                    }
+                }
+
+                // Sleep backpressure to avoid filling the queue
+                while pq.len() >= 512 && is_running_demux.load(Ordering::SeqCst) {
+                    let current_gen = seek_gen_demux.load(Ordering::Relaxed);
+                    if current_gen != last_gen {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+
+                let mut packet = ffmpeg_next::Packet::empty();
+                match packet.read(&mut ictx) {
+                    Ok(()) => {
+                        if Some(packet.stream()) == audio_idx {
+                            let pts_ms = packet.pts().map(|pts| {
+                                let tb = ictx
+                                    .stream(packet.stream())
+                                    .map(|s| s.time_base())
+                                    .unwrap_or(Rational(1, 1000));
+                                (pts as f64 * tb.0 as f64 / tb.1 as f64 * 1000.0) as u64
+                            }).unwrap_or(0);
+                            let gen = seek_gen_demux.load(Ordering::Relaxed);
+                            let _ = pq.push(QueuePacket::Real(packet, pts_ms, gen));
+                            count += 1;
+                        }
+                    }
+                    Err(ffmpeg_next::Error::Eof) => {
+                        while is_running_demux.load(Ordering::SeqCst) {
+                            let current_gen = seek_gen_demux.load(Ordering::Relaxed);
+                            if current_gen != last_gen {
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(20));
+                        }
+                    }
+                    Err(e) => {
+                        runtime_log!("[OverlayDemuxer] id={} read error: {}", id, e);
+                        break;
+                    }
+                }
+            }
+            runtime_log!("[OverlayDemuxer] id={} finished", id);
+        });
+
+        // ── Decoder thread ──
+        let fq = frame_queue.clone();
+        let is_running_dec = is_running.clone();
+        let path_clone2 = path.clone();
+        let pq_dec = packet_queue.clone();
+        let decoder_handle = thread::spawn(move || {
+            runtime_log!("[OverlayDecoder] id={} started", id);
+            let mut ictx = match ffmpeg_next::format::input(&path_clone2) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    runtime_log!("[OverlayDecoder] id={} open failed: {}", id, e);
+                    return;
+                }
+            };
+
+            let audio_stream = match find_best_audio_stream(&ictx) {
+                Some(s) => s,
+                None => {
+                    runtime_log!("[OverlayDecoder] id={} no audio stream", id);
+                    return;
+                }
+            };
+
+            let params = audio_stream.parameters();
+            let tb = audio_stream.time_base();
+            let dec_ctx = match CodecContext::from_parameters(params) {
+                Ok(ctx) => ctx,
+                Err(e) => {
+                    runtime_log!("[OverlayDecoder] id={} codec context failed: {}", id, e);
+                    return;
+                }
+            };
+            let mut decoder = match dec_ctx.decoder().audio() {
+                Ok(d) => d,
+                Err(e) => {
+                    runtime_log!("[OverlayDecoder] id={} decoder init failed: {}", id, e);
+                    return;
+                }
+            };
+
+            let in_format = decoder.format();
+            let in_layout = decoder.channel_layout();
+            let in_rate = decoder.rate();
+            let out_layout = if output_channels == 1 {
+                ffmpeg_next::ChannelLayout::MONO
+            } else {
+                ffmpeg_next::ChannelLayout::STEREO
+            };
+
+            let mut resampler = match ffmpeg_next::software::resampling::Context::get(
+                in_format,
+                in_layout,
+                in_rate,
+                ffmpeg_next::util::format::sample::Sample::F32(
+                    ffmpeg_next::format::sample::Type::Packed,
+                ),
+                out_layout,
+                output_sample_rate,
+            ) {
+                Ok(r) => r,
+                Err(e) => {
+                    runtime_log!("[OverlayDecoder] id={} resampler failed: {}", id, e);
+                    return;
+                }
+            };
+
+            let mut frame_count = 0u64;
+            let mut current_seek_generation = 0u64;
+            loop {
+                if !is_running_dec.load(Ordering::SeqCst) {
+                    break;
+                }
+                if fq.len() >= fq.max_size() {
+                    thread::sleep(Duration::from_millis(10));
+                    continue;
+                }
+                match pq_dec.pop() {
+                    Some(QueuePacket::Real(pkt, pts_ms, gen)) => {
+                        if gen < current_seek_generation {
+                            continue;
+                        }
+                        if decoder.send_packet(&pkt).is_ok() {
+                            let mut decoded =
+                                ffmpeg_next::util::frame::audio::Audio::empty();
+                            while decoder.receive_frame(&mut decoded).is_ok() {
+                                frame_count += 1;
+                                let frame_pts_ms = decoded.pts().map(|pts| {
+                                    (pts as f64 * tb.0 as f64 / tb.1 as f64 * 1000.0)
+                                        as u64
+                                }).unwrap_or(pts_ms);
+
+                                let mut resampled =
+                                    ffmpeg_next::util::frame::audio::Audio::empty();
+                                if resampler.run(&decoded, &mut resampled).is_ok() {
+                                    let nb = resampled.samples();
+                                    let data = resampled.data(0);
+                                    let need =
+                                        nb * output_channels * std::mem::size_of::<f32>();
+                                    if data.len() >= need {
+                                        let slice = unsafe {
+                                            std::slice::from_raw_parts(
+                                                data.as_ptr() as *const f32,
+                                                nb * output_channels,
+                                            )
+                                        };
+                                        let audio_frame = AudioFrame {
+                                            pts_ms: frame_pts_ms,
+                                            sample_rate: output_sample_rate,
+                                            channels: output_channels as u32,
+                                            samples: slice.to_vec(),
+                                            seek_generation: gen,
+                                        };
+                                        fq.enqueue(audio_frame);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Some(QueuePacket::Flush(gen, _target)) => {
+                        current_seek_generation = gen;
+                        fq.flush();
+                        unsafe {
+                            ffmpeg_next::ffi::avcodec_flush_buffers(
+                                decoder.as_mut_ptr(),
+                            );
+                        }
+                        // Recreate resampler context to clear internal buffers
+                        match ffmpeg_next::software::resampling::Context::get(
+                            in_format,
+                            in_layout,
+                            in_rate,
+                            ffmpeg_next::util::format::sample::Sample::F32(
+                                ffmpeg_next::format::sample::Type::Packed,
+                            ),
+                            out_layout,
+                            output_sample_rate,
+                        ) {
+                            Ok(r) => {
+                                resampler = r;
+                            }
+                            Err(e) => {
+                                runtime_log!("[OverlayDecoder] id={} resampler recreation failed on flush: {}", id, e);
+                            }
+                        }
+                    }
+                    Some(_) => {}
+                    None => {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                }
+            }
+            runtime_log!(
+                "[OverlayDecoder] id={} finished frames={}",
+                id,
+                frame_count
+            );
+        });
+
+        Ok(Self {
+            id,
+            path,
+            shared,
+            demuxer_handle: Mutex::new(Some(demuxer_handle)),
+            decoder_handle: Mutex::new(Some(decoder_handle)),
+            is_running,
+            packet_queue,
+        })
+    }
+
+    pub fn stop(&self) {
+        self.is_running.store(false, Ordering::SeqCst);
+        self.packet_queue.close();
+        if let Some(h) = self.demuxer_handle.lock().take() {
+            let _ = h.join();
+        }
+        if let Some(h) = self.decoder_handle.lock().take() {
+            let _ = h.join();
+        }
+    }
+
+    pub fn set_volume(&self, volume: f32) {
+        let s = self.shared.lock();
+        s.volume
+            .store((volume.clamp(0.0, 1.0) * 1000.0) as u32, Ordering::Relaxed);
+    }
 }
 
 #[allow(dead_code)]
@@ -588,6 +1041,15 @@ struct AudioPlayerState {
     waveform: Arc<Mutex<Vec<f32>>>,
     /// Sample-accurate audio master clock (ms). Updated once per cpal buffer callback.
     audio_clock_ms: Arc<AtomicU64>,
+    /// When true, the cpal callback writes silence instead of decoded samples.
+    is_muted: Arc<AtomicBool>,
+    /// Trim end in ms — when audio clock reaches this, playback ends.
+    trim_end_ms: Arc<AtomicU64>,
+    /// Set by the cpal callback when audio clock >= trim_end_ms.
+    trim_end_reached: Arc<AtomicBool>,
+    /// Shared overlay audio states — **shared** with AudioRuntime via Arc<Mutex<>>
+    /// so overlays added after start() are visible to the cpal callback.
+    overlay_states: Arc<Mutex<Vec<Arc<Mutex<OverlayAudioState>>>>>,
     /// Local copies for clock math (avoid locking each callback)
     sr: u64,
     ch: u64,
@@ -606,15 +1068,42 @@ pub struct AudioRuntime {
     waveform: Arc<Mutex<Vec<f32>>>,
     /// Sample-accurate audio playback position in ms — preferred as the master clock.
     /// Updated by the cpal callback; zero until audio starts playing.
+    audio_clock_ms: Arc<AtomicU64>,
+    has_video: Arc<AtomicBool>,
+    seek_was_playing: Arc<AtomicBool>,
+    seek_generation: Arc<AtomicU64>,
+    /// Mute flag — when true, cpal writes silence while keeping the clock running.
+    is_muted: Arc<AtomicBool>,
+    /// Trim end in ms — set by MediaPlaybackEngine, read by cpal callback.
+    trim_end_ms: Arc<AtomicU64>,
+    /// Set by cpal callback when audio clock >= trim_end_ms.
+    trim_end_reached: Arc<AtomicBool>,
+    /// Overlay audio tracks mixed into the output in real-time.
     #[frb(ignore)]
-    pub audio_clock_ms: Arc<AtomicU64>,
+    overlay_tracks: Mutex<Vec<Arc<OverlayAudioTrack>>>,
+    /// Shared overlay state handles — **same Arc** passed to cpal callback
+    /// so overlays added after start() are immediately visible.
+    #[frb(ignore)]
+    overlay_states: Arc<Mutex<Vec<Arc<Mutex<OverlayAudioState>>>>>,
+    /// Next overlay ID.
+    #[frb(ignore)]
+    next_overlay_id: AtomicU64,
+    /// Output sample rate discovered at start() time; used by add_overlay() to resample to device format.
+    #[frb(ignore)]
+    output_sample_rate: AtomicU32,
+    /// Output channel count discovered at start() time; used by add_overlay() to match device format.
+    #[frb(ignore)]
+    output_channels: AtomicU32,
 }
 
 impl AudioRuntime {
+    #[frb(ignore)]
     pub fn new(
         packet_queue: Arc<PacketQueue>,
         frame_queue: Arc<FrameQueue<AudioFrame>>,
         clock: Arc<PlaybackClock>,
+        seek_was_playing: Arc<AtomicBool>,
+        seek_generation: Arc<AtomicU64>,
     ) -> Self {
         Self {
             packet_queue,
@@ -626,6 +1115,17 @@ impl AudioRuntime {
             cpal_stream: Mutex::new(None),
             waveform: Arc::new(Mutex::new(vec![0.0; 20])),
             audio_clock_ms: Arc::new(AtomicU64::new(0)),
+            has_video: Arc::new(AtomicBool::new(true)),
+            seek_was_playing,
+            seek_generation,
+            is_muted: Arc::new(AtomicBool::new(false)),
+            trim_end_ms: Arc::new(AtomicU64::new(u64::MAX)),
+            trim_end_reached: Arc::new(AtomicBool::new(false)),
+            overlay_tracks: Mutex::new(Vec::new()),
+            overlay_states: Arc::new(Mutex::new(Vec::new())),
+            next_overlay_id: AtomicU64::new(1),
+            output_sample_rate: AtomicU32::new(48000),
+            output_channels: AtomicU32::new(2),
         }
     }
 
@@ -649,7 +1149,18 @@ impl AudioRuntime {
                 sample_rate = config.sample_rate().0;
                 channels = config.channels() as usize;
 
+                // Store output format so add_overlay() can resample to device format.
+                self.output_sample_rate.store(sample_rate as u32, Ordering::Relaxed);
+                self.output_channels.store(channels as u32, Ordering::Relaxed);
+                runtime_log!("[AudioRuntime] Output format: {}Hz {}ch", sample_rate, channels);
+
                 let audio_clock_ms_arc = self.audio_clock_ms.clone();
+                let is_muted_arc = self.is_muted.clone();
+                let trim_end_ms_arc = self.trim_end_ms.clone();
+                let trim_end_reached_arc = self.trim_end_reached.clone();
+                // Pass the shared Arc — cpal callback will lock it each buffer,
+                // so overlays added after start() are visible.
+                let overlay_states_shared = self.overlay_states.clone();
                 let player_state = Arc::new(Mutex::new(AudioPlayerState {
                     frame_queue: self.frame_queue.clone(),
                     clock: self._clock.clone(),
@@ -657,6 +1168,10 @@ impl AudioRuntime {
                     current_sample_idx: 0,
                     waveform: self.waveform.clone(),
                     audio_clock_ms: audio_clock_ms_arc,
+                    is_muted: is_muted_arc,
+                    trim_end_ms: trim_end_ms_arc,
+                    trim_end_reached: trim_end_reached_arc,
+                    overlay_states: overlay_states_shared,
                     sr: sample_rate as u64,
                     ch: channels as u64,
                 }));
@@ -668,9 +1183,11 @@ impl AudioRuntime {
                         let mut state = player_state_cb.lock();
                         let is_playing = state.clock.get_state() == PlaybackState::Playing;
                         let is_seeking = state.clock.get_state() == PlaybackState::Seeking;
+                        let muted = state.is_muted.load(Ordering::Relaxed);
 
                         // Update sample-accurate audio master clock once per buffer.
                         // Formula: frame_pts + samples_consumed_in_frame / (sample_rate * channels)
+                        // Clock must keep ticking even when muted so position stays accurate.
                         if is_playing {
                             if let Some(ref frame) = state.current_frame {
                                 let sr = state.sr.max(1);
@@ -680,7 +1197,23 @@ impl AudioRuntime {
                                     frame.pts_ms.saturating_add(offset_ms);
                                 state.audio_clock_ms.store(audio_ms, Ordering::Relaxed);
                                 state.clock.sync_from_audio_ms(audio_ms);
+
+                                // Trim-end detection: when audio clock reaches trim_end_ms,
+                                // signal the engine to transition to Ended state.
+                                let te = state.trim_end_ms.load(Ordering::Relaxed);
+                                if te < u64::MAX && audio_ms >= te {
+                                    state.trim_end_reached.store(true, Ordering::Relaxed);
+                                }
                             }
+                        }
+
+                        // If trim end was reached, output silence and let the
+                        // engine handle the state transition.
+                        if state.trim_end_reached.load(Ordering::Relaxed) {
+                            for sample in data.iter_mut() {
+                                *sample = 0.0;
+                            }
+                            return;
                         }
 
                         if is_seeking {
@@ -699,43 +1232,162 @@ impl AudioRuntime {
                             return;
                         }
 
-                        let mut max_amplitude = 0.0f32;
+                        // When muted: still consume samples to keep the decoder
+                        // advancing and the clock ticking, but output silence.
+                        if muted {
+                            let mut sample_count = 0usize;
+                            for sample in data.iter_mut() {
+                                if let Some(frame) = &state.current_frame {
+                                    if state.current_sample_idx < frame.samples.len() {
+                                        state.current_sample_idx += 1;
+                                        sample_count += 1;
+                                        *sample = 0.0;
+                                        continue;
+                                    }
+                                }
+                                // Try to dequeue next frame to keep pipeline moving
+                                state.current_frame = state.frame_queue.dequeue();
+                                state.current_sample_idx = 0;
+                                if let Some(frame) = &state.current_frame {
+                                    if state.current_sample_idx < frame.samples.len() {
+                                        state.current_sample_idx += 1;
+                                        sample_count += 1;
+                                    }
+                                }
+                                *sample = 0.0;
+                            }
+                            // Still update waveform with zeros so UI shows muted state
+                            if sample_count > 0 {
+                                let mut wf = state.waveform.lock();
+                                wf.remove(0);
+                                wf.push(0.0);
+                            }
+                            return;
+                        }
+
+let mut max_amplitude = 0.0f32;
                         let mut sample_count = 0;
+                        let buffer_len = data.len();
+
+                        // ── Pre-fetch overlay samples for the entire buffer ──
+                        // Lock each overlay once, pull enough samples for the whole buffer
+                        // into a local Vec, then release all locks. The per-sample inner loop
+                        // below reads from these local Vecs with zero locking overhead.
+                        // This eliminates per-sample, per-overlay mutex contention that was
+                        // causing priority inversion in the real-time audio callback when
+                        // 8+ overlay tracks were active (each requiring a Mutex lock per sample).
+                        let overlay_states_ref = state.overlay_states.clone();
+                        struct OverlayMix {
+                            samples: Vec<f32>,
+                            idx: usize,
+                        }
+                        let mut overlay_mixes: Vec<OverlayMix> = {
+                            let overlays = overlay_states_ref.lock();
+                            overlays.iter().map(|ov| {
+                                let mut ov_guard = ov.lock();
+                                let vol = ov_guard.volume_f32();
+                                let master_ms = state.audio_clock_ms.load(Ordering::Relaxed);
+                                let in_bounds = master_ms >= ov_guard.timeline_start_ms
+                                    && master_ms < ov_guard.timeline_start_ms + ov_guard.duration_ms;
+                                if !in_bounds && ov_guard.was_in_bounds {
+                                    ov_guard.frame_queue.flush();
+                                    ov_guard.current_frame = None;
+                                    ov_guard.sample_idx = 0;
+                                    ov_guard.was_in_bounds = false;
+                                }
+                                if in_bounds {
+                                    ov_guard.was_in_bounds = true;
+                                }
+                                if !in_bounds || vol <= 0.0 {
+                                    return OverlayMix { samples: Vec::new(), idx: 0 };
+                                }
+                                let mut buf = Vec::with_capacity(buffer_len);
+                                while buf.len() < buffer_len {
+                                    // Extract what we need from the current frame, then
+                                    // advance index / dequeue without borrow conflict.
+                                    let consumed = match ov_guard.current_frame {
+                                        Some(ref frame) if ov_guard.sample_idx < frame.samples.len() => {
+                                            let start = ov_guard.sample_idx;
+                                            let remaining = frame.samples.len() - start;
+                                            let take = remaining.min(buffer_len - buf.len());
+                                            for i in start..start + take {
+                                                buf.push(frame.samples[i] * vol);
+                                            }
+                                            ov_guard.sample_idx = start + take;
+                                            take
+                                        }
+                                        _ => 0,
+                                    };
+                                    if consumed == 0 {
+                                        // Current frame exhausted or absent — dequeue next
+                                        ov_guard.current_frame = ov_guard.frame_queue.dequeue();
+                                        ov_guard.sample_idx = 0;
+                                        if ov_guard.current_frame.is_none() {
+                                            break;
+                                        }
+                                    }
+                                }
+                                OverlayMix { samples: buf, idx: 0 }
+                            }).collect()
+                        };
 
                         for sample in data.iter_mut() {
+                            // ── Source audio ──
+                            let mut mixed = 0.0f32;
                             if let Some(frame) = &state.current_frame {
                                 if state.current_sample_idx < frame.samples.len() {
-                                    let val = frame.samples[state.current_sample_idx];
-                                    *sample = val;
-                                    let abs_val = val.abs();
-                                    if abs_val > max_amplitude {
-                                        max_amplitude = abs_val;
-                                    }
-                                    state.current_sample_idx += 1;
-                                    sample_count += 1;
-                                    continue;
-                                }
-                            }
-
-                            // Try to dequeue next frame
-                            state.current_frame = state.frame_queue.dequeue();
-                            state.current_sample_idx = 0;
-
-                            if let Some(frame) = &state.current_frame {
-                                if state.current_sample_idx < frame.samples.len() {
-                                    let val = frame.samples[state.current_sample_idx];
-                                    *sample = val;
-                                    let abs_val = val.abs();
-                                    if abs_val > max_amplitude {
-                                        max_amplitude = abs_val;
-                                    }
+                                    mixed += frame.samples[state.current_sample_idx];
                                     state.current_sample_idx += 1;
                                     sample_count += 1;
                                 } else {
-                                    *sample = 0.0;
+                                    // Frame exhausted — dequeue next, skipping 0-sample frames
+                                    loop {
+                                        state.current_frame = state.frame_queue.dequeue();
+                                        state.current_sample_idx = 0;
+                                        if let Some(ref f) = state.current_frame {
+                                            if f.samples.len() > 0 && state.current_sample_idx < f.samples.len() {
+                                                mixed += f.samples[state.current_sample_idx];
+                                                state.current_sample_idx += 1;
+                                                sample_count += 1;
+                                                break;
+                                            }
+                                            // Skip 0-sample frames to avoid getting stuck
+                                        } else {
+                                            break;
+                                        }
+                                    }
                                 }
                             } else {
-                                *sample = 0.0;
+                                // No current frame — dequeue, skipping 0-sample frames
+                                loop {
+                                    state.current_frame = state.frame_queue.dequeue();
+                                    state.current_sample_idx = 0;
+                                    if let Some(ref f) = state.current_frame {
+                                        if f.samples.len() > 0 && state.current_sample_idx < f.samples.len() {
+                                            mixed += f.samples[state.current_sample_idx];
+                                            state.current_sample_idx += 1;
+                                            sample_count += 1;
+                                            break;
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // ── Overlay audio mixing (lock-free, reads from pre-fetched Vec) ──
+                            for omix in overlay_mixes.iter_mut() {
+                                if omix.idx < omix.samples.len() {
+                                    mixed += omix.samples[omix.idx];
+                                    omix.idx += 1;
+                                }
+                            }
+
+                            // Clamp to prevent clipping
+                            *sample = mixed.clamp(-1.0, 1.0);
+                            let abs_val = mixed.abs();
+                            if abs_val > max_amplitude {
+                                max_amplitude = abs_val;
                             }
                         }
 
@@ -772,6 +1424,11 @@ impl AudioRuntime {
         let frame_queue = self.frame_queue.clone();
         let is_running = self.is_running.clone();
         let audio_params = self.audio_params.clone();
+        let clock = self._clock.clone();
+        let seek_was_playing = self.seek_was_playing.clone();
+        let has_video = self.has_video.clone();
+        let seek_generation = self.seek_generation.clone();
+        let audio_clock_ms = self.audio_clock_ms.clone();
 
         let handle = thread::spawn(move || {
             runtime_log!("[AudioDecoder] Started audio decoder thread");
@@ -821,7 +1478,32 @@ impl AudioRuntime {
             }
 
             let mut last_queue_full_log = Instant::now() - Duration::from_secs(5);
+            let mut current_seek_generation = 0u64;
+            let mut recovery_state = DecoderRecoveryState::Ready;
+            let mut recovering_target_ms = None;
+            let mut recovery_started_at = Instant::now();
+            let mut recovery_frame_count = 0u32;
+            let mut stale_frames_dropped = 0u32;
+
             while is_running.load(Ordering::SeqCst) {
+                if let Some(target) = recovering_target_ms {
+                    let elapsed_ms = recovery_started_at.elapsed().as_millis() as u64;
+                    if !has_video.load(Ordering::Relaxed) && (elapsed_ms >= RECOVERY_TIMEOUT_MS || recovery_frame_count >= RECOVERY_MAX_FRAMES) {
+                        runtime_log!(
+                            "[AudioDecoder] Seek recovery watchdog triggered (audio-only): gen={} target={}ms decoded={} stale_dropped={} recovery_ms={}ms",
+                            current_seek_generation,
+                            target,
+                            recovery_frame_count,
+                            stale_frames_dropped,
+                            elapsed_ms
+                        );
+                        recovering_target_ms = None;
+                        recovery_state = DecoderRecoveryState::Ready;
+                        let was_playing = seek_was_playing.load(Ordering::Relaxed);
+                        clock.seek_complete(was_playing, target);
+                    }
+                }
+
                 if frame_queue.len() >= frame_queue.max_size {
                     if last_queue_full_log.elapsed() >= Duration::from_secs(5) {
                         runtime_log!("[AudioDecoder] Frame queue is full ({}/{}), throttling decoder...", frame_queue.len(), frame_queue.max_size);
@@ -832,7 +1514,15 @@ impl AudioRuntime {
                 }
                 if let Some(queue_packet) = packet_queue.pop() {
                     match queue_packet {
-                        QueuePacket::Real(pkt, pts_ms) => {
+                        QueuePacket::Real(pkt, pts_ms, gen) => {
+                            if gen < current_seek_generation {
+                                stale_frames_dropped += 1;
+                                // Discard stale pre-seek packet
+                                continue;
+                            }
+                            if recovery_state == DecoderRecoveryState::Seeking {
+                                recovery_state = DecoderRecoveryState::Recovering;
+                            }
                             if let Some((ref mut decoder, tb)) = decoder_state {
                                 match decoder.send_packet(&pkt) {
                                     Ok(_) => {
@@ -843,6 +1533,30 @@ impl AudioRuntime {
                                             let frame_pts_ms = decoded.pts().map(|pts| {
                                                 (pts as f64 * tb.0 as f64 / tb.1 as f64 * 1000.0) as u64
                                             }).unwrap_or(pts_ms);
+
+                                            if let Some(target) = recovering_target_ms {
+                                                recovery_frame_count += 1;
+                                                if frame_pts_ms < target {
+                                                    // Discard frame before seek target
+                                                    continue;
+                                                } else {
+                                                    let elapsed_ms = recovery_started_at.elapsed().as_millis() as u64;
+                                                    runtime_log!(
+                                                        "[AudioDecoder] Seek recovery complete (metrics) -> gen: {}, recovery_ms: {}ms, recovery_frames_decoded: {}, stale_frames_dropped: {}",
+                                                        current_seek_generation,
+                                                        elapsed_ms,
+                                                        recovery_frame_count,
+                                                        stale_frames_dropped
+                                                    );
+                                                    recovering_target_ms = None;
+                                                    recovery_state = DecoderRecoveryState::Ready;
+                                                    audio_clock_ms.store(frame_pts_ms, Ordering::Relaxed);
+                                                    if !has_video.load(Ordering::Relaxed) {
+                                                        let was_playing = seek_was_playing.load(Ordering::Relaxed);
+                                                        clock.seek_complete(was_playing, frame_pts_ms);
+                                                    }
+                                                }
+                                            }
 
                                             if frame_count % 500 == 0 {
                                                 runtime_log!("[AudioDecoder] Decoded {} audio frames, current PTS: {}ms", frame_count, frame_pts_ms);
@@ -870,6 +1584,7 @@ impl AudioRuntime {
                                                 sample_rate: sample_rate as u32,
                                                 channels: channels as u32,
                                                 samples,
+                                                seek_generation: gen,
                                             };
                                             if let Some(dropped) = frame_queue.enqueue(audio_frame) {
                                                 if frame_count % 100 == 0 {
@@ -894,11 +1609,31 @@ impl AudioRuntime {
                                 sample_rate: sample_rate as u32,
                                 channels: channels as u32,
                                 samples: vec![0.0; 1024],
+                                seek_generation: 0,
                             };
                             let _ = frame_queue.enqueue(audio_frame);
                         }
-                        QueuePacket::Flush => {
-                            runtime_log!("[AudioDecoder] Received Flush sentinel — flushing audio decoder state");
+                        QueuePacket::Flush(gen, target_ms) => {
+                            let latest_gen = seek_generation.load(Ordering::Relaxed);
+                            if gen < latest_gen {
+                                runtime_log!(
+                                    "[AudioDecoder] Latest seek wins: skipping intermediate recovery for gen={} (latest_gen={})",
+                                    gen,
+                                    latest_gen
+                                );
+                                current_seek_generation = gen;
+                                continue;
+                            }
+
+                            runtime_log!("[AudioDecoder] Received Flush sentinel — flushing audio decoder state gen={} target_ms={}", gen, target_ms);
+                            current_seek_generation = gen;
+                            recovering_target_ms = Some(target_ms);
+                            recovery_state = DecoderRecoveryState::Seeking;
+                            recovery_started_at = Instant::now();
+                            recovery_frame_count = 0;
+                            stale_frames_dropped = 0;
+                            // Clear resampler context to clear internal sample buffer
+                            resampler = None;
                             if let Some((ref mut decoder, _)) = decoder_state {
                                 // Drain remaining frames
                                 let _ = decoder.send_eof();
@@ -907,6 +1642,32 @@ impl AudioRuntime {
                                 // Flush internal codec buffers (resets AAC/opus state)
                                 unsafe {
                                     ffmpeg_next::ffi::avcodec_flush_buffers(decoder.as_mut_ptr());
+                                }
+                                
+                                // Re-initialize resampler context
+                                if let Some((ref params, _)) = &*audio_params.lock() {
+                                    if let Ok(dec_ctx) = CodecContext::from_parameters(params.clone()) {
+                                        if let Ok(dec) = dec_ctx.decoder().audio() {
+                                            let in_format = dec.format();
+                                            let in_layout = dec.channel_layout();
+                                            let in_rate = dec.rate();
+                                            let out_layout = if channels == 1 {
+                                                ffmpeg_next::ChannelLayout::MONO
+                                            } else {
+                                                ffmpeg_next::ChannelLayout::STEREO
+                                            };
+                                            if let Ok(r) = ffmpeg_next::software::resampling::Context::get(
+                                                in_format,
+                                                in_layout,
+                                                in_rate,
+                                                ffmpeg_next::util::format::sample::Sample::F32(ffmpeg_next::format::sample::Type::Packed),
+                                                out_layout,
+                                                sample_rate as u32,
+                                            ) {
+                                                resampler = Some(r);
+                                            }
+                                        }
+                                    }
                                 }
                                 runtime_log!("[AudioDecoder] Codec flush complete — ready for post-seek audio");
                             }
@@ -921,6 +1682,146 @@ impl AudioRuntime {
         });
 
         *self.thread_handle.lock() = Some(handle);
+    }
+
+    /// Enable or disable audio muting. When muted, the cpal callback writes
+    /// silence while continuing to consume decoded frames so the clock and
+    /// decoder pipeline stay in sync.
+    pub fn set_muted(&self, muted: bool) {
+        self.is_muted.store(muted, Ordering::Relaxed);
+        runtime_log!("[AudioRuntime] Muted={}", muted);
+    }
+
+    /// Set the trim end point in ms. The cpal callback monitors the audio
+    /// clock and sets `trim_end_reached` when it reaches this value.
+    pub fn set_trim_end_ms(&self, end_ms: u64) {
+        self.trim_end_ms.store(end_ms, Ordering::Relaxed);
+        self.trim_end_reached.store(false, Ordering::Relaxed);
+        runtime_log!("[AudioRuntime] trim_end_ms={}", end_ms);
+    }
+
+    /// Returns true when the audio clock has reached the trim end point.
+    pub fn is_trim_end_reached(&self) -> bool {
+        self.trim_end_reached.load(Ordering::Relaxed)
+    }
+
+    /// Clear the trim-end flag (e.g. after a seek backward past trim end).
+    pub fn clear_trim_end_reached(&self) {
+        self.trim_end_reached.store(false, Ordering::Relaxed);
+    }
+
+    // ── Overlay audio track management ──
+
+    /// Add an overlay audio track. Returns the overlay ID.
+    /// The track is demuxed and decoded in background threads, and its PCM
+    /// output is mixed into the cpal callback alongside the source audio.
+    pub fn add_overlay(
+        &self,
+        path: String,
+        volume: f32,
+        timeline_start_ms: u64,
+        duration_ms: u64,
+        source_start_ms: u64,
+    ) -> u64 {
+        let id = self.next_overlay_id.fetch_add(1, Ordering::SeqCst);
+
+        // Use the output format discovered when the cpal stream was started.
+        // Falls back to 48000/2 if start() hasn't run yet (unlikely in practice).
+        let sr = self.output_sample_rate.load(Ordering::Relaxed) as u32;
+        let ch = self.output_channels.load(Ordering::Relaxed) as usize;
+
+        match OverlayAudioTrack::open(
+            id,
+            path.clone(),
+            volume,
+            timeline_start_ms,
+            duration_ms,
+            source_start_ms,
+            self.audio_clock_ms.clone(),
+            self._clock.clone(),
+            sr,
+            ch,
+            self.seek_generation.clone(),
+        ) {
+            Ok(track) => {
+                let shared = track.shared.clone();
+                // Add to both the track list (for lifecycle) and the shared states
+                // (for cpal callback access). The cpal callback locks overlay_states
+                // each buffer, so overlays added here are visible immediately.
+                self.overlay_tracks.lock().push(Arc::new(track));
+                self.overlay_states.lock().push(shared);
+                runtime_log!(
+                    "[AudioRuntime] Added overlay id={} path={} vol={:.2} start={}ms dur={}ms source_start={}ms",
+                    id,
+                    path,
+                    volume,
+                    timeline_start_ms,
+                    duration_ms,
+                    source_start_ms
+                );
+                id
+            }
+            Err(e) => {
+                runtime_log!("[AudioRuntime] Failed to add overlay: {}", e);
+                u64::MAX // error sentinel
+            }
+        }
+    }
+
+    /// Remove an overlay audio track by ID.
+    pub fn remove_overlay(&self, id: u64) {
+        let track_to_stop = {
+            let mut tracks = self.overlay_tracks.lock();
+            let track = if let Some(pos) = tracks.iter().position(|t| t.id == id) {
+                Some(tracks.remove(pos))
+            } else {
+                None
+            };
+            // Rebuild shared overlay_states from remaining tracks
+            let mut states = self.overlay_states.lock();
+            states.clear();
+            for t in tracks.iter() {
+                states.push(t.shared.clone());
+            }
+            track
+        }; // locks dropped here
+
+        if let Some(track) = track_to_stop {
+            track.stop();
+            runtime_log!("[AudioRuntime] Removed overlay id={}", id);
+        }
+    }
+
+    /// Set volume for an overlay track (0.0 .. 1.0).
+    pub fn set_overlay_volume(&self, id: u64, volume: f32) {
+        let tracks = self.overlay_tracks.lock();
+        if let Some(track) = tracks.iter().find(|t| t.id == id) {
+            track.set_volume(volume);
+        }
+    }
+
+    /// Flush all overlay frame queues (called on seek).
+    pub fn flush_overlay_queues(&self) {
+        let states = self.overlay_states.lock();
+        for s in states.iter() {
+            let mut state = s.lock();
+            state.frame_queue.flush();
+            state.current_frame = None;
+            state.sample_idx = 0;
+            state.was_in_bounds = false;
+        }
+    }
+
+    /// Stop and remove all overlay tracks.
+    pub fn stop_all_overlays(&self) {
+        let tracks_to_stop = {
+            let mut tracks = self.overlay_tracks.lock();
+            tracks.drain(..).collect::<Vec<_>>()
+        };
+        self.overlay_states.lock().clear();
+        for track in tracks_to_stop {
+            track.stop();
+        }
     }
 
     pub fn stop(&self) {
@@ -949,14 +1850,19 @@ pub struct VideoRuntime {
     is_running: Arc<AtomicBool>,
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
     video_params: Arc<Mutex<Option<(ffmpeg_next::codec::Parameters, Rational)>>>,
+    seek_was_playing: Arc<AtomicBool>,
+    seek_generation: Arc<AtomicU64>,
 }
 
 impl VideoRuntime {
+    #[frb(ignore)]
     pub fn new(
         packet_queue: Arc<PacketQueue>,
         frame_queue: Arc<FrameQueue<MediaVideoFrame>>,
         clock: Arc<PlaybackClock>,
         preview_max_edge: u32,
+        seek_was_playing: Arc<AtomicBool>,
+        seek_generation: Arc<AtomicU64>,
     ) -> Self {
         Self {
             packet_queue,
@@ -967,6 +1873,8 @@ impl VideoRuntime {
             is_running: Arc::new(AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
             video_params: Arc::new(Mutex::new(None)),
+            seek_was_playing,
+            seek_generation,
         }
     }
 
@@ -992,6 +1900,9 @@ impl VideoRuntime {
             .clone()
             .unwrap_or_else(|| Arc::new(AtomicU64::new(0)));
         let preview_max_edge = self.preview_max_edge.clone();
+        let clock = self._clock.clone();
+        let seek_was_playing = self.seek_was_playing.clone();
+        let seek_generation = self.seek_generation.clone();
 
         let handle = thread::spawn(move || {
             runtime_log!("[VideoDecoder] Started video decoder thread");
@@ -1032,29 +1943,82 @@ impl VideoRuntime {
                 packet_queue: &PacketQueue,
                 lag_ms: u64,
                 require_keyframe: &mut bool,
+                recovering: bool,
+                current_gen: u64,
+                stale_dropped: &mut u32,
             ) -> Option<QueuePacket> {
                 loop {
                     let pkt = packet_queue.pop()?;
                     match pkt {
-                        QueuePacket::Flush | QueuePacket::Simulated(_) => return Some(pkt),
-                        QueuePacket::Real(p, pts_ms) => {
-                            if crate::video_decode::packet_dropped_in_catchup(
-                                p.is_key(),
-                                lag_ms,
-                                *require_keyframe,
-                            ) {
+                        QueuePacket::Flush(gen, target_ms) => {
+                            if gen < current_gen {
+                                *stale_dropped += 1;
                                 continue;
                             }
-                            *require_keyframe = false;
-                            return Some(QueuePacket::Real(p, pts_ms));
+                            return Some(QueuePacket::Flush(gen, target_ms));
+                        }
+                        QueuePacket::Simulated(p) => return Some(QueuePacket::Simulated(p)),
+                        QueuePacket::Real(p, pts_ms, gen) => {
+                            if gen < current_gen {
+                                *stale_dropped += 1;
+                                continue;
+                            }
+                            let is_key = p.is_key();
+                            if recovering {
+                                if *require_keyframe && !is_key {
+                                    continue;
+                                }
+                                *require_keyframe = false;
+                                return Some(QueuePacket::Real(p, pts_ms, gen));
+                            } else {
+                                if crate::video_decode::packet_dropped_in_catchup(
+                                    is_key,
+                                    lag_ms,
+                                    *require_keyframe,
+                                ) {
+                                    continue;
+                                }
+                                *require_keyframe = false;
+                                return Some(QueuePacket::Real(p, pts_ms, gen));
+                            }
                         }
                     }
                 }
             }
 
+            let mut current_seek_generation = 0u64;
+            let mut recovery_state = DecoderRecoveryState::Ready;
+            let mut recovering_target_ms = None;
+            let mut recovery_frame_count = 0u32;
+            let mut recovery_started_at = Instant::now();
+            let mut stale_frames_dropped = 0u32;
+
             while is_running.load(Ordering::SeqCst) {
                 let lag_ms = video_decode_lag_ms(&audio_clock_ms, &frame_queue);
-                let decode_behind = lag_ms > CATCHUP_SKIP_NON_KEYFRAME_MS;
+                let recovering = recovering_target_ms.is_some();
+                let decode_behind = lag_ms > CATCHUP_SKIP_NON_KEYFRAME_MS && !recovering;
+
+                if let Some(target) = recovering_target_ms {
+                    let elapsed_ms = recovery_started_at.elapsed().as_millis() as u64;
+                    if elapsed_ms >= RECOVERY_TIMEOUT_MS || recovery_frame_count >= RECOVERY_MAX_FRAMES {
+                        let latest_pts = frame_queue.latest_pts();
+                        let fallback_pts = if latest_pts > 0 { latest_pts } else { target };
+                        runtime_log!(
+                            "[VideoDecoder] Seek recovery watchdog triggered: gen={} target={}ms decoded={} stale_dropped={} recovery_ms={}ms fallback_pts={}ms",
+                            current_seek_generation,
+                            target,
+                            recovery_frame_count,
+                            stale_frames_dropped,
+                            elapsed_ms,
+                            fallback_pts
+                        );
+                        recovering_target_ms = None;
+                        recovery_state = DecoderRecoveryState::Ready;
+                        audio_clock_ms.store(fallback_pts, Ordering::Relaxed);
+                        let was_playing = seek_was_playing.load(Ordering::Relaxed);
+                        clock.seek_complete(was_playing, fallback_pts);
+                    }
+                }
 
                 if decode_behind && last_catchup_log.elapsed() >= Duration::from_secs(2) {
                     let mode = crate::video_decode::catchup_mode_label(lag_ms);
@@ -1083,19 +2047,31 @@ impl VideoRuntime {
                 }
 
                 if let Some(queue_packet) =
-                    pop_packet_for_decode(&packet_queue, lag_ms, &mut require_keyframe)
+                    pop_packet_for_decode(&packet_queue, lag_ms, &mut require_keyframe, recovering, current_seek_generation, &mut stale_frames_dropped)
                 {
                     match queue_packet {
-                        QueuePacket::Real(pkt, pts_ms) => {
+                        QueuePacket::Real(pkt, pts_ms, gen) => {
+                            if gen < current_seek_generation {
+                                stale_frames_dropped += 1;
+                                continue;
+                            }
+                            if recovery_state == DecoderRecoveryState::Seeking {
+                                recovery_state = DecoderRecoveryState::Recovering;
+                            }
                             if let Some(ref mut hw) = hw_state {
                                 if hw.dec.send_packet(&pkt).is_ok() {
                                     let mut decoded = VideoFrameImpl::empty();
                                     while hw.dec.receive_frame(&mut decoded).is_ok() {
                                         frame_count += 1;
+                                        if recovering {
+                                            recovery_frame_count += 1;
+                                        }
                                         if frame_count % 150 == 0 {
                                             runtime_log!(
-                                                "[VideoDecoder] Decoded {} frames (HW path)",
-                                                frame_count
+                                                "[VideoDecoder] Decoded {} frames (HW path), recovering={} recovery_frame_count={}",
+                                                frame_count,
+                                                recovering,
+                                                recovery_frame_count
                                             );
                                         }
                                         let mut pushed = false;
@@ -1108,6 +2084,7 @@ impl VideoRuntime {
                                                 hw.out_w,
                                                 hw.out_h,
                                                 &frame_queue,
+                                                gen,
                                             );
                                         }
                                         if !pushed {
@@ -1122,6 +2099,7 @@ impl VideoRuntime {
                                                         hw.out_h,
                                                         hw.tb,
                                                         &frame_queue,
+                                                        gen,
                                                     );
                                                 }
                                             } else {
@@ -1133,7 +2111,28 @@ impl VideoRuntime {
                                                     hw.out_h,
                                                     hw.tb,
                                                     &frame_queue,
+                                                    gen,
                                                 );
+                                            }
+                                        }
+
+                                        // Check seek recovery completion
+                                        if let Some(target) = recovering_target_ms {
+                                            let latest_pts = frame_queue.latest_pts();
+                                            let elapsed_ms = recovery_started_at.elapsed().as_millis() as u64;
+                                            if latest_pts >= target || recovery_frame_count >= RECOVERY_MAX_FRAMES || elapsed_ms >= RECOVERY_TIMEOUT_MS {
+                                                runtime_log!(
+                                                    "[VideoDecoder] Seek recovery complete (metrics) -> gen: {}, recovery_ms: {}ms, recovery_frames_decoded: {}, stale_frames_dropped: {}",
+                                                    current_seek_generation,
+                                                    elapsed_ms,
+                                                    recovery_frame_count,
+                                                    stale_frames_dropped
+                                                );
+                                                recovering_target_ms = None;
+                                                recovery_state = DecoderRecoveryState::Ready;
+                                                audio_clock_ms.store(latest_pts, Ordering::Relaxed);
+                                                let was_playing = seek_was_playing.load(Ordering::Relaxed);
+                                                clock.seek_complete(was_playing, latest_pts);
                                             }
                                         }
                                     }
@@ -1146,10 +2145,15 @@ impl VideoRuntime {
                                         let mut decoded = VideoFrameImpl::empty();
                                         while sw_dec.receive_frame(&mut decoded).is_ok() {
                                             frame_count += 1;
+                                            if recovering {
+                                                recovery_frame_count += 1;
+                                            }
                                             if frame_count % 150 == 0 {
                                                 runtime_log!(
-                                                    "[VideoDecoder] Decoded {} frames (SW path)",
-                                                    frame_count
+                                                    "[VideoDecoder] Decoded {} frames (SW path), recovering={} recovery_frame_count={}",
+                                                    frame_count,
+                                                    recovering,
+                                                    recovery_frame_count
                                                 );
                                             }
                                             push_rgba_frame(
@@ -1160,7 +2164,28 @@ impl VideoRuntime {
                                                 out_h,
                                                 tb,
                                                 &frame_queue,
+                                                gen,
                                             );
+
+                                            // Check seek recovery completion
+                                            if let Some(target) = recovering_target_ms {
+                                                let latest_pts = frame_queue.latest_pts();
+                                                let elapsed_ms = recovery_started_at.elapsed().as_millis() as u64;
+                                                if latest_pts >= target || recovery_frame_count >= RECOVERY_MAX_FRAMES || elapsed_ms >= RECOVERY_TIMEOUT_MS {
+                                                    runtime_log!(
+                                                        "[VideoDecoder] Seek recovery complete (SW, metrics) -> gen: {}, recovery_ms: {}ms, recovery_frames_decoded: {}, stale_frames_dropped: {}",
+                                                        current_seek_generation,
+                                                        elapsed_ms,
+                                                        recovery_frame_count,
+                                                        stale_frames_dropped
+                                                    );
+                                                    recovering_target_ms = None;
+                                                    recovery_state = DecoderRecoveryState::Ready;
+                                                    audio_clock_ms.store(latest_pts, Ordering::Relaxed);
+                                                    let was_playing = seek_was_playing.load(Ordering::Relaxed);
+                                                    clock.seek_complete(was_playing, latest_pts);
+                                                }
+                                            }
                                         }
                                     }
                                     Err(e) => {
@@ -1191,13 +2216,34 @@ impl VideoRuntime {
                                 height: 720,
                                 pixels: vec![255; 1280 * 720 * 4],
                                 pixel_buffer_ptr: 0,
+                                seek_generation: 0,
                             };
                             let _ = frame_queue.enqueue(video_frame);
                         }
-                        QueuePacket::Flush => {
+                        QueuePacket::Flush(gen, target_ms) => {
+                            let latest_gen = seek_generation.load(Ordering::Relaxed);
+                            if gen < latest_gen {
+                                runtime_log!(
+                                    "[VideoDecoder] Latest seek wins: skipping intermediate recovery for gen={} (latest_gen={})",
+                                    gen,
+                                    latest_gen
+                                );
+                                current_seek_generation = gen;
+                                continue;
+                            }
+
                             runtime_log!(
-                                "[VideoDecoder] Flush — reopening decoders and scalers for post-seek"
+                                "[VideoDecoder] Flush — reopening decoders and scalers for post-seek gen={} target_ms={}",
+                                gen,
+                                target_ms
                             );
+                            current_seek_generation = gen;
+                            recovering_target_ms = Some(target_ms);
+                            recovery_state = DecoderRecoveryState::Seeking;
+                            recovery_frame_count = 0;
+                            stale_frames_dropped = 0;
+                            recovery_started_at = Instant::now();
+
                             if let Some(ref mut hw) = hw_state {
                                 flush_decoder(&mut hw.dec);
                             }
@@ -1276,9 +2322,12 @@ pub struct MediaPlaybackEngine {
     seek_was_playing: Arc<AtomicBool>,
     demuxer_active: Arc<AtomicBool>,
     seek_controller: Arc<SeekController>,
+    seek_generation: Arc<AtomicU64>,
     session: Mutex<Option<PlaybackSession>>,
     duration_ms: Mutex<u64>,
     preview_max_edge: u32,
+    trim_start_ms: Arc<AtomicU64>,
+    trim_end_ms: Arc<AtomicU64>,
 }
 
 impl MediaPlaybackEngine {
@@ -1298,25 +2347,31 @@ impl MediaPlaybackEngine {
         let clock = Arc::new(PlaybackClock::new());
         let video_packet_queue = Arc::new(PacketQueue::new(max_queue_size));
         let audio_packet_queue = Arc::new(PacketQueue::new(max_queue_size));
-        let video_frame_queue = Arc::new(FrameQueue::new(VIDEO_FRAME_QUEUE_CAP));
+        let video_frame_queue = Arc::new(FrameQueue::new(video_frame_queue_capacity(preview_max_edge)));
         let audio_frame_queue = Arc::new(FrameQueue::new(max_queue_size.min(32)));
+        let seek_was_playing = Arc::new(AtomicBool::new(false));
+        let seek_generation = Arc::new(AtomicU64::new(0));
         
         let audio_runtime = AudioRuntime::new(
             audio_packet_queue.clone(),
             audio_frame_queue.clone(),
             clock.clone(),
+            seek_was_playing.clone(),
+            seek_generation.clone(),
         );
         let video_runtime = VideoRuntime::new(
             video_packet_queue.clone(),
             video_frame_queue.clone(),
             clock.clone(),
             preview_max_edge,
+            seek_was_playing.clone(),
+            seek_generation.clone(),
         );
         video_runtime.set_audio_clock(audio_runtime.audio_clock_ms.clone());
         let presenter = GpuPresenter::new(texture_id);
         let seek_target_ms = Arc::new(AtomicI64::new(-1));
-        let seek_was_playing = Arc::new(AtomicBool::new(false));
         let demuxer_active = Arc::new(AtomicBool::new(false));
+        let presenter_runtime = PresenterRuntime::new();
         let seek_controller = Arc::new(SeekController::new(
             seek_target_ms.clone(),
             seek_was_playing.clone(),
@@ -1327,6 +2382,9 @@ impl MediaPlaybackEngine {
             audio_packet_queue.clone(),
             video_frame_queue.clone(),
             audio_frame_queue.clone(),
+            seek_generation.clone(),
+            presenter_runtime.get_display_frame(),
+            presenter_runtime.frozen_frame.clone(),
         ));
 
         Self {
@@ -1338,14 +2396,17 @@ impl MediaPlaybackEngine {
             video_runtime,
             audio_runtime,
             presenter,
-            presenter_runtime: PresenterRuntime::new(),
+            presenter_runtime,
             seek_target_ms,
             seek_was_playing,
             demuxer_active,
             seek_controller,
+            seek_generation,
             session: Mutex::new(None),
             duration_ms: Mutex::new(0),
             preview_max_edge,
+            trim_start_ms: Arc::new(AtomicU64::new(0)),
+            trim_end_ms: Arc::new(AtomicU64::new(u64::MAX)),
         }
     }
 
@@ -1362,10 +2423,14 @@ impl MediaPlaybackEngine {
             0
         };
         *self.duration_ms.lock() = duration_ms;
+        // Reset trim to full duration
+        self.trim_start_ms.store(0, Ordering::Relaxed);
+        self.trim_end_ms.store(duration_ms, Ordering::Relaxed);
+        self.audio_runtime.set_trim_end_ms(duration_ms);
         runtime_log!("[MediaPlaybackEngine] Opened file duration={}ms", duration_ms);
 
         let video_stream = ictx.streams().best(ffmpeg_next::media::Type::Video);
-        let audio_stream = ictx.streams().best(ffmpeg_next::media::Type::Audio);
+        let audio_stream = find_best_audio_stream(&ictx);
 
         if let Some(ref s) = video_stream {
             *self.video_runtime.video_params.lock() = Some((s.parameters(), s.time_base()));
@@ -1393,14 +2458,18 @@ impl MediaPlaybackEngine {
         self.video_frame_queue.flush_video();
         self.audio_frame_queue.flush();
 
-        let clock_demux = self.clock.clone();
+        let _clock_demux = self.clock.clone();
         let audio_clock_demux = self.audio_runtime.audio_clock_ms.clone();
         let video_fq_demux = self.video_frame_queue.clone();
+        let seek_generation_demux = self.seek_generation.clone();
+        let trim_start_demux = self.trim_start_ms.clone();
+        let trim_end_demux = self.trim_end_ms.clone();
 
         let demuxer_thread = thread::spawn(move || {
             runtime_log!("[Demuxer] Started demuxer thread");
             let mut video_count = 0u64;
             let mut audio_count = 0u64;
+            let mut current_demux_generation = seek_generation_demux.load(Ordering::Relaxed);
 
             'demux: loop {
                 // Check for a pending seek before reading the next packet
@@ -1408,7 +2477,8 @@ impl MediaPlaybackEngine {
                 if seek_ms >= 0 {
                     seek_target_ms_demux.store(-1, Ordering::Release);
                     let was_playing = seek_was_playing_demux.load(Ordering::Relaxed);
-                    runtime_log!("[Demuxer] Executing file seek to {}ms was_playing={}", seek_ms, was_playing);
+                    current_demux_generation = seek_generation_demux.load(Ordering::Relaxed);
+                    runtime_log!("[Demuxer] Executing file seek to {}ms gen={} was_playing={}", seek_ms, current_demux_generation, was_playing);
 
                     // Convert ms to AV_TIME_BASE units (microseconds)
                     let seek_ts = (seek_ms as i64) * 1000;
@@ -1429,13 +2499,11 @@ impl MediaPlaybackEngine {
                     } else {
                         runtime_log!("[Demuxer] File seek succeeded — flushing decoder caches and queues");
                         // Send Flush sentinel so decoder threads reset HEVC/GOP state
-                        let _ = video_pq.push(QueuePacket::Flush);
-                        let _ = audio_pq.push(QueuePacket::Flush);
+                        let _ = video_pq.push(QueuePacket::Flush(current_demux_generation, seek_ms as u64));
+                        let _ = audio_pq.push(QueuePacket::Flush(current_demux_generation, seek_ms as u64));
                     }
 
-                    // Resume the clock now that seek is done
-                    clock_demux.seek_complete(was_playing);
-                    runtime_log!("[Demuxer] Seek to {}ms complete, resuming demux", seek_ms);
+                    runtime_log!("[Demuxer] Seek to {}ms initiated, resuming demux", seek_ms);
                 }
 
                 // Check if the engine wants us to stop
@@ -1458,7 +2526,14 @@ impl MediaPlaybackEngine {
                                 (pts as f64 * tb.0 as f64 / tb.1 as f64 * 1000.0) as u64
                             }).unwrap_or(0);
 
-                            let q_pkt = QueuePacket::Real(packet, pts_ms);
+                            // Skip packets outside trim range — eliminates wasted decode work
+                            let t_start = trim_start_demux.load(Ordering::Relaxed);
+                            let t_end = trim_end_demux.load(Ordering::Relaxed);
+                            if pts_ms < t_start || (t_end < u64::MAX && pts_ms > t_end + 1000) {
+                                continue;
+                            }
+
+                            let q_pkt = QueuePacket::Real(packet, pts_ms, current_demux_generation);
 
                             if is_video {
                                 // Slow decode backpressure: avoid filling 2000 packets while VQ is empty.
@@ -1553,6 +2628,12 @@ impl MediaPlaybackEngine {
             self.audio_runtime.audio_clock_ms.clone(),
             self.seek_controller.clone(),
         );
+        // Auto-seek to trim start if it's not at the beginning
+        let trim_start = self.trim_start_ms.load(Ordering::Relaxed);
+        if trim_start > 0 {
+            runtime_log!("[MediaPlaybackEngine] Auto-seeking to trim_start={}ms", trim_start);
+            self.seek_controller.request_seek(trim_start, "trim_start");
+        }
     }
 
     pub fn pause(&self) {
@@ -1566,18 +2647,81 @@ impl MediaPlaybackEngine {
         self.clock.set_rate(rate);
     }
 
+    pub fn set_muted(&self, muted: bool) {
+        self.audio_runtime.set_muted(muted);
+    }
+
+    /// Set the trim range in ms. Packets outside this range are skipped by
+    /// the demuxer, and playback auto-pauses when reaching `end_ms`.
+    pub fn set_trim_range(&self, start_ms: u64, end_ms: u64) {
+        let clamped_end = end_ms.min(self.get_duration_ms());
+        self.trim_start_ms.store(start_ms, Ordering::Relaxed);
+        self.trim_end_ms.store(clamped_end, Ordering::Relaxed);
+        self.audio_runtime.set_trim_end_ms(clamped_end);
+        // Clear stale trim-end flag (e.g. after trimming a range that was past the old end)
+        self.audio_runtime.clear_trim_end_reached();
+        runtime_log!(
+            "[MediaPlaybackEngine] Trim range set: {}..{}ms",
+            start_ms,
+            clamped_end
+        );
+    }
+
+    pub fn get_trim_start_ms(&self) -> u64 {
+        self.trim_start_ms.load(Ordering::Relaxed)
+    }
+
+    pub fn get_trim_end_ms(&self) -> u64 {
+        self.trim_end_ms.load(Ordering::Relaxed)
+    }
+
+    // ── Overlay audio track management ──
+
+    /// Add an overlay audio track that will be mixed into playback in real-time.
+    /// Returns the overlay ID (u64::MAX on error).
+    pub fn add_overlay_audio(
+        &self,
+        path: String,
+        volume: f32,
+        timeline_start_ms: u64,
+        duration_ms: u64,
+        source_start_ms: u64,
+    ) -> u64 {
+        self.audio_runtime.add_overlay(
+            path,
+            volume,
+            timeline_start_ms,
+            duration_ms,
+            source_start_ms,
+        )
+    }
+
+    /// Remove an overlay audio track by ID.
+    pub fn remove_overlay_audio(&self, id: u64) {
+        self.audio_runtime.remove_overlay(id);
+    }
+
+    /// Set volume for an overlay audio track (0.0 .. 1.0).
+    pub fn set_overlay_volume(&self, id: u64, volume: f32) {
+        self.audio_runtime.set_overlay_volume(id, volume);
+    }
+
     pub fn stop(&self) {
         runtime_log!("[MediaPlaybackEngine] Stopping runtimes");
         self.presenter_runtime.stop();
         self.clock.pause();
         self.stop_demuxer_session();
+        self.audio_runtime.stop_all_overlays();
         self.video_runtime.stop();
         self.audio_runtime.stop();
     }
 
     pub fn seek(&self, time_ms: u64) {
         runtime_log!("[MediaPlaybackEngine] Seeking to {}ms", time_ms);
-        self.presenter_runtime.clear_display_frame();
+        // Clear trim-end flag so seeking backward past trim end works
+        self.audio_runtime.clear_trim_end_reached();
+        // Flush overlay audio queues so they restart from the new position
+        self.audio_runtime.flush_overlay_queues();
         self.seek_controller.request_seek(time_ms, "ui_seek");
     }
 
@@ -1591,7 +2735,44 @@ impl MediaPlaybackEngine {
 
     /// Returns the frame selected by [`PresenterRuntime`] (~30 fps), not the raw decode queue.
     pub fn take_video_frame(&self) -> Option<MediaVideoFrame> {
-        self.presenter_runtime.take_display_frame()
+        let current_gen = self.seek_generation.load(Ordering::Relaxed);
+        
+        if let Some(frame) = self.presenter_runtime.take_display_frame() {
+            if frame.seek_generation >= current_gen {
+                self.presenter_runtime.clear_frozen_frame();
+                return Some(frame);
+            } else {
+                runtime_log!(
+                    "[MediaPlaybackEngine] Discarding stale display frame (gen={}, current={})",
+                    frame.seek_generation,
+                    current_gen
+                );
+            }
+        }
+        
+        let state = self.clock.get_state();
+        if state == PlaybackState::Seeking {
+            if let Some(frame) = self.presenter_runtime.get_frozen_frame() {
+                return Some(frame);
+            }
+        }
+        
+        if state == PlaybackState::Paused || state == PlaybackState::Seeking {
+            if let Some(frame) = self.video_frame_queue.dequeue_best_for_time(self.get_media_time_ms()) {
+                if frame.seek_generation >= current_gen {
+                    self.presenter_runtime.clear_frozen_frame();
+                    return Some(frame);
+                } else {
+                    runtime_log!(
+                        "[MediaPlaybackEngine] Discarding stale dequeue frame (gen={}, current={})",
+                        frame.seek_generation,
+                        current_gen
+                    );
+                }
+            }
+        }
+        
+        None
     }
 
     pub fn take_audio_frame(&self) -> Option<AudioFrame> {
@@ -1653,6 +2834,9 @@ impl MediaPlaybackEngine {
     }
 
     pub fn get_playback_state(&self) -> PlaybackState {
+        if self.audio_runtime.is_trim_end_reached() {
+            return PlaybackState::Ended;
+        }
         self.clock.get_state()
     }
 
@@ -1692,6 +2876,43 @@ impl MediaPlaybackEngine {
     pub fn get_decode_capabilities(&self) -> DecodeCapabilities {
         probe_decode_capabilities()
     }
+
+    /// Single-call diagnostics snapshot — replaces 11 individual FRB bridge
+    /// calls with one, reducing per-tick overhead from ~22 calls/s to ~2.
+    pub fn get_diagnostics(&self) -> DiagnosticsSnapshot {
+        let audio_ms = self.audio_runtime.audio_clock_ms.load(Ordering::Relaxed);
+        let video_pts = self.video_frame_queue.latest_pts();
+        DiagnosticsSnapshot {
+            state: self.get_playback_state(),
+            media_time_ms: self.get_media_time_ms(),
+            audio_clock_ms: audio_ms,
+            wall_clock_ms: self.clock.get_media_time_ms(),
+            latest_decoded_pts_ms: video_pts,
+            presented_pts_ms: self.clock.get_last_presented_pts_ms(),
+            av_drift_ms: audio_ms.saturating_sub(video_pts),
+            video_packets_in_queue: self.video_packet_queue.len() as u64,
+            audio_packets_in_queue: self.audio_packet_queue.len() as u64,
+            video_frames_in_queue: self.video_frame_queue.len() as u64,
+            audio_frames_in_queue: self.audio_frame_queue.len() as u64,
+        }
+    }
+}
+
+/// All playback diagnostics in one struct — returned by [`MediaPlaybackEngine::get_diagnostics`].
+#[derive(Debug, Clone)]
+#[frb]
+pub struct DiagnosticsSnapshot {
+    pub state: PlaybackState,
+    pub media_time_ms: u64,
+    pub audio_clock_ms: u64,
+    pub wall_clock_ms: u64,
+    pub latest_decoded_pts_ms: u64,
+    pub presented_pts_ms: u64,
+    pub av_drift_ms: u64,
+    pub video_packets_in_queue: u64,
+    pub audio_packets_in_queue: u64,
+    pub video_frames_in_queue: u64,
+    pub audio_frames_in_queue: u64,
 }
 
 #[cfg(test)]
@@ -1770,6 +2991,7 @@ mod tests {
             height: 10,
             pixels: vec![0],
             pixel_buffer_ptr: 0,
+            seek_generation: 0,
         };
         let f2 = MediaVideoFrame {
             pts_ms: 200,
@@ -1777,6 +2999,7 @@ mod tests {
             height: 10,
             pixels: vec![0],
             pixel_buffer_ptr: 0,
+            seek_generation: 0,
         };
         let f3 = MediaVideoFrame {
             pts_ms: 300,
@@ -1784,6 +3007,7 @@ mod tests {
             height: 10,
             pixels: vec![0],
             pixel_buffer_ptr: 0,
+            seek_generation: 0,
         };
 
         assert!(queue.enqueue(f1).is_none());
@@ -1807,6 +3031,7 @@ mod tests {
                 height: 4,
                 pixels: vec![0; 16],
                 pixel_buffer_ptr: 0,
+                seek_generation: 0,
             });
         }
         let at_250 = queue.dequeue_best_for_time(250).unwrap();

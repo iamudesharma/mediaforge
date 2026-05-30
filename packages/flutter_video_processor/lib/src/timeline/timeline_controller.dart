@@ -29,7 +29,8 @@ class TimelineController extends ChangeNotifier {
 
   /// Master timeline length (video + overlays). Audio never extends this.
   int get durationMs {
-    var maxMs = _sourceDurationMs;
+    if (_videoClips.isEmpty) return _sourceDurationMs;
+    var maxMs = 0;
     for (final c in _videoClips) {
       if (c.timelineEndMs > maxMs) maxMs = c.timelineEndMs;
     }
@@ -150,7 +151,7 @@ class TimelineController extends ChangeNotifier {
       ..removeAt(index)
       ..insert(index, left)
       ..insert(index + 1, right);
-    _normalizeVideoTimelineOffsets();
+    normalizeVideoTimelineOffsets();
     _selectedVideoClipId = right.id;
     notifyListeners();
     return true;
@@ -173,7 +174,7 @@ class TimelineController extends ChangeNotifier {
     _videoClips
       ..removeAt(index + 1)
       ..[index] = merged;
-    _normalizeVideoTimelineOffsets();
+    normalizeVideoTimelineOffsets();
     _selectedVideoClipId = merged.id;
     notifyListeners();
     return true;
@@ -183,6 +184,7 @@ class TimelineController extends ChangeNotifier {
     final i = _videoClips.indexWhere((c) => c.id == clip.id);
     if (i < 0) return;
     _videoClips[i] = clip;
+    normalizeVideoTimelineOffsets();
     notifyListeners();
   }
 
@@ -192,13 +194,13 @@ class TimelineController extends ChangeNotifier {
     _videoClips.removeWhere((c) => c.id == clipId);
     final removed = _videoClips.length < before;
     if (!removed) return false;
-    _normalizeVideoTimelineOffsets();
+    normalizeVideoTimelineOffsets();
     _selectedVideoClipId = _videoClips.isNotEmpty ? _videoClips.first.id : null;
     notifyListeners();
     return true;
   }
 
-  void _normalizeVideoTimelineOffsets() {
+  void normalizeVideoTimelineOffsets() {
     _videoClips.sort((a, b) => a.timelineStartMs.compareTo(b.timelineStartMs));
     var cursor = 0;
     for (var i = 0; i < _videoClips.length; i++) {

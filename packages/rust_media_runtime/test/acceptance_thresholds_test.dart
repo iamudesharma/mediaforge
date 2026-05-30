@@ -14,7 +14,7 @@ void main() {
 
   test('isHealthyPlayback during play', () {
     const drive = _FakeDrive();
-    const healthy = DiagnosticsSnapshot(
+    const healthy = PlaybackDiagnostics(
       state: PlaybackState.playing,
       mediaTimeMs: 1000,
       audioClockMs: 1000,
@@ -29,7 +29,7 @@ void main() {
     );
     expect(drive.isHealthyPlayback(healthy, isPlaying: true), isTrue);
 
-    const starved = DiagnosticsSnapshot(
+    const starved = PlaybackDiagnostics(
       state: PlaybackState.playing,
       mediaTimeMs: 8000,
       audioClockMs: 8000,
@@ -50,7 +50,7 @@ void main() {
 class _FakeDrive {
   const _FakeDrive();
 
-  bool isHealthyPlayback(DiagnosticsSnapshot d, {required bool isPlaying}) {
+  bool isHealthyPlayback(PlaybackDiagnostics d, {required bool isPlaying}) {
     if (!isPlaying) return true;
     return d.avDriftMs < MediaPlaybackAcceptance.healthyMaxDriftMs &&
         d.videoFramesInQueue >= MediaPlaybackAcceptance.minHealthyVideoQueueDepth;

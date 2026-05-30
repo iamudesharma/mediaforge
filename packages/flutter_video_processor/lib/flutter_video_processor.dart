@@ -27,6 +27,7 @@ export 'src/widgets/timeline/timeline_editor_panel.dart';
 export 'src/widgets/timeline/video_clips_timeline.dart';
 export 'src/widgets/timeline/audio_mixer_panel.dart';
 export 'src/widgets/timeline/overlay_timeline_panel.dart';
+export 'src/widgets/timeline/audio_range_scrubber.dart';
 export 'src/widgets/video_preview_surface.dart';
 export 'package:video_thumbnail_cache/video_thumbnail_cache.dart';
 export 'package:video_processor_core/video_processor_core.dart'

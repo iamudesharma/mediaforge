@@ -164,6 +164,15 @@ class NativePlaybackController extends ChangeNotifier {
     debugPrint('[NativePlayback] volume path=$_path muted=$muted');
   }
 
+  /// Set the playback rate (speed) of the video player.
+  Future<void> setPlaybackRate(double rate) async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    await c.setPlaybackSpeed(rate);
+    debugPrint('[NativePlayback] speed path=$_path rate=$rate');
+    _notify();
+  }
+
   Future<void> close() async {
     _detachPositionListener();
     final c = _controller;
@@ -190,12 +199,8 @@ class NativePlaybackController extends ChangeNotifier {
     void onTick() {
       if (_disposed || !c.value.isInitialized) return;
       final pos = c.value.position.inMilliseconds;
-      if (shouldPauseAtTrimEnd(
-        positionMs: pos,
-        endMs: _trimEndMs,
-        isPlaying: c.value.isPlaying,
-        loopPlayback: loopPlayback,
-      )) {
+      final hasReachedEnd = pos >= _trimEndMs - 80;
+      if (c.value.isPlaying && hasReachedEnd) {
         unawaited(_handleTrimEnd());
         return;
       }
