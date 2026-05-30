@@ -60,7 +60,7 @@
 
 | Area | Today |
 |------|--------|
-| Rust | `rust_image/rust/src/gpu/surface.rs`, texture-related `api/texture.rs`, minimal `gpu/mod.rs` engine singleton |
+| Rust | `packages/rust_image_core/rust/src/gpu/surface.rs`, texture-related `api/texture.rs`, minimal `gpu/mod.rs` engine singleton |
 | Dart | `lib/src/editor/services/gpu_texture_registry.dart`, `widgets/gpu_texture_preview.dart` |
 | Native | `darwin/Classes/RustImageTexturePlugin.swift`, `android/.../RustImageTexturePlugin.kt` |
 
@@ -89,7 +89,7 @@ GpuTextureView(textureId: handle.textureId);
 | Beauty, face masks, warp (engine) | Live camera orchestration (→ package 4) |
 | FRB generated Dart under `src/rust/` | Platform texture plugins (→ package 1) |
 
-**Note:** The Rust crate is **already** named `rust_image_core` (`rust_image/rust/Cargo.toml`). Publishing means splitting it from the Flutter plugin tree and declaring a dependency from `rust_gpu_texture` for surface operations.
+**Note:** The Rust crate is **already** named `rust_image_core` (`packages/rust_image_core/rust/Cargo.toml`). Publishing means splitting it from the Flutter plugin tree and declaring a dependency from `rust_gpu_texture` for surface operations.
 
 **Current code (stays in engine):**
 

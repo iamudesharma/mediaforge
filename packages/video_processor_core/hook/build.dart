@@ -205,8 +205,7 @@ Future<String?> _cargoBuild({
     final abi = _androidAbiFolder(arch)!;
     final ffmpegCandidates = [
       env['FFMPEG_DIR'],
-      p.join(workspaceRoot.toFilePath(), 'rust video/tools/ffmpeg/dist/android', abi),
-      p.join(workspaceRoot.toFilePath(), 'tools/video/ffmpeg/dist/android', abi),
+      p.join(workspaceRoot.toFilePath(), 'tools/ffmpeg/dist/android', abi),
     ];
     String? ffmpegDir;
     for (final c in ffmpegCandidates) {

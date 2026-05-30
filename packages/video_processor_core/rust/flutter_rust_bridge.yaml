@@ -1,7 +1,0 @@
-rust_input: crate::api
-rust_root: .
-dart_output: ../../packages/flutter_video_processor/lib/src/frb_generated
-dart_entrypoint_class_name: VideoProcessorCore
-web: false
-dart_format: true
-dart3: true

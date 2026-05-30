@@ -189,7 +189,6 @@ void _applyFfmpegDistEnv(
       p.join(home, '.cache', 'rust_image', 'ffmpeg-macos-vt'),
     p.join(
       workspaceRoot.toFilePath(),
-      'rust video',
       'tools',
       'ffmpeg',
       'dist',
@@ -197,7 +196,6 @@ void _applyFfmpegDistEnv(
     ),
     p.join(
       workspaceRoot.toFilePath(),
-      'rust video',
       'tools',
       'ffmpeg',
       'dist',
@@ -206,7 +204,6 @@ void _applyFfmpegDistEnv(
     ),
     p.join(
       workspaceRoot.toFilePath(),
-      'rust video',
       'tools',
       'ffmpeg',
       'dist',

@@ -67,7 +67,7 @@ Requirements for **host apps** integrating each package. All packages need **Flu
 
 | Requirement | Notes |
 |-------------|--------|
-| Rust + FFmpeg | Prebuilt artifacts or local build — see [`rust video/README.md`](../rust%20video/README.md) |
+| Rust + FFmpeg | Prebuilt artifacts or local build — see [`tools/ffmpeg/`](../tools/ffmpeg/) |
 | Android minSdk | 24 (plugin); host app ≥ 24 recommended |
 | iOS | 13+; vendored `video_processor_core.framework` |
 | Hook | Native library via `video_processor_core` CodeAsset hook |

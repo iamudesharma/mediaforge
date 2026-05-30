@@ -1,0 +1,31 @@
+{
+  "description": "Public test fixtures for flutter_video_processor and rust_media_runtime benchmarks",
+  "tiers": [
+    {
+      "id": "small",
+      "label": "360p · ~10s · ~1 MB",
+      "local_file": "Big_Buck_Bunny_360_10s_1MB.mp4",
+      "network_url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4"
+    },
+    {
+      "id": "medium",
+      "label": "720p · ~10s · ~5 MB",
+      "local_file": "Big_Buck_Bunny_720_10s_5MB.mp4",
+      "network_url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4"
+    },
+    {
+      "id": "large",
+      "label": "1080p · ~10s · ~10 MB",
+      "local_file": "Big_Buck_Bunny_1080_10s_10MB.mp4",
+      "network_url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4"
+    }
+  ],
+  "audio_tracks": [
+    {
+      "id": "bgm_5s",
+      "label": "Background music · ~1min · ~8.5 MB",
+      "local_file": "SoundHelix-Song-1.mp3",
+      "network_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+    }
+  ]
+}

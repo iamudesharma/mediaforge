@@ -71,7 +71,7 @@ abstract final class NativeLibraryLoader {
       return 'Android: from repo root run:\n'
           '  ./scripts/run-android.sh\n'
           '  (package-video-android.sh → jniLibs, then flutter run)\n'
-          'Requires NDK + FFmpeg: cd "rust video" && ./tools/ffmpeg/android.sh';
+          'Requires NDK + FFmpeg: ./tools/ffmpeg/android.sh';
     }
     if (Platform.isIOS) {
       return 'iOS: from repo root run:\n'
