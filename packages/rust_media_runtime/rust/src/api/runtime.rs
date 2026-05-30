@@ -26,7 +26,7 @@ macro_rules! runtime_log {
 static FFMPEG_INIT: std::sync::Once = std::sync::Once::new();
 
 /// Default longest edge for decoded preview frames (matches MediaRuntime).
-pub const DEFAULT_PREVIEW_MAX_EDGE: u32 = 720;
+pub const DEFAULT_PREVIEW_MAX_EDGE: u32 = 1080;
 /// When audio clock leads latest decoded video PTS by more than this, enter catch-up.
 pub const AV_LAG_THRESHOLD_MS: u64 = 500;
 /// Cap on decoded RGBA frames waiting for the UI.

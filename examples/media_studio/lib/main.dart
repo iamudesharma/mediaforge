@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_video_processor/flutter_video_processor.dart';
 import 'package:rust_image_editor/rust_image_editor.dart';
+import 'package:rust_media_runtime/rust_media_runtime.dart'
+    as media_runtime show RustLib;
 
 import 'home_hub.dart';
 
@@ -11,6 +13,7 @@ Future<void> main() async {
   try {
     await VideoProcessor.initialize();
     await RustImageEditor.ensureInitialized();
+    await media_runtime.RustLib.init();
   } catch (e) {
     debugPrint('Native engine initialization warning: $e');
   }

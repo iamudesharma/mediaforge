@@ -54,7 +54,7 @@ impl RgbaScaler {
         if !self.needs_reinit(fmt, w, h) {
             return true;
         }
-        match ScalerContext::get(fmt, w, h, Pixel::RGBA, self.dst_w, self.dst_h, ScalerFlags::FAST_BILINEAR)
+        match ScalerContext::get(fmt, w, h, Pixel::RGBA, self.dst_w, self.dst_h, ScalerFlags::LANCZOS)
         {
             Ok(scaler) => {
                 if self.scaler.is_some() {
