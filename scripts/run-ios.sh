@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RUST_VIDEO="${ROOT}/rust video"
+TOOLS="${ROOT}/tools"
 EXAMPLE="${ROOT}/packages/flutter_video_processor/example"
 DEVICE_ID="${IOS_DEVICE_ID:-${1:-}}"
 
@@ -19,19 +19,19 @@ if [[ -z "${DEVICE_ID}" ]]; then
   DEVICE_ID="$(cd "${EXAMPLE}" && flutter devices 2>/dev/null | grep 'ios' | grep -v simulator | head -1 | awk '{print $NF}' | tr -d '•' || true)"
 fi
 
-FFMPEG_DIST="${RUST_VIDEO}/tools/ffmpeg/dist/apple/aarch64-apple-ios"
+FFMPEG_DIST="${TOOLS}/ffmpeg/dist/apple/aarch64-apple-ios"
 if [[ ! -d "${FFMPEG_DIST}/lib" ]] || [[ "${FORCE_FFMPEG_IOS_REBUILD:-}" == "1" ]]; then
   echo "==> Building FFmpeg for iOS device (~10–20 min)..."
-  chmod +x "${RUST_VIDEO}/tools/ffmpeg/apple-ios-device.sh"
-  "${RUST_VIDEO}/tools/ffmpeg/apple-ios-device.sh"
+  chmod +x "${TOOLS}/ffmpeg/apple-ios-device.sh"
+  "${TOOLS}/ffmpeg/apple-ios-device.sh"
 elif [[ ! -f "${FFMPEG_DIST}/HWACCEL_FEATURES" ]]; then
   echo "==> iOS FFmpeg predates h264_videotoolbox hwaccel fix; rebuilding..."
-  "${RUST_VIDEO}/tools/ffmpeg/apple-ios-device.sh"
+  "${TOOLS}/ffmpeg/apple-ios-device.sh"
 fi
 
 echo "==> Packaging iOS framework..."
-chmod +x "${RUST_VIDEO}/tools/release/package-ios-framework.sh"
-"${RUST_VIDEO}/tools/release/package-ios-framework.sh"
+chmod +x "${TOOLS}/release/package-ios-framework.sh"
+"${TOOLS}/release/package-ios-framework.sh"
 
 echo "==> Flutter pub get (workspace)..."
 (cd "${ROOT}" && dart pub get && dart run melos bootstrap)

@@ -91,7 +91,7 @@ if [[ "${verify_ok}" -eq 0 ]]; then
   exit 1
 fi
 
-REPO_LINK="${REPO_ROOT}/rust video/tools/ffmpeg/dist/macos-vt"
+REPO_LINK="${REPO_ROOT}/tools/ffmpeg/dist/macos-vt"
 mkdir -p "$(dirname "${REPO_LINK}")"
 ln -sfn "${INSTALL_PREFIX}" "${REPO_LINK}"
 

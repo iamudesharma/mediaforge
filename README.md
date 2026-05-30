@@ -4,9 +4,7 @@ Flutter image editor plugin with a **Rust** processing core and **flutter_rust_b
 
 ## Package location
 
-The Flutter plugin lives in [`rust_image/`](rust_image/).
-
-**Pre–pub.dev:** Four-package monorepo (P0.1–P0.6 done):
+**Pre–pub.dev:** Multi-package monorepo (P0.1–P0.6 done):
 
 | Package | Role |
 |---------|------|
@@ -18,7 +16,7 @@ The Flutter plugin lives in [`rust_image/`](rust_image/).
 | [`flutter_video_processor`](packages/flutter_video_processor/) | Video compress / thumbnails SDK |
 | [`video_thumbnail_cache`](packages/video_thumbnail_cache/) | Optional disk thumbnail cache |
 
-[`rust_image/`](rust_image/) re-exports the editor. Split design: [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md) · checklist: [docs/P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) · platforms: [docs/PACKAGE_PLATFORM_MATRIX.md](docs/PACKAGE_PLATFORM_MATRIX.md). Video: [docs/VIDEO_PACKAGE_SPLIT.md](docs/VIDEO_PACKAGE_SPLIT.md) · preview runtime (Sprint V1): [docs/VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md) · FFmpeg tooling in [`rust video/`](rust%20video/).
+Split design: [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md) · checklist: [docs/P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) · platforms: [docs/PACKAGE_PLATFORM_MATRIX.md](docs/PACKAGE_PLATFORM_MATRIX.md). Video: [docs/VIDEO_PACKAGE_SPLIT.md](docs/VIDEO_PACKAGE_SPLIT.md) · preview runtime (Sprint V1): [docs/VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md) · FFmpeg tooling in [`tools/ffmpeg/`](tools/ffmpeg/).
 
 ## Stack
 
@@ -41,12 +39,12 @@ Default features: `avif`, `blurhash`, `gpu` (disable with `default-features: fal
 
 ```yaml
 dependencies:
-  rust_image:
-    path: ../rust_image/rust_image   # or pub.dev when published
+  rust_image_editor:
+    path: ../packages/rust_image_editor   # or pub.dev when published
 ```
 
 ```dart
-import 'package:rust_image/rust_image.dart';
+import 'package:rust_image_editor/rust_image_editor.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -103,13 +101,13 @@ Blur and most filters are **CPU-only** by design today; the editor keeps an **RG
 Runs the packaged [RustImageEditorWidget] (studio demo).
 
 ```bash
-cd rust_image/example
+cd examples/image_editor
 flutter run
 ```
 
 ## Android prerequisites
 
-Install Rust via [rustup](https://rustup.rs) (not only Homebrew `rustc`). The repo includes `rust/rust-toolchain.toml` so Android targets are installed automatically.
+Install Rust via [rustup](https://rustup.rs) (not only Homebrew `rustc`). The repo includes `packages/rust_image_core/rust/rust-toolchain.toml` so Android targets are installed automatically.
 
 If you see `can't find crate for core` / `aarch64-linux-android target may not be installed`:
 
@@ -122,7 +120,7 @@ rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-and
 Then clean and rebuild:
 
 ```bash
-cd rust_image/example
+cd examples/image_editor
 flutter clean
 flutter run
 ```
@@ -136,25 +134,34 @@ If you see `Could not find method exec()` from `cargokit/gradle/plugin.gradle`, 
 After changing `rust/src/api/*.rs`:
 
 ```bash
-cd rust_image
+cd packages/rust_image_core
 flutter_rust_bridge_codegen generate
 ```
 
 ## Project layout
 
 ```
-rust_image/
-├── rust/                 # Rust core (rust_image_core)
-│   └── src/
+packages/
+├── rust_image_core/      # Rust core + FRB
+│   └── rust/src/
 │       ├── api/          # FRB exports
 │       ├── resize.rs
 │       ├── filters.rs
 │       ├── exif.rs
 │       └── ...
-├── lib/
-│   ├── rust_image.dart
-│   └── src/rust_image_editor.dart
-└── example/
+├── rust_image_editor/    # Editor UI (Riverpod)
+│   └── lib/
+│       └── ...
+├── rust_gpu_texture/     # GPU Texture bridge
+├── rust_camera_runtime/  # Live camera YUV stream
+├── video_processor_core/ # Video Rust engine + FFmpeg
+├── flutter_video_processor/ # Video compress/thumbnails SDK
+├── rust_media_runtime/   # Media playback runtime
+└── video_thumbnail_cache/ # Optional disk cache
+
+examples/
+├── image_editor/         # Image editor example app
+└── media_studio/         # Video/audio editor showcase
 ```
 
 ## Roadmap
@@ -207,18 +214,18 @@ final jpeg = RustImageEditor.encodeRgba(rgba, format: OutputFormat.jpeg);
 
 ## Benchmarks
 
-Cold API benchmarks (10 runs per op, CPU vs GPU, no caching) live in [`rust_image/benchmark/`](rust_image/benchmark/README.md).
+Cold API benchmarks (10 runs per op, CPU vs GPU, no caching) live in [`benchmark/`](benchmark/README.md).
 
 **Rust CLI (fastest):**
 
 ```bash
-cd rust_image/rust
+cd packages/rust_image_core/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic --iterations 10
 ```
 
-**Dart / Flutter** (not `dart run`): `cd rust_image/benchmark && ./run_dart_benchmark.sh` — use `BENCH_PIPELINE=worker` for the editor isolate path
+**Dart / Flutter** (not `dart run`): `cd benchmark && ./run_dart_benchmark.sh` — use `BENCH_PIPELINE=worker` for the editor isolate path
 
-See [benchmark/README.md](rust_image/benchmark/README.md) for full options and CSV export.
+See [benchmark/README.md](benchmark/README.md) for full options and CSV export.
 
 ## Running tests
 
@@ -232,9 +239,9 @@ chmod +x test_all.sh   # one time
 
 | Layer | Command | What it covers |
 |-------|---------|----------------|
-| Rust  | `cd rust_image/rust && cargo test --features gpu,blurhash` | Core image API (resize, crop, rotate, EXIF, compress, filters, draw, overlay, blurhash, RGBA pipeline, edit graph, batch, pool, backend). |
-| Dart unit | `cd rust_image && flutter test test/editor/` | Pure-Dart editor logic (edit graph, layer stack, filter descriptors, config defaults) — no device, no native lib. |
-| Integration | `cd rust_image/example && flutter test integration_test/ -d <device>` | End-to-end `RustImageEditor` API on a real Flutter engine (smoke, thorough, RGBA pipeline, edit pipeline, BlendMode matrix + BlurHash). Requires a connected device or simulator. |
+| Rust  | `cd packages/rust_image_core/rust && cargo test --features gpu,blurhash` | Core image API (resize, crop, rotate, EXIF, compress, filters, draw, overlay, blurhash, RGBA pipeline, edit graph, batch, pool, backend). |
+| Dart unit | `cd packages/rust_image_editor && flutter test test/editor/` | Pure-Dart editor logic (edit graph, layer stack, filter descriptors, config defaults) — no device, no native lib. |
+| Integration | `cd examples/image_editor && flutter test integration_test/ -d <device>` | End-to-end `RustImageEditor` API on a real Flutter engine (smoke, thorough, RGBA pipeline, edit pipeline, BlendMode matrix + BlurHash). Requires a connected device or simulator. |
 
 ### `test_all.sh` environment knobs
 

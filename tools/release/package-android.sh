@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# Build video_processor_core for Android and install into the monorepo plugin jniLibs/.
+# Build video_processor_core for Android ABIs and install into the plugin jniLibs/.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TOOLS="${ROOT}/tools"
-VP_PKG="${ROOT}/packages/video_processor_core"
-PLUGIN_JNI="${VP_PKG}/android/src/main/jniLibs"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# shellcheck source=android-env.sh
+source "${ROOT}/tools/release/android-env.sh"
+
+PLUGIN_JNI="${ROOT}/packages/flutter_video_processor/android/src/main/jniLibs"
 OUT="${ROOT}/platform-build/android"
-
-# shellcheck source=/dev/null
-source "${TOOLS}/release/android-env.sh"
-
 mkdir -p "${PLUGIN_JNI}" "${OUT}/jniLibs"
 
 # Default: device ABI only (faster). Pass --all for emulator + 32-bit.
@@ -23,21 +20,20 @@ if [[ "${1:-}" == "--all" ]]; then
   )
 fi
 
-export CARGO_TARGET_DIR="${VP_PKG}/rust/target"
-target_dir="${CARGO_TARGET_DIR}"
-manifest="${VP_PKG}/rust/Cargo.toml"
+cd "${ROOT}"
 
-cd "${VP_PKG}/rust"
+# Keep artifacts in-repo (predictable path for jniLibs copy).
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/target}"
+target_dir="${CARGO_TARGET_DIR}"
 
 for entry in "${ABIS[@]}"; do
   triple="${entry%%:*}"
   abi="${entry##*:}"
-  ffmpeg_dir="${TOOLS}/ffmpeg/dist/android/${abi}"
+  ffmpeg_dir="${ROOT}/tools/ffmpeg/dist/android/${abi}"
 
   if [[ ! -d "${ffmpeg_dir}/lib" ]]; then
     echo "Missing FFmpeg for ${abi} at ${ffmpeg_dir}" >&2
-    echo "From repo root:" >&2
-    echo "  ./tools/ffmpeg/android.sh" >&2
+    echo "Build with: ./tools/ffmpeg/android.sh" >&2
     exit 1
   fi
 
@@ -47,18 +43,14 @@ for entry in "${ABIS[@]}"; do
   FFMPEG_DIR="${ffmpeg_dir}" \
     PKG_CONFIG_PATH="${ffmpeg_dir}/lib/pkgconfig" \
     BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS} -I${ffmpeg_dir}/include" \
-    "${CARGO}" build --release \
-      --manifest-path "${manifest}" \
-      -p video_processor_core \
-      --lib \
-      --target "${triple}"
+    "${CARGO}" build --release -p video_processor_core --lib --target "${triple}"
 
   so="${target_dir}/${triple}/release/libvideo_processor_core.so"
   if [[ ! -f "${so}" ]]; then
     so="${target_dir}/${triple}/release/deps/libvideo_processor_core.so"
   fi
   if [[ ! -f "${so}" ]]; then
-    echo "Build did not produce libvideo_processor_core.so for ${triple}" >&2
+    echo "Build did not produce ${so}" >&2
     exit 1
   fi
 
@@ -68,5 +60,5 @@ for entry in "${ABIS[@]}"; do
   echo "    → ${PLUGIN_JNI}/${abi}/libvideo_processor_core.so"
 done
 
-tar -czf "${OUT}/android.tar.gz" -C "${OUT}" jniLibs 2>/dev/null || true
+tar -czf "${OUT}/android.tar.gz" -C "${OUT}" jniLibs
 echo "Done. Plugin jniLibs: ${PLUGIN_JNI}"

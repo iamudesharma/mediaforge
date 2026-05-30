@@ -1,6 +1,6 @@
 //! Native link flags for FFmpeg / VideoToolbox (aligned with `video_processor_core`).
 //!
-//! Set `FFMPEG_DIR` to a VT-enabled FFmpeg prefix (e.g. `rust video/tools/ffmpeg/dist/apple/<triple>`)
+//! Set `FFMPEG_DIR` to a VT-enabled FFmpeg prefix (e.g. `tools/ffmpeg/dist/apple/<triple>`)
 //! before building when Homebrew FFmpeg lacks `hevc_videotoolbox`.
 
 fn main() {

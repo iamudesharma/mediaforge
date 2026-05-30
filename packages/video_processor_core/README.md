@@ -20,6 +20,6 @@ cd ..  # packages/video_processor_core
 cargo build --release -p video_processor_core
 ```
 
-FFmpeg builds: [`rust video/tools`](../../rust%20video/tools).
+FFmpeg builds: [`tools/ffmpeg`](../../tools/ffmpeg).
 
 See [VIDEO_PACKAGE_SPLIT.md](../../docs/VIDEO_PACKAGE_SPLIT.md).

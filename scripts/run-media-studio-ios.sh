@@ -13,15 +13,15 @@ DEVICE="${1:-}"
 echo "==> Prebuild rust_image_core (iOS device)"
 bash "${ROOT}/scripts/rebuild-rust-image-ios.sh"
 
-if [[ -f "${ROOT}/rust video/tools/release/package-ios-framework.sh" ]]; then
-  FFMPEG_DIST="${ROOT}/rust video/tools/ffmpeg/dist/apple/aarch64-apple-ios"
+if [[ -f "${ROOT}/tools/release/package-ios-framework.sh" ]]; then
+  FFMPEG_DIST="${ROOT}/tools/ffmpeg/dist/apple/aarch64-apple-ios"
   if [[ -d "${FFMPEG_DIST}/lib" ]]; then
     echo "==> Package video_processor_core.framework"
-    chmod +x "${ROOT}/rust video/tools/release/package-ios-framework.sh"
-    "${ROOT}/rust video/tools/release/package-ios-framework.sh"
+    chmod +x "${ROOT}/tools/release/package-ios-framework.sh"
+    "${ROOT}/tools/release/package-ios-framework.sh"
   else
     echo "==> Skip video framework (no iOS FFmpeg at ${FFMPEG_DIST})"
-    echo "    Run: rust\\ video/tools/ffmpeg/apple-ios-device.sh"
+    echo "    Run: tools/ffmpeg/apple-ios-device.sh"
   fi
 fi
 

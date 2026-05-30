@@ -39,9 +39,6 @@ rm -rf "${REPO_ROOT}/.dart_tool/hooks_runner"
 rm -rf "${REPO_ROOT}/packages/video_processor_core/.dart_tool"
 rm -rf "${REPO_ROOT}/packages/flutter_video_processor/.dart_tool"
 rm -rf "${REPO_ROOT}/examples/media_studio/.dart_tool"
-# Legacy nested tree: old dylibs here shadow packages/video_processor_core (wrong FRB hash).
-rm -f "${REPO_ROOT}/rust video/target/release/libvideo_processor_core.dylib" \
-  "${REPO_ROOT}/rust video/target/release/deps/libvideo_processor_core.dylib"
 
 echo "==> cargo clean + build --release (video_processor_core, target=${MACOS_TARGET})"
 (cd "${RUST}" && cargo clean && cargo build --release --target "${MACOS_TARGET}")

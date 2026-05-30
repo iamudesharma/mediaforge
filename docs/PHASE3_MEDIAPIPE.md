@@ -127,7 +127,7 @@ Mask = union of `outerLips` + `innerLips` (Vision) or MP lip indices. Apply HSL 
 Soft pink/orange ellipses on cheek landmarks; multiply blend at low opacity.
 
 ### Beauty looks (Nexus C)
-Mirror [`mood_presets.rs`](../rust_image/rust/src/filters/mood_presets.rs) pattern:
+Mirror [`mood_presets.rs`](../packages/rust_image_core/rust/src/filters/mood_presets.rs) pattern:
 
 ```rust
 pub struct BeautyRecipe {

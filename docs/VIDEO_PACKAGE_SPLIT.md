@@ -4,7 +4,7 @@
 
 **Goal:** Three independently versioned packages with hard dependency boundaries. Host apps choose only what they need (engine/FRB only, ergonomic SDK, or disk-cached filmstrip helpers).
 
-**Related:** Image split [PUB_PACKAGE_SPLIT.md](PUB_PACKAGE_SPLIT.md) · [V0_ACCEPTANCE.md](V0_ACCEPTANCE.md) · preview runtime [VIDEO_MEDIA_RUNTIME.md](VIDEO_MEDIA_RUNTIME.md) (Sprint V1) · legacy tooling in [`rust video/`](../rust%20video/).
+**Related:** Image split [PUB_PACKAGE_SPLIT.md](PUB_PACKAGE_SPLIT.md) · [V0_ACCEPTANCE.md](V0_ACCEPTANCE.md) · preview runtime [VIDEO_MEDIA_RUNTIME.md](VIDEO_MEDIA_RUNTIME.md) (Sprint V1) · FFmpeg tooling in [`tools/ffmpeg/`](../tools/ffmpeg/).
 
 ---
 
@@ -75,7 +75,7 @@ rust_image/packages/
 ├── video_processor_core/     # rust/ + lib/frb + hook + android/ios
 ├── flutter_video_processor/  # SDK + example/
 └── video_thumbnail_cache/
-tools/video/                  # FFmpeg scripts (from rust video/tools)
+tools/ffmpeg/                 # FFmpeg build scripts
 video/Cargo.toml              # Rust workspace for video_processor_core
 ```
 
@@ -89,8 +89,7 @@ Display and playback move to **MediaRuntime** + `rust_gpu_texture` — not `vide
 
 ## References
 
-- Legacy monorepo: [`rust video/README.md`](../rust%20video/README.md)
-- Architecture: [`rust video/docs/architecture.md`](../rust%20video/docs/architecture.md)
+- FFmpeg builds: [`tools/ffmpeg/`](../tools/ffmpeg/)
 - Sprint tracker: [ROADMAP.md](../ROADMAP.md) — Sprint V1
 
 *Last updated: V0 split + V1 runtime design*

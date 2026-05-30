@@ -42,9 +42,6 @@ jobs:
       - name: Test rust_image_editor
         run: dart run melos exec --scope=rust_image_editor -- flutter test
 
-      - name: Analyze rust_image shim
-        run: dart run melos exec --scope=rust_image -- flutter analyze lib --no-fatal-infos --no-fatal-warnings
-
       - name: Analyze video_processor_core
         run: dart run melos exec --scope=video_processor_core -- flutter analyze --no-fatal-infos
 

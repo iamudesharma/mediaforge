@@ -77,7 +77,7 @@ Uses [`rust_gpu_texture`](../rust_gpu_texture/) on macOS / iOS / Android. **Appl
 | Dolby Vision HEVC | `texture_rgba` (CPU upload) | Auto-detected; same as thumbnails |
 | VT failure mid-session | SW fallback | Rust reopens decoder; Dart retries RGBA |
 
-Full API and platform setup: see [`rust video/README.md`](../../rust%20video/README.md) (legacy doc hub) or run the [example](example/).
+Full API and platform setup: see [docs/VIDEO_PACKAGE_SPLIT.md](../../docs/VIDEO_PACKAGE_SPLIT.md) or run the [example](example/).
 
 **macOS demo** (from repo root):
 

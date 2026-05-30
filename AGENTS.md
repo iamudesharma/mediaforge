@@ -9,7 +9,6 @@ Instructions for AI agents working in this repository.
   - `packages/rust_image_core/rust/` — image processing engine (standalone `Cargo.toml`)
   - `packages/video_processor_core/rust/` — video engine (workspace root at `packages/video_processor_core/Cargo.toml`, member `rust/`)
   - `packages/rust_media_runtime/rust/` — media playback engine (standalone `Cargo.toml`; FFmpeg + cpal for real-time video/audio decode and mixing)
-- `**rust_image/`** is a thin shim that re-exports `rust_image_editor`. Do not add logic there.
 
 ## Package boundaries
 
@@ -96,9 +95,9 @@ Env knobs: `TEST_RUST_FEATURES` (default `gpu,blurhash`), `RUN_INTEGRATION=1`, `
 | Rust image core                | `cd packages/rust_image_core/rust && cargo test --features gpu,blurhash`                        |
 | Rust video core                | `cd packages/video_processor_core && cargo test -p video_processor_core`                        |
 | Rust media runtime             | `cd packages/rust_media_runtime/rust && cargo test`                                              |
-| Dart unit tests (editor)       | `cd rust_image && flutter test test/editor/`                                                    |
+| Dart unit tests (editor)       | `cd packages/rust_image_editor && flutter test test/editor/`                                                    |
 | Dart unit tests (media runtime) | `cd packages/rust_media_runtime && flutter test`                                                |
-| Dart integration               | `cd rust_image/example && flutter test integration_test/ -d <device>`                           |
+| Dart integration               | `cd examples/image_editor && flutter test integration_test/ -d <device>`                           |
 | Dart analyze (all)              | `dart run melos analyze`                                                                        |
 
 
@@ -122,7 +121,7 @@ cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 
 **Dart/Flutter benchmarks** — must run inside Flutter, not `dart run` (FRB code crashes the standalone Dart VM):
 
 ```
-cd rust_image/benchmark && ./run_dart_benchmark.sh
+cd benchmark && ./run_dart_benchmark.sh
 BENCH_PIPELINE=worker ./run_dart_benchmark.sh   # editor isolate path
 ```
 
@@ -328,7 +327,7 @@ If audio sequence appears but source audio is silent while overlay plays, check 
 
 - **AVIF encoder needs NASM** — builds fail on hosts without it. Use `TEST_RUST_FEATURES=gpu,blurhash` (no avif) unless NASM is installed.
 - **Android builds require** `rustup`, not Homebrew `rustc`. The repo has `rust/rust-toolchain.toml` for auto-installing Android targets. If you see `can't find crate for core`, run `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`.
-- **Three Rust crate roots** — `packages/rust_image_core/rust/` standalone; `packages/video_processor_core/Cargo.toml` workspace root with `rust/` member; `packages/rust_media_runtime/rust/` standalone. `rust video/` is legacy — ignore it.
+- **Three Rust crate roots** — `packages/rust_image_core/rust/` standalone; `packages/video_processor_core/Cargo.toml` workspace root with `rust/` member; `packages/rust_media_runtime/rust/` standalone.
 - `dart run` **does not work** for FRB-based benchmarks or apps. Always use `flutter run` or `flutter test`.
 - **First Android build** compiles Rust for each ABI — can take several minutes.
 - **Melos bootstrap** required after cloning: `dart pub get && dart run melos bootstrap`.

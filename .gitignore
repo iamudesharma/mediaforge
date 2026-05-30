@@ -20,6 +20,9 @@
 # OS
 .DS_Store
 
+# Build / output artifacts
+examples/media_studio/output/
+tools/ffmpeg/dist/
+
 # Keep plugin lockfiles for reproducible CI (optional — remove if you prefer)
-!rust_image/pubspec.lock
-!rust_image/example/pubspec.lock
+!packages/rust_image_editor/pubspec.lock

@@ -4,7 +4,7 @@
 
 **Goal:** Move from **preview-centric / frame-on-demand** to a **stream-centric** playback model with explicit **runtime ownership**, **decoder-clock** timing, **texture lifecycle**, and a **frame queue** — without building a custom full video engine in V1.
 
-**Related:** [VIDEO_PACKAGE_SPLIT.md](VIDEO_PACKAGE_SPLIT.md) · [V0_ACCEPTANCE.md](V0_ACCEPTANCE.md) · image texture bridge [`rust_gpu_texture`](../packages/rust_gpu_texture/) · legacy [rust video/docs/architecture.md](../rust%20video/docs/architecture.md).
+**Related:** [VIDEO_PACKAGE_SPLIT.md](VIDEO_PACKAGE_SPLIT.md) · [V0_ACCEPTANCE.md](V0_ACCEPTANCE.md) · image texture bridge [`rust_gpu_texture`](../packages/rust_gpu_texture/) · legacy FFmpeg tooling now lives under `tools/ffmpeg/` (the old `rust video/docs/architecture.md` is no longer applicable).
 
 **Prerequisite:** V0 package split done (`video_processor_core`, `flutter_video_processor`, `video_thumbnail_cache`).
 

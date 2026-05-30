@@ -41,7 +41,7 @@ Performance and architecture plan for reaching native-editor responsiveness (GPU
 
 | Component | Location |
 |-----------|----------|
-| Rust CLI (`rust_image_benchmark`) | `rust_image/rust/src/benchmark/`, `src/bin/rust_image_benchmark.rs` |
+| Rust CLI (`rust_image_benchmark`) | `packages/rust_image_core/rust/src/benchmark/`, `src/bin/rust_image_benchmark.rs` |
 | Dart / FRB runner | `rust_image/benchmark/` |
 
 Run before/after perf work: `cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10`. Export CSV with `--csv results.csv`. Details: [benchmark/README.md](rust_image/benchmark/README.md).
@@ -210,7 +210,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 |------|--------|-------|
 | `CropController` + `CropOverlay` | Done | Drag box + corners; aspects Free, 1:1, 4:5, 9:16, 16:9, Original |
 | Transform panel wired to shared crop state | Done | [`crop_controller.dart`](rust_image/lib/src/editor/crop_controller.dart), preview when Crop tool active |
-| Filter preset strength 0–100% | Done | `ImageFilter.preset { strength }` + lerp in Rust [`filters.rs`](rust_image/rust/src/filters.rs) |
+| Filter preset strength 0–100% | Done | `ImageFilter.preset { strength }` + lerp in Rust [`filters.rs`](packages/rust_image_core/rust/src/filters.rs) |
 | Warmth / Fade / Vignette adjust | Done | New `ImageFilter` variants + Adjust panel sliders |
 | Paint eraser (stroke erase) | Done | `PaintStrokeInput.erase` + preview `BlendMode.clear` + export bake |
 | Widget / unit tests | Done | `crop_controller_test`, `filters_panel_preset_test`, `editor_crop_filters_widget_test` |
@@ -230,7 +230,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 | Text layer double-tap edit sheet | Done | [`text_layer_edit_sheet.dart`](rust_image/lib/src/editor/panels/text_layer_edit_sheet.dart) |
 | Marker / highlighter / neon brushes | Done | Preview + `PaintStrokeInput.brushKind` export |
 | Arrow on canvas | Done | Shapes panel → builtin `arrow` sticker |
-| Highlights / Shadows / Structure | Done | CPU [`filters.rs`](rust_image/rust/src/filters.rs) + Adjust panel |
+| Highlights / Shadows / Structure | Done | CPU [`filters.rs`](packages/rust_image_core/rust/src/filters.rs) + Adjust panel |
 | Straighten slider + apply | Done | `rotate_rgba_arbitrary` + [`CropController`](rust_image/lib/src/editor/crop_controller.dart) |
 | Tests | Done | `layer_stack_test`, `filter_descriptor_test`, `paint_stroke_painter_test` |
 
@@ -252,7 +252,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `MoodFilterPreset` + parametric recipes | Done | [`mood_presets.rs`](rust_image/rust/src/filters/mood_presets.rs) |
+| `MoodFilterPreset` + parametric recipes | Done | [`mood_presets.rs`](packages/rust_image_core/rust/src/filters/mood_presets.rs) |
 | `ImageFilter::Mood` + RGBA path | Done | Separate from `FilterPreset` / photon presets |
 | Swipe on preview + name chip | Done | [`swipe_mood_filter.dart`](rust_image/lib/src/editor/widgets/swipe_mood_filter.dart) |
 | Dedicated mood slot in edit graph | Done | `EditGraph.replaceMoodFilter` |
@@ -332,11 +332,11 @@ cargo run --release --features gpu --bin rust_image_benchmark -- \
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `build_lip_mask` / `build_eye_mask` / blush regions | Done | [`regions.rs`](rust_image/rust/src/face/regions.rs); Vision lip indices; eraser exclude mask |
-| Eye brighten | Done | CPU + GPU [`eye_brighten.wgsl`](rust_image/rust/src/gpu/shaders/eye_brighten.wgsl) |
+| `build_lip_mask` / `build_eye_mask` / blush regions | Done | [`regions.rs`](packages/rust_image_core/rust/src/face/regions.rs); Vision lip indices; eraser exclude mask |
+| Eye brighten | Done | CPU + GPU [`eye_brighten.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/eye_brighten.wgsl) |
 | Lip color + swatches | Done | HSL tint; Nude / Rose / Berry / Coral / Red |
-| Lip size (plump / thin) | Done | [`warp.rs`](rust_image/rust/src/face/warp.rs) — CPU warp; cap ±15% at 100% |
-| Cheek blush | Done | Cheek ellipses; CPU + [`blush.wgsl`](rust_image/rust/src/gpu/shaders/blush.wgsl) |
+| Lip size (plump / thin) | Done | [`warp.rs`](packages/rust_image_core/rust/src/face/warp.rs) — CPU warp; cap ±15% at 100% |
+| Cheek blush | Done | Cheek ellipses; CPU + [`blush.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/blush.wgsl) |
 | `BeautyParams` in edit graph | Done | Structured slot replaces scalar `skinSmooth` |
 | Beauty panel fine-tune sliders | Done | Collapsible section under looks strip; eraser |
 
@@ -346,7 +346,7 @@ cargo run --release --features gpu --bin rust_image_benchmark -- \
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `BeautyLookPreset` + `BeautyRecipe` | Done | [`face/looks.rs`](rust_image/rust/src/face/looks.rs) — mirror [`mood_presets.rs`](rust_image/rust/src/filters/mood_presets.rs) |
+| `BeautyLookPreset` + `BeautyRecipe` | Done | [`face/looks.rs`](packages/rust_image_core/rust/src/face/looks.rs) — mirror [`mood_presets.rs`](packages/rust_image_core/rust/src/filters/mood_presets.rs) |
 | Horizontal looks strip in Beauty panel | Done | Natural, Soft, Glow, Glam, Clear |
 | Tap to apply / commit | Done | Sets all regional sliders; user can override after |
 | Undo / redo / export | Done | Committed look + overrides in graph |
@@ -368,7 +368,7 @@ Example recipes (face-only, not global grade):
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Bind `skin_smooth.wgsl` on GPU surface | Done | [`beauty_pass.rs`](rust_image/rust/src/gpu/beauty_pass.rs) on texture preview |
+| Bind `skin_smooth.wgsl` on GPU surface | Done | [`beauty_pass.rs`](packages/rust_image_core/rust/src/gpu/beauty_pass.rs) on texture preview |
 | `lip_tint.wgsl`, `eye_brighten.wgsl`, `blush.wgsl` | Done | Chained on `GpuEditSurface`; lip plump CPU warp |
 | Android ML Kit face plugin | Done | [`RustImageFacePlugin.kt`](rust_image/android/src/main/kotlin/com/flutter_rust_bridge/rust_image/RustImageFacePlugin.kt) — same FRB shape |
 | Benchmark beauty passes | Done | `--only beauty_skin_smooth_gpu` / `beauty_skin_smooth_cpu` |
@@ -381,7 +381,7 @@ Example recipes (face-only, not global grade):
 | Item | Status | Notes |
 |-------|--------|-------|
 | Under-eye softening | Done | `under_eye` in `BeautyParams`; `build_under_eye_mask` |
-| Teeth whiten | Done | teeth_whiten CPU + [`teeth_whiten.wgsl`](rust_image/rust/src/gpu/shaders/teeth_whiten.wgsl) |
+| Teeth whiten | Done | teeth_whiten CPU + [`teeth_whiten.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/teeth_whiten.wgsl) |
 | Compare-hold for beauty | Done | Compare shows pre-beauty RGBA on Beauty tool |
 | Preset thumbnails | Done | Gradient look chips in Beauty panel |
 
@@ -433,14 +433,14 @@ Example recipes (face-only, not global grade):
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `SwipeLookPreset` + recipes | Done | [`swipe_looks.rs`](rust_image/rust/src/filters/swipe_looks.rs) |
+| `SwipeLookPreset` + recipes | Done | [`swipe_looks.rs`](packages/rust_image_core/rust/src/filters/swipe_looks.rs) |
 | `ImageFilter::SwipeLook` + GPU LUT | Done | Separate slot from Filters-tab `ImageFilter::Mood` |
 | `setSwipeLook` atomic commit | Done | Grade + `BeautyParams` + undo |
 | Filters tab mood strip | Done | Rose, Clarendon, … + intensity slider |
-| Extras: glow, grain, halation, rgb split | Done | CPU + GPU post-grade in [`swipe_extras.rs`](rust_image/rust/src/filters/swipe_extras.rs) |
-| Face warp (eye/jaw/nose/chin) | Done | [`warp_mesh.rs`](rust_image/rust/src/face/warp_mesh.rs) |
+| Extras: glow, grain, halation, rgb split | Done | CPU + GPU post-grade in [`swipe_extras.rs`](packages/rust_image_core/rust/src/filters/swipe_extras.rs) |
+| Face warp (eye/jaw/nose/chin) | Done | [`warp_mesh.rs`](packages/rust_image_core/rust/src/face/warp_mesh.rs) |
 | Snow Princess particles | Done | Flutter overlay [`swipe_look_particles.dart`](rust_image/lib/src/editor/widgets/swipe_look_particles.dart) |
-| `skin_preserve_detail` | Done | CPU + [`skin_smooth.wgsl`](rust_image/rust/src/gpu/shaders/skin_smooth.wgsl) |
+| `skin_preserve_detail` | Done | CPU + [`skin_smooth.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/skin_smooth.wgsl) |
 
 **Config:** `enableSwipeLooks` (default true); `enableSwipeBeautyLooks` default false on Beauty tab swipe.
 

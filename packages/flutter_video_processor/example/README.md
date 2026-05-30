@@ -34,10 +34,10 @@ Prerequisites: Android NDK (via Android Studio SDK Manager), Rust Android target
 
 ```bash
 unset ANDROID_NDK_HOME   # if you copied the docs placeholder by mistake
-cd "rust video" && ./tools/ffmpeg/android.sh   # once, ~30+ min (no OpenSSL — file/http only)
+./tools/ffmpeg/android.sh   # once, ~30+ min (no OpenSSL — file/http only)
 ```
 
-The default Android FFmpeg build does **not** require OpenSSL on your Mac. To enable `https://` inputs, set `VFP_FFMPEG_OPENSSL=1` and place cross-compiled `libssl.a` / `libcrypto.a` under `rust video/tools/ffmpeg/dist/android/<abi>/openssl/` (optional; most demos use local files).
+The default Android FFmpeg build does **not** require OpenSSL on your Mac. To enable `https://` inputs, set `VFP_FFMPEG_OPENSSL=1` and place cross-compiled `libssl.a` / `libcrypto.a` under `tools/ffmpeg/dist/android/<abi>/openssl/` (optional; most demos use local files).
 
 Or explicitly (your machine has `28.2.13676358`):
 

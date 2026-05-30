@@ -17,7 +17,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PKG="${REPO_ROOT}/packages/rust_media_runtime"
 EXAMPLE="${PKG}/example"
-RUST_VIDEO="${REPO_ROOT}/rust video"
+TOOLS="${REPO_ROOT}/tools"
 TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
 
 echo "==> Host triple: ${TRIPLE}"
@@ -43,10 +43,10 @@ probe_vt_in_prefix() {
 if [[ -z "${FFMPEG_DIR:-}" ]]; then
   for candidate in \
     "${HOME}/.cache/rust_image/ffmpeg-macos-vt" \
-    "${RUST_VIDEO}/tools/ffmpeg/dist/macos-vt" \
-    "${RUST_VIDEO}/tools/ffmpeg/dist/apple/${TRIPLE}" \
-    "${RUST_VIDEO}/tools/ffmpeg/build/apple/${TRIPLE}" \
-    "${RUST_VIDEO}/tools/ffmpeg/dist/macos/${TRIPLE}"; do
+    "${TOOLS}/ffmpeg/dist/macos-vt" \
+    "${TOOLS}/ffmpeg/dist/apple/${TRIPLE}" \
+    "${TOOLS}/ffmpeg/build/apple/${TRIPLE}" \
+    "${TOOLS}/ffmpeg/dist/macos/${TRIPLE}"; do
     if ffmpeg_prefix_valid "${candidate}"; then
       export FFMPEG_DIR="${candidate}"
       break

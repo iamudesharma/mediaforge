@@ -95,6 +95,6 @@ RustImageEditorConfig(
 | Texture registry | `rust_image/lib/src/editor/services/gpu_texture_registry.dart` |
 | Android texture | `rust_image/android/.../RustImageTexturePlugin.kt` |
 | Apple texture | `rust_image/macos/Classes/RustImageTexturePlugin.swift` |
-| GPU surface | `rust_image/rust/src/gpu/surface.rs`, `beauty_pass.rs` |
+| GPU surface | `packages/rust_image_core/rust/src/gpu/surface.rs`, `beauty_pass.rs` |
 
 *Last updated: Sprint 22 Phases 1–4*
