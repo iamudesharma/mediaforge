@@ -24,6 +24,7 @@ class MediaIngestResult {
     this.info,
     this.error,
     this.skippedCopy = false,
+    this.normalizedPathFuture,
   });
 
   final MediaIngestPhase phase;
@@ -31,6 +32,12 @@ class MediaIngestResult {
   final MediaInfo? info;
   final String? error;
   final bool skippedCopy;
+
+  /// If non-null, audio normalization to AAC is running in the background.
+  /// Await this future to get the normalized path. Until it completes,
+  /// [stablePath] contains the original (possibly non-AAC) copy which still
+  /// works for timeline placement but may need the AAC path for export mux.
+  final Future<String>? normalizedPathFuture;
 }
 
 abstract final class MediaIngest {
@@ -197,36 +204,20 @@ abstract final class MediaIngest {
     }
 
     final codec = probe.info!.audioCodec?.toLowerCase() ?? '';
-    // Normalize anything that isn't native AAC/ALAC (e.g. OPUS, FLAC, VBR MP3)
+    // Normalize anything that isn't native AAC/ALAC (e.g. OPUS, FLAC, VBR MP3).
+    // Kick off normalization as a background future so the caller can add the
+    // audio clip to the timeline immediately without waiting.
     if (codec != 'aac' && codec != 'alac' && codec.isNotEmpty) {
-      onStatus?.call('Normalizing audio to AAC…');
-      try {
-        final dir = await ingestDir();
-        final aacPath = p.join(dir.path, 'norm_${const Uuid().v4()}.m4a');
-        final job = await VideoProcessor.compressJob(
-          input: stablePath,
-          output: aacPath,
-          audioTracks: [
-            AudioTrackInput(
-              sourcePath: stablePath,
-              sourceStartMs: BigInt.zero,
-              durationMs: probe.info!.durationMs,
-              timelineStartMs: BigInt.zero,
-              volume: 1.0,
-              muted: false,
-            )
-          ],
-          muteOriginalAudio: true,
-          includeAudio: true,
-        );
-        await job.result;
-        stablePath = aacPath;
-      } catch (e) {
-        return MediaIngestResult(
-          phase: MediaIngestPhase.failed,
-          error: 'Audio normalize failed: $e',
-        );
-      }
+      final pathToNormalize = stablePath;
+      final info = probe.info!;
+      final normalizeFuture = _normalizeAudioToAac(pathToNormalize, info);
+      return MediaIngestResult(
+        phase: MediaIngestPhase.ready,
+        stablePath: stablePath,
+        info: info,
+        skippedCopy: false,
+        normalizedPathFuture: normalizeFuture,
+      );
     }
 
     return probeOnly(
@@ -234,6 +225,34 @@ abstract final class MediaIngest {
       onStatus: onStatus,
       skippedCopy: false,
     );
+  }
+
+  /// Re-encodes [sourcePath] to AAC in a background isolate-friendly way.
+  /// Returns the path to the normalized AAC file.
+  static Future<String> _normalizeAudioToAac(
+    String sourcePath,
+    MediaInfo info,
+  ) async {
+    final dir = await ingestDir();
+    final aacPath = p.join(dir.path, 'norm_${const Uuid().v4()}.m4a');
+    final job = await VideoProcessor.compressJob(
+      input: sourcePath,
+      output: aacPath,
+      audioTracks: [
+        AudioTrackInput(
+          sourcePath: sourcePath,
+          sourceStartMs: BigInt.zero,
+          durationMs: info.durationMs,
+          timelineStartMs: BigInt.zero,
+          volume: 1.0,
+          muted: false,
+        )
+      ],
+      muteOriginalAudio: true,
+      includeAudio: true,
+    );
+    await job.result;
+    return aacPath;
   }
 
   static Future<String> _copyToIngest(

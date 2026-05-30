@@ -21,6 +21,7 @@ class MediaGpuTexturePresenter {
   int _lastUploadedPtsMs = -1;
   int _width = 0;
   int _height = 0;
+  bool _isDisposed = false;
 
   bool get isReady => textureId.value != null && frameSize.value != Size.zero;
 
@@ -39,12 +40,13 @@ class MediaGpuTexturePresenter {
     if (textureId.value == null || _width != w || _height != h) {
       await _recreateTexture(w, h);
     }
-    if (textureId.value == null) return false;
+    if (_isDisposed || textureId.value == null) return false;
 
     await GpuTextureRegistry.updateTexture(
       handle: textureHandle,
       pixels: frame.pixels,
     );
+    if (_isDisposed) return false;
     await GpuTextureRegistry.notifyFrameAvailable(textureHandle);
     _lastUploadedPtsMs = pts;
     return true;
@@ -59,11 +61,13 @@ class MediaGpuTexturePresenter {
 
   Future<void> _recreateTexture(int w, int h) async {
     await disposeTexture();
+    if (_isDisposed) return;
     final id = await GpuTextureRegistry.createTexture(
       handle: textureHandle,
       width: w,
       height: h,
     );
+    if (_isDisposed) return;
     if (id == null) return;
     _width = w;
     _height = h;
@@ -80,6 +84,7 @@ class MediaGpuTexturePresenter {
     if (textureId.value != null || _width > 0) {
       await GpuTextureRegistry.disposeTexture(textureHandle);
     }
+    if (_isDisposed) return;
     textureId.value = null;
     frameSize.value = Size.zero;
     _width = 0;
@@ -93,6 +98,7 @@ class MediaGpuTexturePresenter {
   }
 
   void dispose() {
+    _isDisposed = true;
     disposeTexture();
     textureId.dispose();
     frameSize.dispose();

@@ -39,6 +39,9 @@ pub struct SeekController {
     audio_packet_queue: Arc<PacketQueue>,
     video_frame_queue: Arc<FrameQueue<MediaVideoFrame>>,
     audio_frame_queue: Arc<FrameQueue<AudioFrame>>,
+    pub seek_generation: Arc<AtomicU64>,
+    display_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
+    frozen_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
 }
 
 impl SeekController {
@@ -52,6 +55,9 @@ impl SeekController {
         audio_packet_queue: Arc<PacketQueue>,
         video_frame_queue: Arc<FrameQueue<MediaVideoFrame>>,
         audio_frame_queue: Arc<FrameQueue<AudioFrame>>,
+        seek_generation: Arc<AtomicU64>,
+        display_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
+        frozen_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
     ) -> Self {
         Self {
             seek_target_ms,
@@ -64,13 +70,20 @@ impl SeekController {
             audio_packet_queue,
             video_frame_queue,
             audio_frame_queue,
+            seek_generation,
+            display_frame,
+            frozen_frame,
         }
     }
 
     pub fn request_seek(&self, time_ms: u64, reason: &str) {
+        // Increment seek generation immediately
+        let new_gen = self.seek_generation.fetch_add(1, Ordering::SeqCst) + 1;
+
         presenter_log!(
-            "[SeekController] request_seek target_ms={} reason={} demuxer_active={}",
+            "[SeekController] request_seek target_ms={} gen={} reason={} demuxer_active={}",
             time_ms,
+            new_gen,
             reason,
             self.demuxer_active.load(Ordering::Relaxed)
         );
@@ -78,6 +91,20 @@ impl SeekController {
         *self.last_seek_at.lock() = Some(Instant::now());
         // Align audio clock immediately so hard resync / presenter do not use pre-seek PTS.
         self.audio_clock_ms.store(time_ms, Ordering::Relaxed);
+
+        // Freeze the last presented frame
+        let mut display = self.display_frame.lock();
+        if let Some(frame) = display.as_ref() {
+            let mut frozen = frame.clone();
+            frozen.seek_generation = new_gen;
+            *self.frozen_frame.lock() = Some(frozen);
+            presenter_log!("[SeekController] Froze last good frame for seek gen={} pts={}ms", new_gen, frame.pts_ms);
+        } else {
+            *self.frozen_frame.lock() = None;
+        }
+
+        // Clear active presented frame (display queue)
+        *display = None;
 
         if self.demuxer_active.load(Ordering::Relaxed) {
             let was_playing = self.clock.get_state() == PlaybackState::Playing;
@@ -96,7 +123,7 @@ impl SeekController {
             self.audio_packet_queue.flush();
             self.video_frame_queue.flush_video();
             self.audio_frame_queue.flush();
-            self.clock.seek_complete(false);
+            self.clock.seek_complete(false, time_ms);
         }
     }
 }
@@ -208,6 +235,7 @@ pub struct PresenterRuntime {
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
     display_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
     hard_resync: Arc<HardResyncState>,
+    pub(crate) frozen_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
 }
 
 impl PresenterRuntime {
@@ -217,6 +245,7 @@ impl PresenterRuntime {
             thread_handle: Mutex::new(None),
             display_frame: Arc::new(Mutex::new(None)),
             hard_resync: Arc::new(HardResyncState::new()),
+            frozen_frame: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -224,8 +253,20 @@ impl PresenterRuntime {
         self.display_frame.lock().take()
     }
 
+    pub fn get_display_frame(&self) -> Arc<Mutex<Option<MediaVideoFrame>>> {
+        self.display_frame.clone()
+    }
+
     pub fn clear_display_frame(&self) {
         self.display_frame.lock().take();
+    }
+
+    pub fn get_frozen_frame(&self) -> Option<MediaVideoFrame> {
+        self.frozen_frame.lock().clone()
+    }
+
+    pub fn clear_frozen_frame(&self) {
+        *self.frozen_frame.lock() = None;
     }
 
     pub fn start(
@@ -244,6 +285,7 @@ impl PresenterRuntime {
         let display_frame = self.display_frame.clone();
         let hard_resync = self.hard_resync.clone();
         let interval = Duration::from_millis(PRESENTER_INTERVAL_MS);
+        let frozen_frame = self.frozen_frame.clone();
 
         presenter_log!(
             "[PresenterRuntime] Starting paced presenter interval_ms={} (~{} Hz)",
@@ -254,6 +296,13 @@ impl PresenterRuntime {
         let handle = thread::spawn(move || {
             let mut next_tick = Instant::now();
             let mut last_present_log = Instant::now() - Duration::from_secs(5);
+            let mut last_gen = 0u64;
+
+            // Frame pacing history tracking
+            let mut last_presented_frame_pts: Option<u64> = None;
+            let mut last_presented_frame_time: Option<Instant> = None;
+            let mut pacing_interval_average_ms: Option<f64> = None;
+            let mut pacing_drift_average_ms: Option<f64> = None;
 
             while is_running.load(Ordering::SeqCst) {
                 let now = Instant::now();
@@ -261,6 +310,16 @@ impl PresenterRuntime {
                     thread::sleep(next_tick - now);
                 }
                 next_tick = Instant::now() + interval;
+
+                let current_gen = seek.seek_generation.load(Ordering::Relaxed);
+                if current_gen != last_gen {
+                    presenter_log!("[PresenterRuntime] Invalidate presenter frame pacing history: gen={} -> {}", last_gen, current_gen);
+                    last_gen = current_gen;
+                    last_presented_frame_pts = None;
+                    last_presented_frame_time = None;
+                    pacing_interval_average_ms = None;
+                    pacing_drift_average_ms = None;
+                }
 
                 let state = clock.get_state();
                 if state != PlaybackState::Playing {
@@ -287,14 +346,34 @@ impl PresenterRuntime {
                 if let Some(frame) = video_frame_queue.dequeue_best_for_time(media_ms) {
                     let pts = frame.pts_ms;
                     clock.advance_presented_pts(pts);
+                    
+                    // Update pacing history
+                    let frame_time = Instant::now();
+                    if let (Some(last_pts), Some(last_time)) = (last_presented_frame_pts, last_presented_frame_time) {
+                        let pts_delta = pts.saturating_sub(last_pts) as f64;
+                        let time_delta = frame_time.duration_since(last_time).as_millis() as f64;
+                        
+                        let prev_avg_int = pacing_interval_average_ms.unwrap_or(pts_delta);
+                        pacing_interval_average_ms = Some(prev_avg_int * 0.9 + pts_delta * 0.1);
+                        
+                        let drift = (time_delta - pts_delta).abs();
+                        let prev_avg_drift = pacing_drift_average_ms.unwrap_or(drift);
+                        pacing_drift_average_ms = Some(prev_avg_drift * 0.9 + drift * 0.1);
+                    }
+                    last_presented_frame_pts = Some(pts);
+                    last_presented_frame_time = Some(frame_time);
+
                     *display_frame.lock() = Some(frame);
+                    *frozen_frame.lock() = None; // Reset frozen frame on new frame presentation
 
                     if last_present_log.elapsed() >= Duration::from_secs(2) {
                         presenter_log!(
-                            "[PresenterRuntime] presented pts={}ms clock={}ms vq={}",
+                            "[PresenterRuntime] presented pts={}ms clock={}ms vq={} pacing_int={:?} pacing_drift={:?}",
                             pts,
                             media_ms,
-                            video_frame_queue.len()
+                            video_frame_queue.len(),
+                            pacing_interval_average_ms,
+                            pacing_drift_average_ms
                         );
                         last_present_log = Instant::now();
                     }
@@ -313,6 +392,7 @@ impl PresenterRuntime {
         }
         presenter_log!("[PresenterRuntime] Stopping");
         *self.display_frame.lock() = None;
+        *self.frozen_frame.lock() = None;
         if let Some(handle) = self.thread_handle.lock().take() {
             let _ = handle.join();
         }

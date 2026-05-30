@@ -1,4 +1,4 @@
-import '../frb_generated/api/runtime.dart';
+import '../frb_generated/api/runtime.dart' as frb;
 
 import 'media_playback_presenter.dart';
 
@@ -19,7 +19,7 @@ class MediaPlaybackDrive {
     required this.presenter,
   });
 
-  final MediaPlaybackEngine engine;
+  final frb.MediaPlaybackEngine engine;
   final MediaPlaybackPresenter presenter;
 
   /// ~30fps path: take paced frame + GPU upload only.
@@ -28,25 +28,15 @@ class MediaPlaybackDrive {
     return PresentationTickResult(presentedPtsMs: pts);
   }
 
-  /// Slower path: queue depths, clocks, drift (safe for [setState]).
-  Future<DiagnosticsSnapshot> diagnosticsTick() async {
-    return DiagnosticsSnapshot(
-      state: await engine.getPlaybackState(),
-      mediaTimeMs: (await engine.getMediaTimeMs()).toInt(),
-      audioClockMs: (await engine.getAudioClockMs()).toInt(),
-      wallClockMs: (await engine.getWallClockMs()).toInt(),
-      latestDecodedPtsMs: (await engine.getLatestDecodedVideoPtsMs()).toInt(),
-      presentedPtsMs: (await engine.getLastPresentedPtsMs()).toInt(),
-      avDriftMs: (await engine.getAvDriftMs()).toInt(),
-      videoPacketsInQueue: (await engine.getVideoPacketQueueLen()).toInt(),
-      audioPacketsInQueue: (await engine.getAudioPacketQueueLen()).toInt(),
-      videoFramesInQueue: (await engine.getVideoFrameQueueLen()).toInt(),
-      audioFramesInQueue: (await engine.getAudioFrameQueueLen()).toInt(),
-    );
+  /// Single FRB bridge call — returns all diagnostics at once.
+  /// Replaces 11 individual `engine.getXxx()` calls per tick.
+  Future<PlaybackDiagnostics> diagnosticsTick() async {
+    final snap = await engine.getDiagnostics();
+    return PlaybackDiagnostics.fromFrb(snap);
   }
 
   /// Acceptance check for custom-file playback dashboards.
-  bool isHealthyPlayback(DiagnosticsSnapshot d, {required bool isPlaying}) {
+  bool isHealthyPlayback(PlaybackDiagnostics d, {required bool isPlaying}) {
     if (!isPlaying) return true;
     return d.avDriftMs < MediaPlaybackAcceptance.healthyMaxDriftMs &&
         d.videoFramesInQueue >= MediaPlaybackAcceptance.minHealthyVideoQueueDepth;
@@ -59,8 +49,11 @@ class PresentationTickResult {
   bool get hasFrame => presentedPtsMs >= 0;
 }
 
-class DiagnosticsSnapshot {
-  const DiagnosticsSnapshot({
+/// Dart-side diagnostics snapshot with `int` fields.
+/// Converted from the FRB-generated `BigInt`-based struct to avoid
+/// naming conflicts with the FRB-exported `DiagnosticsSnapshot`.
+class PlaybackDiagnostics {
+  const PlaybackDiagnostics({
     required this.state,
     required this.mediaTimeMs,
     required this.audioClockMs,
@@ -74,7 +67,24 @@ class DiagnosticsSnapshot {
     required this.audioFramesInQueue,
   });
 
-  final PlaybackState state;
+  /// Convert from FRB-generated snapshot (BigInt fields → int fields).
+  factory PlaybackDiagnostics.fromFrb(frb.DiagnosticsSnapshot snap) {
+    return PlaybackDiagnostics(
+      state: snap.state,
+      mediaTimeMs: snap.mediaTimeMs.toInt(),
+      audioClockMs: snap.audioClockMs.toInt(),
+      wallClockMs: snap.wallClockMs.toInt(),
+      latestDecodedPtsMs: snap.latestDecodedPtsMs.toInt(),
+      presentedPtsMs: snap.presentedPtsMs.toInt(),
+      avDriftMs: snap.avDriftMs.toInt(),
+      videoPacketsInQueue: snap.videoPacketsInQueue.toInt(),
+      audioPacketsInQueue: snap.audioPacketsInQueue.toInt(),
+      videoFramesInQueue: snap.videoFramesInQueue.toInt(),
+      audioFramesInQueue: snap.audioFramesInQueue.toInt(),
+    );
+  }
+
+  final frb.PlaybackState state;
   final int mediaTimeMs;
   final int audioClockMs;
   final int wallClockMs;

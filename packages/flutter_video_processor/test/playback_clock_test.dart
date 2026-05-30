@@ -6,7 +6,8 @@ void main() {
     test('advanceToFramePts sets media time from decode', () {
       final clock = PlaybackClock()..mediaTimeMs = 1000;
       clock.advanceToFramePts(1523);
-      expect(clock.mediaTimeMs, 1523);
+      expect(clock.lastPresentedPtsMs, 1523);
+      expect(clock.mediaTimeMs, 1000);
     });
 
     test('pause only from playing', () {

@@ -24,5 +24,9 @@ cpal = "0.15"
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 
+[[bin]]
+name = "media_bench"
+path = "src/bin/media_bench.rs"
+
 [dev_dependencies]
 tempfile = "3.14"

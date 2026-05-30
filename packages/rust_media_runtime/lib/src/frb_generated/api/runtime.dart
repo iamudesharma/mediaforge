@@ -6,11 +6,11 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `ffmpeg_version_string`, `hw_decode_enabled`, `log_decode_capabilities`, `probe_decode_capabilities_inner`, `release_media_video_frame_pixel_buffer`, `stop_demuxer_session`, `update_time_internal`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AudioPlayerState`, `PacketQueueInner`, `PlaybackClockInner`, `PlaybackSession`, `SendSafeStream`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
-// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`
-// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `dequeue_best_for_time`, `dequeue`, `enqueue_video`, `enqueue`, `flush_video`, `flush`, `is_empty`, `latest_pts`, `len`, `max_size`, `new`
+// These functions are ignored because they are not marked as `pub`: `ffmpeg_version_string`, `find_best_audio_stream`, `hw_decode_enabled`, `log_decode_capabilities`, `probe_decode_capabilities_inner`, `release_media_video_frame_pixel_buffer`, `stop_demuxer_session`, `update_time_internal`, `video_frame_queue_capacity`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AudioPlayerState`, `DecoderRecoveryState`, `FrameQueue`, `OverlayAudioState`, `OverlayAudioTrack`, `PacketQueueInner`, `PlaybackClockInner`, `PlaybackSession`, `SendSafeStream`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `new`, `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `dequeue_best_for_time`, `dequeue`, `enqueue_video`, `enqueue`, `flush_video`, `flush`, `is_empty`, `latest_pts`, `len`, `max_size`, `new`, `open`, `set_volume`, `stop`, `volume_f32`
 
 /// Probe linked FFmpeg once (safe to call from Dart at startup).
 Future<DecodeCapabilities> probeDecodeCapabilities() =>
@@ -25,34 +25,49 @@ Future<PixelBufferHandoff?> mediaVideoFrameIntoPixelBufferHandoff({
   frame: frame,
 );
 
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Arc < FrameQueue < AudioFrame > >>>
-abstract class ArcFrameQueueAudioFrame implements RustOpaqueInterface {}
-
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Arc < FrameQueue < MediaVideoFrame > >>>
-abstract class ArcFrameQueueMediaVideoFrame implements RustOpaqueInterface {}
-
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Arc < PacketQueue >>>
-abstract class ArcPacketQueue implements RustOpaqueInterface {}
-
-// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<Arc < PlaybackClock >>>
-abstract class ArcPlaybackClock implements RustOpaqueInterface {}
-
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<AudioRuntime>>
 abstract class AudioRuntime implements RustOpaqueInterface {
-  // HINT: Make it `#[frb(sync)]` to let it become the default constructor of Dart class.
-  static Future<AudioRuntime> newInstance({
-    required ArcPacketQueue packetQueue,
-    required ArcFrameQueueAudioFrame frameQueue,
-    required ArcPlaybackClock clock,
-  }) => RustLib.instance.api.crateApiRuntimeAudioRuntimeNew(
-    packetQueue: packetQueue,
-    frameQueue: frameQueue,
-    clock: clock,
-  );
+  /// Add an overlay audio track. Returns the overlay ID.
+  /// The track is demuxed and decoded in background threads, and its PCM
+  /// output is mixed into the cpal callback alongside the source audio.
+  Future<BigInt> addOverlay({
+    required String path,
+    required double volume,
+    required BigInt timelineStartMs,
+    required BigInt durationMs,
+    required BigInt sourceStartMs,
+  });
+
+  /// Clear the trim-end flag (e.g. after a seek backward past trim end).
+  Future<void> clearTrimEndReached();
+
+  /// Flush all overlay frame queues (called on seek).
+  Future<void> flushOverlayQueues();
+
+  /// Returns true when the audio clock has reached the trim end point.
+  Future<bool> isTrimEndReached();
+
+  /// Remove an overlay audio track by ID.
+  Future<void> removeOverlay({required BigInt id});
+
+  /// Enable or disable audio muting. When muted, the cpal callback writes
+  /// silence while continuing to consume decoded frames so the clock and
+  /// decoder pipeline stay in sync.
+  Future<void> setMuted({required bool muted});
+
+  /// Set volume for an overlay track (0.0 .. 1.0).
+  Future<void> setOverlayVolume({required BigInt id, required double volume});
+
+  /// Set the trim end point in ms. The cpal callback monitors the audio
+  /// clock and sets `trim_end_reached` when it reaches this value.
+  Future<void> setTrimEndMs({required BigInt endMs});
 
   Future<void> start();
 
   Future<void> stop();
+
+  /// Stop and remove all overlay tracks.
+  Future<void> stopAllOverlays();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<GpuPresenter>>
@@ -64,6 +79,16 @@ abstract class GpuPresenter implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>>
 abstract class MediaPlaybackEngine implements RustOpaqueInterface {
+  /// Add an overlay audio track that will be mixed into playback in real-time.
+  /// Returns the overlay ID (u64::MAX on error).
+  Future<BigInt> addOverlayAudio({
+    required String path,
+    required double volume,
+    required BigInt timelineStartMs,
+    required BigInt durationMs,
+    required BigInt sourceStartMs,
+  });
+
   /// Audio clock in ms (for Dart diagnostics / A/V drift display).
   /// Returns 0 until audio begins playing.
   Future<BigInt> getAudioClockMs();
@@ -79,6 +104,10 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
 
   /// Phase 0: snapshot of linked FFmpeg / VideoToolbox decoder availability.
   Future<DecodeCapabilities> getDecodeCapabilities();
+
+  /// Single-call diagnostics snapshot — replaces 11 individual FRB bridge
+  /// calls with one, reducing per-tick overhead from ~22 calls/s to ~2.
+  Future<DiagnosticsSnapshot> getDiagnostics();
 
   Future<BigInt> getDurationMs();
 
@@ -97,6 +126,10 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
   Future<BigInt> getMediaTimeMs();
 
   Future<PlaybackState> getPlaybackState();
+
+  Future<BigInt> getTrimEndMs();
+
+  Future<BigInt> getTrimStartMs();
 
   Future<BigInt> getVideoFrameQueueLen();
 
@@ -130,9 +163,21 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
 
   Future<bool> pushVideoPacket({required MediaPacket packet});
 
+  /// Remove an overlay audio track by ID.
+  Future<void> removeOverlayAudio({required BigInt id});
+
   Future<void> seek({required BigInt timeMs});
 
+  Future<void> setMuted({required bool muted});
+
+  /// Set volume for an overlay audio track (0.0 .. 1.0).
+  Future<void> setOverlayVolume({required BigInt id, required double volume});
+
   Future<void> setRate({required double rate});
+
+  /// Set the trim range in ms. Packets outside this range are skipped by
+  /// the demuxer, and playback auto-pauses when reaching `end_ms`.
+  Future<void> setTrimRange({required BigInt startMs, required BigInt endMs});
 
   Future<void> start();
 
@@ -184,8 +229,11 @@ abstract class PlaybackClock implements RustOpaqueInterface {
 
   Future<void> seek({required BigInt timeMs});
 
-  /// Called when the seek is complete — resumes the appropriate playback state.
-  Future<void> seekComplete({required bool wasPlaying});
+  /// Called when the seek is complete — resumes the appropriate playback state and aligns clock to presented frame PTS.
+  Future<void> seekComplete({
+    required bool wasPlaying,
+    required BigInt presentedPtsMs,
+  });
 
   Future<void> setRate({required double rate});
 
@@ -200,19 +248,6 @@ abstract class QueuePacket implements RustOpaqueInterface {}
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<VideoRuntime>>
 abstract class VideoRuntime implements RustOpaqueInterface {
-  // HINT: Make it `#[frb(sync)]` to let it become the default constructor of Dart class.
-  static Future<VideoRuntime> newInstance({
-    required ArcPacketQueue packetQueue,
-    required ArcFrameQueueMediaVideoFrame frameQueue,
-    required ArcPlaybackClock clock,
-    required int previewMaxEdge,
-  }) => RustLib.instance.api.crateApiRuntimeVideoRuntimeNew(
-    packetQueue: packetQueue,
-    frameQueue: frameQueue,
-    clock: clock,
-    previewMaxEdge: previewMaxEdge,
-  );
-
   Future<void> start();
 
   Future<void> stop();
@@ -228,12 +263,14 @@ class AudioFrame {
   final int sampleRate;
   final int channels;
   final Float32List samples;
+  final BigInt seekGeneration;
 
   const AudioFrame({
     required this.ptsMs,
     required this.sampleRate,
     required this.channels,
     required this.samples,
+    required this.seekGeneration,
   });
 
   @override
@@ -241,7 +278,8 @@ class AudioFrame {
       ptsMs.hashCode ^
       sampleRate.hashCode ^
       channels.hashCode ^
-      samples.hashCode;
+      samples.hashCode ^
+      seekGeneration.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -251,7 +289,8 @@ class AudioFrame {
           ptsMs == other.ptsMs &&
           sampleRate == other.sampleRate &&
           channels == other.channels &&
-          samples == other.samples;
+          samples == other.samples &&
+          seekGeneration == other.seekGeneration;
 }
 
 /// Phase 0 diagnostic: which decoders exist in the **linked** FFmpeg build.
@@ -305,6 +344,66 @@ class DecodeCapabilities {
           hint == other.hint;
 }
 
+/// All playback diagnostics in one struct — returned by [`MediaPlaybackEngine::get_diagnostics`].
+class DiagnosticsSnapshot {
+  final PlaybackState state;
+  final BigInt mediaTimeMs;
+  final BigInt audioClockMs;
+  final BigInt wallClockMs;
+  final BigInt latestDecodedPtsMs;
+  final BigInt presentedPtsMs;
+  final BigInt avDriftMs;
+  final BigInt videoPacketsInQueue;
+  final BigInt audioPacketsInQueue;
+  final BigInt videoFramesInQueue;
+  final BigInt audioFramesInQueue;
+
+  const DiagnosticsSnapshot({
+    required this.state,
+    required this.mediaTimeMs,
+    required this.audioClockMs,
+    required this.wallClockMs,
+    required this.latestDecodedPtsMs,
+    required this.presentedPtsMs,
+    required this.avDriftMs,
+    required this.videoPacketsInQueue,
+    required this.audioPacketsInQueue,
+    required this.videoFramesInQueue,
+    required this.audioFramesInQueue,
+  });
+
+  @override
+  int get hashCode =>
+      state.hashCode ^
+      mediaTimeMs.hashCode ^
+      audioClockMs.hashCode ^
+      wallClockMs.hashCode ^
+      latestDecodedPtsMs.hashCode ^
+      presentedPtsMs.hashCode ^
+      avDriftMs.hashCode ^
+      videoPacketsInQueue.hashCode ^
+      audioPacketsInQueue.hashCode ^
+      videoFramesInQueue.hashCode ^
+      audioFramesInQueue.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DiagnosticsSnapshot &&
+          runtimeType == other.runtimeType &&
+          state == other.state &&
+          mediaTimeMs == other.mediaTimeMs &&
+          audioClockMs == other.audioClockMs &&
+          wallClockMs == other.wallClockMs &&
+          latestDecodedPtsMs == other.latestDecodedPtsMs &&
+          presentedPtsMs == other.presentedPtsMs &&
+          avDriftMs == other.avDriftMs &&
+          videoPacketsInQueue == other.videoPacketsInQueue &&
+          audioPacketsInQueue == other.audioPacketsInQueue &&
+          videoFramesInQueue == other.videoFramesInQueue &&
+          audioFramesInQueue == other.audioFramesInQueue;
+}
+
 /// A simplified demuxed media packet.
 class MediaPacket {
   final BigInt ptsMs;
@@ -351,6 +450,7 @@ class MediaVideoFrame {
   final int height;
   final Uint8List pixels;
   final BigInt pixelBufferPtr;
+  final BigInt seekGeneration;
 
   const MediaVideoFrame({
     required this.ptsMs,
@@ -358,6 +458,7 @@ class MediaVideoFrame {
     required this.height,
     required this.pixels,
     required this.pixelBufferPtr,
+    required this.seekGeneration,
   });
 
   @override
@@ -366,7 +467,8 @@ class MediaVideoFrame {
       width.hashCode ^
       height.hashCode ^
       pixels.hashCode ^
-      pixelBufferPtr.hashCode;
+      pixelBufferPtr.hashCode ^
+      seekGeneration.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -377,7 +479,8 @@ class MediaVideoFrame {
           width == other.width &&
           height == other.height &&
           pixels == other.pixels &&
-          pixelBufferPtr == other.pixelBufferPtr;
+          pixelBufferPtr == other.pixelBufferPtr &&
+          seekGeneration == other.seekGeneration;
 }
 
 /// Hand off `CVPixelBuffer` to Flutter without releasing on [MediaVideoFrame] drop.
@@ -386,12 +489,14 @@ class PixelBufferHandoff {
   final int width;
   final int height;
   final BigInt pixelBufferPtr;
+  final BigInt seekGeneration;
 
   const PixelBufferHandoff({
     required this.ptsMs,
     required this.width,
     required this.height,
     required this.pixelBufferPtr,
+    required this.seekGeneration,
   });
 
   @override
@@ -399,7 +504,8 @@ class PixelBufferHandoff {
       ptsMs.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      pixelBufferPtr.hashCode;
+      pixelBufferPtr.hashCode ^
+      seekGeneration.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -409,7 +515,8 @@ class PixelBufferHandoff {
           ptsMs == other.ptsMs &&
           width == other.width &&
           height == other.height &&
-          pixelBufferPtr == other.pixelBufferPtr;
+          pixelBufferPtr == other.pixelBufferPtr &&
+          seekGeneration == other.seekGeneration;
 }
 
 /// State of the playback clock.

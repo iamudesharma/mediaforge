@@ -11,6 +11,8 @@ class FilmstripTrimmer extends StatelessWidget {
     required this.startSeconds,
     required this.endSeconds,
     required this.onRangeChanged,
+    this.onDragStart,
+    this.onDragEnd,
     this.height = 56,
     this.cacheWidth,
   });
@@ -21,6 +23,8 @@ class FilmstripTrimmer extends StatelessWidget {
   final double startSeconds;
   final double endSeconds;
   final void Function(double start, double end) onRangeChanged;
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
   final double height;
   final int? cacheWidth;
 
@@ -103,6 +107,8 @@ class FilmstripTrimmer extends StatelessWidget {
                 bottom: 0,
                 child: _Handle(
                   label: _formatTime(startSeconds),
+                  onDragStart: onDragStart,
+                  onDragEnd: onDragEnd,
                   onDrag: (dx) {
                     final delta = dx / width * durationSeconds;
                     final next = _safeClamp(
@@ -121,6 +127,8 @@ class FilmstripTrimmer extends StatelessWidget {
                 child: _Handle(
                   label: _formatTime(endSeconds),
                   alignRight: true,
+                  onDragStart: onDragStart,
+                  onDragEnd: onDragEnd,
                   onDrag: (dx) {
                     final delta = dx / width * durationSeconds;
                     final next = _safeClamp(
@@ -187,11 +195,15 @@ class _Handle extends StatefulWidget {
     required this.onDrag,
     required this.label,
     this.alignRight = false,
+    this.onDragStart,
+    this.onDragEnd,
   });
 
   final void Function(double dx) onDrag;
   final String label;
   final bool alignRight;
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
 
   @override
   State<_Handle> createState() => _HandleState();
@@ -203,12 +215,19 @@ class _HandleState extends State<_Handle> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      onHorizontalDragStart: (d) {
+        widget.onDragStart?.call();
+      },
       onHorizontalDragUpdate: (d) {
         _accum += d.delta.dx;
         if (_accum.abs() > 2) {
           widget.onDrag(_accum);
           _accum = 0;
         }
+      },
+      onHorizontalDragEnd: (d) {
+        widget.onDragEnd?.call();
+        _accum = 0;
       },
       child: Center(
         child: Container(
