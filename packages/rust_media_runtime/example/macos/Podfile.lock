@@ -1,0 +1,28 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - rust_gpu_texture (0.1.0):
+    - FlutterMacOS
+  - rust_media_runtime (0.1.0):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - rust_gpu_texture (from `Flutter/ephemeral/.symlinks/plugins/rust_gpu_texture/macos`)
+  - rust_media_runtime (from `Flutter/ephemeral/.symlinks/plugins/rust_media_runtime/macos`)
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  rust_gpu_texture:
+    :path: Flutter/ephemeral/.symlinks/plugins/rust_gpu_texture/macos
+  rust_media_runtime:
+    :path: Flutter/ephemeral/.symlinks/plugins/rust_media_runtime/macos
+
+SPEC CHECKSUMS:
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  rust_gpu_texture: 9f133a42cf51e7e65fc9023be5deb1484f936827
+  rust_media_runtime: 77d36ee872386e8ea4aae4f89c45c2a234f1c93a
+
+PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
+
+COCOAPODS: 1.16.2

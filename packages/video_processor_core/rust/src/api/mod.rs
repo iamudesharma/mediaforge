@@ -9,7 +9,7 @@ use crate::types::*;
 
 #[frb(init)]
 pub fn init_app() {
-    let _ = env_logger::try_init();
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).try_init();
     let _ = crate::ffmpeg::ensure_ffmpeg_initialized();
 }
 
