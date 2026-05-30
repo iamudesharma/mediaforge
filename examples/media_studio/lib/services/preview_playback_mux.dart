@@ -58,7 +58,7 @@ class PreviewPlaybackMux {
     final job = await VideoProcessor.compressJob(
       input: videoPath,
       output: outPath,
-      quality: VideoQuality.low,
+      quality: VideoQuality.medium,
       preferHardwareEncoder: true,
       startMs: startMs,
       endMs: endMs > startMs ? endMs : null,
