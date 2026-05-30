@@ -19,6 +19,8 @@ workspace:
   - packages/flutter_video_processor
   - packages/flutter_video_processor/example
   - packages/video_thumbnail_cache
+  - packages/rust_media_runtime
+  - packages/rust_media_runtime/example
   - examples/media_studio
 
 dev_dependencies:

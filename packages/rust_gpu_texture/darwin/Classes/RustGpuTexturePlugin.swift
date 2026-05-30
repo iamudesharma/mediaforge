@@ -141,6 +141,14 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       let srcPb = Unmanaged<CVPixelBuffer>.fromOpaque(raw).takeRetainedValue()
       let width = CVPixelBufferGetWidth(srcPb)
       let height = CVPixelBufferGetHeight(srcPb)
+
+      if Self.canAdoptPixelBufferDirectly(srcPb) {
+        tex.pixelBuffer = srcPb
+        registry.textureFrameAvailable(texId)
+        result(nil)
+        return
+      }
+
       guard let dstPb = Self.ensureMetalPixelBuffer(tex: tex, width: width, height: height) else {
         result(FlutterError(code: "create_failed", message: "Metal CVPixelBuffer alloc failed", details: nil))
         return
@@ -214,6 +222,20 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     guard err == kCVReturnSuccess, let pb else { return nil }
     tex.pixelBuffer = pb
     return pb
+  }
+
+  private static func canAdoptPixelBufferDirectly(_ pb: CVPixelBuffer) -> Bool {
+    guard CVPixelBufferGetPixelFormatType(pb) == kCVPixelFormatType_32BGRA else {
+      return false
+    }
+    guard CVPixelBufferGetIOSurface(pb) != nil else {
+      return false
+    }
+    if let attrs = CVPixelBufferCopyCreationAttributes(pb) as? [String: Any],
+       let metal = attrs[kCVPixelBufferMetalCompatibilityKey as String] as? Bool {
+      return metal
+    }
+    return true
   }
 
   /// Copies [src] into the Flutter-registered Metal-compatible [dst] (does not replace [dst]).
