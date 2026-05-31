@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart' hide ImageInfo;
-import 'package:rust_image_editor/rust_image_editor.dart';
+import 'package:image_forge_editor/image_forge_editor.dart';
 import 'package:path_provider/path_provider.dart';
 
 class PhotoEditorFlow extends StatefulWidget {

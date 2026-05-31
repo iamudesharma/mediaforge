@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build video_processor_core for iOS and run the flutter_video_processor example.
+# Build video_forge for iOS and run the video_forge_kit example.
 # Run from repo root: ./scripts/run-ios.sh [optional flutter device id]
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOOLS="${ROOT}/tools"
-EXAMPLE="${ROOT}/packages/flutter_video_processor/example"
+EXAMPLE="${ROOT}/packages/video_forge_kit/example"
 DEVICE_ID="${IOS_DEVICE_ID:-${1:-}}"
 
 if [[ ! -d "${EXAMPLE}" ]]; then

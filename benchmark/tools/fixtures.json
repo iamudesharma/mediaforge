@@ -1,5 +1,5 @@
 {
-  "description": "Public test fixtures for flutter_video_processor and rust_media_runtime benchmarks",
+  "description": "Public test fixtures for video_forge_kit and media_forge benchmarks",
   "tiers": [
     {
       "id": "small",

@@ -32,7 +32,7 @@ BENCH_PIPELINE=both ./run_dart_benchmark.sh
 
 This runs `example/lib/benchmark_main.dart` with **`flutter run --release`** on macOS:
 
-- Same **Flutter engine** and **plugin-linked** `rust_image_core` as the editor app  
+- Same **Flutter engine** and **plugin-linked** `image_forge` as the editor app  
 - Not the test runner, not a loose `dart` VM  
 
 Optional env:
@@ -67,8 +67,8 @@ Use **`worker`** when you care about slider/filter responsiveness in the app.
 Fastest; no Dart/FRB/isolate overhead:
 
 ```bash
-cd rust_image/rust
-cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10
+cd packages/image_forge/rust
+cargo run --release --features gpu --bin image_forge_benchmark -- --synthetic -n 10
 ```
 
 Or: `./run_dart_benchmark.sh rust`
@@ -77,7 +77,7 @@ Or: `./run_dart_benchmark.sh rust`
 
 | Goal | Command |
 |------|---------|
-| Full suite | `cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10 --warmup 1` |
+| Full suite | `cargo run --release --features gpu --bin image_forge_benchmark -- --synthetic -n 10 --warmup 1` |
 | One operation | `... --only filter_rgba_blur -n 10 --warmup 2` |
 | App-like preview | `... --preview-profile fast` |
 | Stress preview | `... --preview-profile quality` |

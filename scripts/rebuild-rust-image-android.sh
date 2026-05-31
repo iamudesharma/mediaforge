@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prebuild rust_image_core for arm64 Android (avoids OOM during Gradle / cargokit).
+# Prebuild image_forge for arm64 Android (avoids OOM during Gradle / cargokit).
 set -euo pipefail
 
 if [[ -d "${HOME}/.cargo/bin" ]]; then
@@ -8,7 +8,7 @@ fi
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RIC="${REPO_ROOT}/packages/rust_image_core"
+RIC="${REPO_ROOT}/packages/image_forge"
 RUST="${RIC}/rust"
 EXAMPLE="${REPO_ROOT}/examples/media_studio"
 JNI_DIR="${RIC}/android/src/main/jniLibs/arm64-v8a"
@@ -61,25 +61,25 @@ setup_ndk_env() {
   export CARGOKIT_TOOL_TEMP_DIR="${CARGOKIT_TOOL_TEMP_DIR:-/tmp/cargokit-rust-image-android}"
   export _CARGOKIT_NDK_LINK_CLANG="${bin}/clang"
   export _CARGOKIT_NDK_LINK_TARGET="${target_arg}"
-  export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${REPO_ROOT}/packages/rust_image_core/cargokit/run_build_tool.sh"
+  export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${REPO_ROOT}/packages/image_forge/cargokit/run_build_tool.sh"
   echo "    NDK ${ndk_ver} (${host})"
 }
 
-echo "==> cargo build (rust_image_core, ${TARGET}, release, blurhash+gpu)"
+echo "==> cargo build (image_forge, ${TARGET}, release, blurhash+gpu)"
 mkdir -p "${JNI_DIR}"
 setup_ndk_env
-(cd "${RUST}" && cargo build --release -p rust_image_core --target "${TARGET}" \
+(cd "${RUST}" && cargo build --release -p image_forge --target "${TARGET}" \
   --no-default-features --features blurhash,gpu)
 
-LIB="${RUST}/target/${TARGET}/release/librust_image_core.so"
+LIB="${RUST}/target/${TARGET}/release/libimage_forge.so"
 if [[ ! -f "${LIB}" ]]; then
-  LIB="${RIC}/target/${TARGET}/release/librust_image_core.so"
+  LIB="${RIC}/target/${TARGET}/release/libimage_forge.so"
 fi
 if [[ ! -f "${LIB}" ]]; then
-  echo "ERROR: librust_image_core.so not found after build" >&2
+  echo "ERROR: libimage_forge.so not found after build" >&2
   exit 1
 fi
 
-cp "${LIB}" "${JNI_DIR}/librust_image_core.so"
-echo "    → ${JNI_DIR}/librust_image_core.so"
+cp "${LIB}" "${JNI_DIR}/libimage_forge.so"
+echo "    → ${JNI_DIR}/libimage_forge.so"
 echo "Done."

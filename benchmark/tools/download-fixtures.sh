@@ -23,7 +23,7 @@ while IFS= read -r url; do
     continue
   fi
   echo "  download: ${url}"
-  curl -fL --retry 3 --connect-timeout 30 -A "flutter_video_processor-benchmark/1.0" \
+  curl -fL --retry 3 --connect-timeout 30 -A "video_forge_kit-benchmark/1.0" \
     -o "${file}" "${url}"
 done < <(jq -r '.tiers[].network_url' "${CONFIG}")
 
@@ -35,7 +35,7 @@ while IFS= read -r url; do
     continue
   fi
   echo "  download: ${url}"
-  curl -fL --retry 3 --connect-timeout 30 -A "flutter_video_processor-benchmark/1.0" \
+  curl -fL --retry 3 --connect-timeout 30 -A "video_forge_kit-benchmark/1.0" \
     -o "${file}" "${url}"
 done < <(jq -r '.audio_tracks[]?.network_url // empty' "${CONFIG}")
 

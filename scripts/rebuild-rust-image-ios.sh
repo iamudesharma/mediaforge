@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prebuild rust_image_core for iOS device (aarch64-apple-ios).
+# Prebuild image_forge for iOS device (aarch64-apple-ios).
 set -euo pipefail
 
 if [[ -d "${HOME}/.cargo/bin" ]]; then
@@ -7,7 +7,7 @@ if [[ -d "${HOME}/.cargo/bin" ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RIC="${REPO_ROOT}/packages/rust_image_core"
+RIC="${REPO_ROOT}/packages/image_forge"
 RUST="${RIC}/rust"
 PREBUILT_DIR="${RIC}/ios/Prebuilt"
 TARGET="aarch64-apple-ios"
@@ -19,17 +19,17 @@ if command -v xcrun >/dev/null 2>&1; then
   export SDKROOT="$(xcrun --sdk iphoneos --show-sdk-path)"
 fi
 
-echo "==> cargo build (rust_image_core, ${TARGET}, release, blurhash+gpu)"
+echo "==> cargo build (image_forge, ${TARGET}, release, blurhash+gpu)"
 mkdir -p "${PREBUILT_DIR}"
-(cd "${RUST}" && cargo build --release -p rust_image_core --target "${TARGET}" \
+(cd "${RUST}" && cargo build --release -p image_forge --target "${TARGET}" \
   --no-default-features --features blurhash,gpu)
 
-LIB="${RUST}/target/${TARGET}/release/librust_image_core.a"
+LIB="${RUST}/target/${TARGET}/release/libimage_forge.a"
 if [[ ! -f "${LIB}" ]]; then
-  echo "ERROR: librust_image_core.a not found after build" >&2
+  echo "ERROR: libimage_forge.a not found after build" >&2
   exit 1
 fi
 
-cp "${LIB}" "${PREBUILT_DIR}/librust_image_core.a"
-echo "    → ${PREBUILT_DIR}/librust_image_core.a"
+cp "${LIB}" "${PREBUILT_DIR}/libimage_forge.a"
+echo "    → ${PREBUILT_DIR}/libimage_forge.a"
 echo "Done."

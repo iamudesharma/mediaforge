@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Build video_processor_core for Android and run the flutter_video_processor example.
+# Build video_forge for Android and run the video_forge_kit example.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-EXAMPLE="${ROOT}/packages/flutter_video_processor/example"
+EXAMPLE="${ROOT}/packages/video_forge_kit/example"
 DEVICE="${1:-}"
 BUILD_ALL_ABIS=0
 if [[ "${1:-}" == "--all" ]]; then
@@ -11,7 +11,7 @@ if [[ "${1:-}" == "--all" ]]; then
   DEVICE="${2:-}"
 fi
 
-echo "==> Building libvideo_processor_core.so (Android NDK + FFmpeg)"
+echo "==> Building libvideo_forge.so (Android NDK + FFmpeg)"
 if [[ "${BUILD_ALL_ABIS}" -eq 1 ]]; then
   "${ROOT}/scripts/package-video-android.sh" --all
 else
@@ -19,7 +19,7 @@ else
 fi
 
 echo "==> Clearing Flutter hook cache (not jniLibs — just rebuilt)"
-rm -rf "${ROOT}/packages/video_processor_core/rust/target/rust_hook"
+rm -rf "${ROOT}/packages/video_forge/rust/target/rust_hook"
 
 echo "==> flutter clean (example)"
 cd "${EXAMPLE}"

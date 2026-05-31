@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Package libvideo_processor_core.dylib as a macOS framework for CocoaPods / FRB.
+# Package libvideo_forge.dylib as a macOS framework for CocoaPods / FRB.
 set -euo pipefail
 
 # tools/release -> repo root
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CORE_PKG="${REPO_ROOT}/packages/video_processor_core"
-FRAMEWORK_NAME="video_processor_core"
+CORE_PKG="${REPO_ROOT}/packages/video_forge"
+FRAMEWORK_NAME="video_forge"
 FRAMEWORK_DIR="${CORE_PKG}/macos/Frameworks/${FRAMEWORK_NAME}.framework"
 DYLIB_SRC="${CORE_PKG}/target/release/lib${FRAMEWORK_NAME}.dylib"
 
 if [[ ! -f "${DYLIB_SRC}" ]]; then
   echo "Building Rust core..."
-  (cd "${CORE_PKG}" && cargo build --release -p video_processor_core)
+  (cd "${CORE_PKG}" && cargo build --release -p video_forge)
 fi
 
 if [[ ! -f "${DYLIB_SRC}" ]]; then
@@ -42,7 +42,7 @@ cat > "${VERSIONS}/Resources/Info.plist" <<EOF
   <key>CFBundleExecutable</key>
   <string>${FRAMEWORK_NAME}</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.video_processor_core.${FRAMEWORK_NAME}</string>
+  <string>dev.video_forge.${FRAMEWORK_NAME}</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

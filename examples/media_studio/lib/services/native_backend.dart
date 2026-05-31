@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter_video_processor/flutter_video_processor.dart';
+import 'package:video_forge_kit/video_forge_kit.dart';
 
 import 'playback_backend.dart';
 

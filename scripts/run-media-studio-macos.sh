@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build video_processor_core native libs, then run Media Studio on macOS.
+# Build video_forge native libs, then run Media Studio on macOS.
 # Run from anywhere: bash scripts/run-media-studio-macos.sh
 # Skip the native rebuild (faster, may hit FRB hash mismatch): --no-rebuild
 set -euo pipefail

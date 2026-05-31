@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:rust_media_runtime/rust_media_runtime.dart';
+import 'package:media_forge/media_forge.dart';
 
 import '../services/rust_backend.dart';
 

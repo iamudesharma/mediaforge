@@ -1,24 +1,24 @@
-name: rust_image_workspace
+name: media_forge_workspace
 publish_to: none
-description: Monorepo for rust_image and flutter_video_processor packages.
+description: Monorepo for image_forge, video_forge, and pixel_surface packages.
 
 environment:
   sdk: ^3.12.0
 
 workspace:
-  - packages/rust_image_editor
-  - packages/rust_image_core
-  - packages/rust_gpu_texture
-  - packages/rust_gpu_texture/example
-  - packages/rust_camera_runtime
-  - packages/rust_image_core/example
-  - packages/video_processor_core
-  - packages/video_processor_core/example
-  - packages/flutter_video_processor
-  - packages/flutter_video_processor/example
-  - packages/video_thumbnail_cache
-  - packages/rust_media_runtime
-  - packages/rust_media_runtime/example
+  - packages/image_forge_editor
+  - packages/image_forge
+  - packages/pixel_surface
+  - packages/pixel_surface/example
+  - packages/image_forge_camera
+  - packages/image_forge/example
+  - packages/video_forge
+  - packages/video_forge/example
+  - packages/video_forge_kit
+  - packages/video_forge_kit/example
+  - packages/video_forge_cache
+  - packages/media_forge
+  - packages/media_forge/example
   - examples/media_studio
   - examples/image_editor
   - benchmark

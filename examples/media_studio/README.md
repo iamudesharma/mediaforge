@@ -1,6 +1,6 @@
 # Media Studio — Unified capabilities example
 
-A new monorepo example app that showcases editing photos (using `rust_image_editor`) and processing/compositing videos (using `flutter_video_processor`) in a single cohesive product story.
+A new monorepo example app that showcases editing photos (using `image_forge_editor`) and processing/compositing videos (using `video_forge_kit`) in a single cohesive product story.
 
 ## Capabilities Shown
 
@@ -19,8 +19,8 @@ A new monorepo example app that showcases editing photos (using `rust_image_edit
 ## Project Boundaries
 
 To follow the package architecture:
-- Video packages (`flutter_video_processor`) must not depend on image packages (`rust_image_core`).
-- The integration is strictly app-layer, utilizing `rust_gpu_texture` for native preview surfaces.
+- Video packages (`video_forge_kit`) must not depend on image packages (`image_forge`).
+- The integration is strictly app-layer, utilizing `pixel_surface` for native preview surfaces.
 - Text, emoji, and poster-frame overlays are rasterized in Flutter and burned into export via `CompressOptions.burnInOverlays` (Rust CPU composite during encode).
 
 ## Building and Running
@@ -63,4 +63,4 @@ Record device model, Android version, and sample codec when reporting issues.
 
 ### Preview engines (package example)
 
-[`flutter_video_processor` example](../../packages/flutter_video_processor/example/) can switch **Native** vs **Rust MediaRuntime** preview (menu on the studio page). Media Studio uses **native-only** preview, matching the macOS/iOS creator app.
+[`video_forge_kit` example](../../packages/video_forge_kit/example/) can switch **Native** vs **Rust MediaRuntime** preview (menu on the studio page). Media Studio uses **native-only** preview, matching the macOS/iOS creator app.

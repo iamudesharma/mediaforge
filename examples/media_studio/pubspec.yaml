@@ -11,12 +11,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_video_processor:
-    path: ../../packages/flutter_video_processor
-  rust_image_editor:
-    path: ../../packages/rust_image_editor
-  rust_media_runtime:
-    path: ../../packages/rust_media_runtime
+  video_forge_kit:
+    path: ../../packages/video_forge_kit
+  image_forge_editor:
+    path: ../../packages/image_forge_editor
+  media_forge:
+    path: ../../packages/media_forge
   file_picker: ^8.3.7
   path: ^1.9.0
   path_provider: ^2.1.5

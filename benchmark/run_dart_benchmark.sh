@@ -9,7 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 EXAMPLE="$ROOT/../examples/image_editor"
-RUST_DIR="$ROOT/../packages/rust_image_core/rust"
+RUST_DIR="$ROOT/../packages/image_forge/rust"
 
 export BENCH_SYNTHETIC="${BENCH_SYNTHETIC:-1}"
 export BENCH_ITERATIONS="${BENCH_ITERATIONS:-10}"
@@ -30,8 +30,8 @@ if [[ "$MODE" == "test" ]]; then
   (cd "$RUST_DIR" && cargo build --release --features gpu)
   if [[ "$(uname -s)" == "Darwin" ]]; then
     for candidate in \
-      "$RUST_DIR/target/release/librust_image_core.dylib" \
-      "$RUST_DIR/target/release/deps/librust_image_core.dylib"; do
+      "$RUST_DIR/target/release/libimage_forge.dylib" \
+      "$RUST_DIR/target/release/deps/libimage_forge.dylib"; do
       if [[ -f "$candidate" ]]; then export RUST_IMAGE_DYLIB="$candidate"; break; fi
     done
   fi
@@ -41,7 +41,7 @@ fi
 
 if [[ "$MODE" == "rust" ]]; then
   exec cargo run --manifest-path "$RUST_DIR/Cargo.toml" --release --features gpu \
-    --bin rust_image_benchmark -- --synthetic --iterations "$BENCH_ITERATIONS" "$@"
+    --bin image_forge_benchmark -- --synthetic --iterations "$BENCH_ITERATIONS" "$@"
 fi
 
 if [[ ! -d "$EXAMPLE" ]]; then

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_video_processor/flutter_video_processor.dart';
+import 'package:video_forge_kit/video_forge_kit.dart';
 
 class ModernTimeline extends StatefulWidget {
   const ModernTimeline({

@@ -10,13 +10,13 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="${ROOT}/examples/media_studio"
 DEVICE="${1:-}"
 
-echo "==> Prebuild rust_image_core (iOS device)"
+echo "==> Prebuild image_forge (iOS device)"
 bash "${ROOT}/scripts/rebuild-rust-image-ios.sh"
 
 if [[ -f "${ROOT}/tools/release/package-ios-framework.sh" ]]; then
   FFMPEG_DIST="${ROOT}/tools/ffmpeg/dist/apple/aarch64-apple-ios"
   if [[ -d "${FFMPEG_DIST}/lib" ]]; then
-    echo "==> Package video_processor_core.framework"
+    echo "==> Package video_forge.framework"
     chmod +x "${ROOT}/tools/release/package-ios-framework.sh"
     "${ROOT}/tools/release/package-ios-framework.sh"
   else

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_video_processor/flutter_video_processor.dart'
-    show VideoOverlayItem, DraggableVideoOverlays;
-import 'package:rust_media_runtime/rust_media_runtime.dart';
+import 'package:video_forge_kit/video_forge_kit.dart'
+    show GpuTextureView, MediaPlaybackEngine, VideoPlaybackState;
+import 'package:media_forge/media_forge.dart';
 
 import '../services/rust_backend.dart';
 

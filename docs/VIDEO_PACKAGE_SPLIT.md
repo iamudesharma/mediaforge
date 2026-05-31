@@ -10,11 +10,11 @@
 
 ## Why split
 
-| Problem (monolith `flutter_video_processor`) | After split |
+| Problem (monolith `video_forge_kit`) | After split |
 |---------------------------------------------|-------------|
 | FFmpeg hook + FRB + disk cache ship one version | Patch cache without touching compress API |
-| Upload backends pull `path_provider` / `crypto` for compress-only | Minimal transitive deps on `video_processor_core` |
-| Breaking FRB types force SDK major bump | `video_processor_core` majors independently |
+| Upload backends pull `path_provider` / `crypto` for compress-only | Minimal transitive deps on `video_forge` |
+| Breaking FRB types force SDK major bump | `video_forge` majors independently |
 | Example UI mixed with published API surface | Demo stays in `example/` only |
 
 ---
@@ -23,37 +23,37 @@
 
 ```text
                     ┌─────────────────────────────┐
-                    │   flutter_video_processor   │  ← app-facing SDK
+                    │   video_forge_kit   │  ← app-facing SDK
                     │   (Dart facade + queue)     │
                     └──────────────┬──────────────┘
                                    │
               ┌────────────────────┼────────────────────┐
               ▼                    ▼                    ▼
 ┌──────────────────────┐  ┌──────────────────────────────┐
-│ video_processor_core │  │ video_thumbnail_cache        │
+│ video_forge │  │ video_forge_cache        │
 │ Rust + FRB + hook    │  │ (optional disk LRU)          │
 └──────────────────────┘  └──────────────────────────────┘
 ```
 
-### Package 1 — `video_processor_core`
+### Package 1 — `video_forge`
 
-Rust `video_processor_core` cdylib, FRB bindings, native hook (FFmpeg). No `VideoProcessor` facade, no disk cache.
+Rust `video_forge` cdylib, FRB bindings, native hook (FFmpeg). No `VideoProcessor` facade, no disk cache.
 
-### Package 2 — `flutter_video_processor`
+### Package 2 — `video_forge_kit`
 
-`VideoProcessor`, `VideoProcessorQueue`, `VideoJob`, presets. Depends on `video_processor_core` only (no `path_provider` / `crypto`).
+`VideoProcessor`, `VideoProcessorQueue`, `VideoJob`, presets. Depends on `video_forge` only (no `path_provider` / `crypto`).
 
-### Package 3 — `video_thumbnail_cache` (optional)
+### Package 3 — `video_forge_cache` (optional)
 
-`ThumbnailCache`, `thumbnailPathCached`, batch cached paths, eviction. Depends on `video_processor_core`.
+`ThumbnailCache`, `thumbnailPathCached`, batch cached paths, eviction. Depends on `video_forge`.
 
 ---
 
 ## Hard boundaries
 
-1. **`video_processor_core`** must not depend on `path_provider`, `crypto`, or `uuid`.
-2. **`flutter_video_processor`** must not embed Rust sources or duplicate the native hook.
-3. **`video_thumbnail_cache`** must not register FFI or ship FFmpeg artifacts.
+1. **`video_forge`** must not depend on `path_provider`, `crypto`, or `uuid`.
+2. **`video_forge_kit`** must not embed Rust sources or duplicate the native hook.
+3. **`video_forge_cache`** must not register FFI or ship FFmpeg artifacts.
 4. **Example app** is not published; may depend on all layers.
 
 ---
@@ -62,9 +62,9 @@ Rust `video_processor_core` cdylib, FRB bindings, native hook (FFmpeg). No `Vide
 
 | App need | Packages |
 |----------|----------|
-| Compress / probe / jobs | `flutter_video_processor` or `video_processor_core` + FRB |
-| In-memory thumbnails | `flutter_video_processor` |
-| Filmstrip / `Image.file` cached paths | `flutter_video_processor` + `video_thumbnail_cache` |
+| Compress / probe / jobs | `video_forge_kit` or `video_forge` + FRB |
+| In-memory thumbnails | `video_forge_kit` |
+| Filmstrip / `Image.file` cached paths | `video_forge_kit` + `video_forge_cache` |
 
 ---
 
@@ -72,18 +72,18 @@ Rust `video_processor_core` cdylib, FRB bindings, native hook (FFmpeg). No `Vide
 
 ```text
 rust_image/packages/
-├── video_processor_core/     # rust/ + lib/frb + hook + android/ios
-├── flutter_video_processor/  # SDK + example/
-└── video_thumbnail_cache/
+├── video_forge/     # rust/ + lib/frb + hook + android/ios
+├── video_forge_kit/  # SDK + example/
+└── video_forge_cache/
 tools/ffmpeg/                 # FFmpeg build scripts
-video/Cargo.toml              # Rust workspace for video_processor_core
+video/Cargo.toml              # Rust workspace for video_forge
 ```
 
 ---
 
 ## Preview runtime (Sprint V1, planned)
 
-Display and playback move to **MediaRuntime** + `rust_gpu_texture` — not `video_player` in the editor path. See [VIDEO_MEDIA_RUNTIME.md](VIDEO_MEDIA_RUNTIME.md). `video_processor_core` stays decode/encode; `flutter_video_processor` owns runtime + queue.
+Display and playback move to **MediaRuntime** + `pixel_surface` — not `video_player` in the editor path. See [VIDEO_MEDIA_RUNTIME.md](VIDEO_MEDIA_RUNTIME.md). `video_forge` stays decode/encode; `video_forge_kit` owns runtime + queue.
 
 ---
 

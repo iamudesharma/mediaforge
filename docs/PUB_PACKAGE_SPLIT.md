@@ -1,6 +1,6 @@
 # pub.dev package split (pre-publish architecture)
 
-**Status:** P0.1–P0.6 **done** (structural + docs/examples) — `packages/rust_image_editor` has all `lib/src/editor/` UI; `rust_image` is a thin re-export shim. Engine: `rust_image_core`. Texture: `rust_gpu_texture`. Camera: `rust_camera_runtime`. `GpuEditSurface` / wgpu still in `rust_image_core/rust` until moved to `rust_gpu_texture/rust`.
+**Status:** P0.1–P0.6 **done** (structural + docs/examples) — `packages/image_forge_editor` has all `lib/src/editor/` UI; `rust_image` is a thin re-export shim. Engine: `image_forge`. Texture: `pixel_surface`. Camera: `image_forge_camera`. `GpuEditSurface` / wgpu still in `image_forge/rust` until moved to `pixel_surface/rust`.
 
 **Goal:** Four independently versioned packages with hard dependency boundaries. Host apps choose only what they need (texture-only, engine-only, full editor, or camera SDK).
 
@@ -14,9 +14,9 @@
 |----------------------------------|-------------|
 | Texture + editor + camera ship one version line | Patch texture without touching Beauty UI |
 | Apps that only need GPU preview pull camera, Riverpod, image_picker | Minimal transitive deps |
-| Breaking FRB API forces editor widget major bump | `rust_image_core` majors independently |
-| Camera permissions / MediaPipe bloat desktop & web editor consumers | Camera is opt-in via `rust_camera_runtime` |
-| Hard to reuse `GpuEditSurface` in non-editor products | `rust_gpu_texture` is a first-class SDK |
+| Breaking FRB API forces editor widget major bump | `image_forge` majors independently |
+| Camera permissions / MediaPipe bloat desktop & web editor consumers | Camera is opt-in via `image_forge_camera` |
+| Hard to reuse `GpuEditSurface` in non-editor products | `pixel_surface` is a first-class SDK |
 
 ---
 
@@ -24,24 +24,24 @@
 
 ```text
                     ┌─────────────────────┐
-                    │  rust_image_editor  │  ← app-facing Instagram UI
+                    │  image_forge_editor  │  ← app-facing Instagram UI
                     │  (Flutter only)     │
                     └──────────┬──────────┘
            ┌───────────────────┼───────────────────┐
            ▼                   ▼                   ▼
 ┌──────────────────┐  ┌─────────────────┐  ┌──────────────────────┐
-│ rust_gpu_texture │  │ rust_image_core │  │ rust_camera_runtime  │
+│ pixel_surface     │  │ image_forge     │  │ image_forge_camera  │
 │ Texture + wgpu   │  │ Engine (Rust)   │  │ Live camera SDK      │
 │ surface bridge   │  │ FRB API layer   │  │ (optional, later)    │
 └────────┬─────────┘  └────────┬────────┘  └──────────┬───────────┘
          │                     │                       │
          └─────────────────────┴───────────────────────┘
                                │
-                    rust_image_core (Rust crate)
-                    may depend on rust_gpu_texture crate
+                    image_forge (Rust crate)
+                    may depend on pixel_surface crate
 ```
 
-### Package 1 — `rust_gpu_texture`
+### Package 1 — `pixel_surface`
 
 **Purpose:** Reusable GPU-resident frame display — no editor, filters, or beauty.
 
@@ -54,20 +54,20 @@
 | Flutter `Texture` widget + frame scheduling | Squadron workers |
 | Texture lifecycle, surface resize, GPU↔Flutter sync | Camera capture |
 
-**Consumers:** camera apps, video players, realtime AI preview, game overlays, shader demos, `rust_image_editor`, `rust_camera_runtime`.
+**Consumers:** camera apps, video players, realtime AI preview, game overlays, shader demos, `image_forge_editor`, `image_forge_camera`.
 
 **Current code to extract (indicative):**
 
 | Area | Today |
 |------|--------|
-| Rust | `packages/rust_image_core/rust/src/gpu/surface.rs`, texture-related `api/texture.rs`, minimal `gpu/mod.rs` engine singleton |
+| Rust | `packages/image_forge/rust/src/gpu/surface.rs`, texture-related `api/texture.rs`, minimal `gpu/mod.rs` engine singleton |
 | Dart | `lib/src/editor/services/gpu_texture_registry.dart`, `widgets/gpu_texture_preview.dart` |
 | Native | `darwin/Classes/RustImageTexturePlugin.swift`, `android/.../RustImageTexturePlugin.kt` |
 
 **pub.dev surface (sketch):**
 
 ```dart
-import 'package:rust_gpu_texture/rust_gpu_texture.dart';
+import 'package:pixel_surface/pixel_surface.dart';
 
 final handle = await GpuTextureRegistry.register(width: w, height: h);
 // Rust: upload RGBA / bind external texture, present frame
@@ -76,7 +76,7 @@ GpuTextureView(textureId: handle.textureId);
 
 ---
 
-### Package 2 — `rust_image_core`
+### Package 2 — `image_forge`
 
 **Purpose:** Image processing engine — Rust + FRB APIs only. No Flutter widgets, no `Texture` widget.
 
@@ -89,19 +89,19 @@ GpuTextureView(textureId: handle.textureId);
 | Beauty, face masks, warp (engine) | Live camera orchestration (→ package 4) |
 | FRB generated Dart under `src/rust/` | Platform texture plugins (→ package 1) |
 
-**Note:** The Rust crate is **already** named `rust_image_core` (`packages/rust_image_core/rust/Cargo.toml`). Publishing means splitting it from the Flutter plugin tree and declaring a dependency from `rust_gpu_texture` for surface operations.
+**Note:** The Rust crate is **already** named `image_forge` (`packages/image_forge/rust/Cargo.toml`). Publishing means splitting it from the Flutter plugin tree and declaring a dependency from `pixel_surface` for surface operations.
 
 **Current code (stays in engine):**
 
 - `rust/src/` — `filters/`, `face/`, `gpu/beauty_pass.rs`, `gpu/shaders/*`, `layers.rs`, `decode.rs`, `api/*` (except texture moves to P1)
 - `lib/src/rust/` — FRB bindings only
-- `lib/src/editor/services/rust_worker_service.dart` — moves to editor or thin `rust_image_core_flutter` helper; engine stays isolate-agnostic
+- `lib/src/editor/services/rust_worker_service.dart` — moves to editor or thin `image_forge_flutter` helper; engine stays isolate-agnostic
 
-**Dependency:** `rust_gpu_texture` (Rust crate + optional Flutter FRB re-export) for `GpuEditSurface` upload/readback used by filter and beauty pipelines.
+**Dependency:** `pixel_surface` (Rust crate + optional Flutter FRB re-export) for `GpuEditSurface` upload/readback used by filter and beauty pipelines.
 
 ---
 
-### Package 3 — `rust_image_editor`
+### Package 3 — `image_forge_editor`
 
 **Purpose:** Drop-in Instagram-style editor — the product most apps import today.
 
@@ -110,15 +110,15 @@ GpuTextureView(textureId: handle.textureId);
 | `RustImageEditorWidget`, `RustImageEditorConfig` | Low-level wgpu setup |
 | Tool panels, crop overlay, swipe mood/beauty | Raw FRB types (re-exported) |
 | Riverpod providers (`editor_providers.dart`) | Texture plugin native code |
-| Layer stack UI, paint canvas, export sheet | Rust benchmark binary (stays in repo / `rust_image_core` dev) |
+| Layer stack UI, paint canvas, export sheet | Rust benchmark binary (stays in repo / `image_forge` dev) |
 | Editor session, coalesce, status line | |
 
 **Dependencies (target):**
 
 ```yaml
 dependencies:
-  rust_gpu_texture: ^x.y.z
-  rust_image_core: ^x.y.z   # FRB + thin Dart helpers
+  pixel_surface: ^x.y.z
+  image_forge: ^x.y.z   # FRB + thin Dart helpers
   flutter_riverpod: ...
   # file_selector, gal, etc. — editor-only UX deps
 ```
@@ -126,20 +126,20 @@ dependencies:
 **Optional dependency:**
 
 ```yaml
-rust_camera_runtime: ^x.y.z   # only if Beauty → Live camera enabled
+image_forge_camera: ^x.y.z   # only if Beauty → Live camera enabled
 ```
 
-**Migration:** Rename / republish current `rust_image` pub package as `rust_image_editor`, or ship a deprecation shim:
+**Migration:** Rename / republish current `rust_image` pub package as `image_forge_editor`, or ship a deprecation shim:
 
 ```yaml
 # rust_image 1.0.0 — meta re-export (one release cycle)
 dependencies:
-  rust_image_editor: ^1.0.0
+  image_forge_editor: ^1.0.0
 ```
 
 ---
 
-### Package 4 — `rust_camera_runtime` (later)
+### Package 4 — `image_forge_camera` (later)
 
 **Purpose:** Realtime front-camera SDK — not embedded in the editor package.
 
@@ -152,7 +152,7 @@ dependencies:
 | Landmark debug overlay hooks | Web editor (camera optional) |
 | Dedicated camera worker / isolate contract | |
 
-**Why separate:** Nexus live pipeline is already a product-sized stack ([PHASE3_MEDIAPIPE.md](PHASE3_MEDIAPIPE.md), Sprint Nexus A). Keeping it inside `rust_image_editor` will:
+**Why separate:** Nexus live pipeline is already a product-sized stack ([PHASE3_MEDIAPIPE.md](PHASE3_MEDIAPIPE.md), Sprint Nexus A). Keeping it inside `image_forge_editor` will:
 
 - Slow editor releases on camera-only fixes
 - Force `camera` + `permission_handler` on static-photo apps
@@ -163,20 +163,20 @@ dependencies:
 
 | Area | Today |
 |------|--------|
-| Dart | `packages/rust_camera_runtime/lib/src/` — `live_camera_service.dart`, `camera_permission.dart`, `temporal_face_smoother.dart` |
+| Dart | `packages/image_forge_camera/lib/src/` — `live_camera_service.dart`, `camera_permission.dart`, `temporal_face_smoother.dart` |
 | Rust | `api/temporal.rs`, live upload paths in session that bypass JPEG |
 | Native | MediaPipe analyzers, face plugins (may stay shared with core face **analysis** API; runtime owns **stream** wiring) |
 
-**Depends on:** `rust_gpu_texture`, `rust_image_core` (beauty on surface), optional face analysis FRB.
+**Depends on:** `pixel_surface`, `image_forge` (beauty on surface), optional face analysis FRB.
 
 ---
 
 ## Hard boundaries (enforced in review)
 
-1. **`rust_gpu_texture` must not** import `face/`, `filters/`, or `edit_graph`.
-2. **`rust_image_core` must not** import `package:flutter` or register `TextureRegistry`.
-3. **`rust_image_editor` must not** duplicate wgpu device creation — only call core + texture APIs.
-4. **`rust_camera_runtime` must not** import editor panels or Riverpod; exposes a small Dart API (`CameraBeautySession`, `CameraPreview`, etc.).
+1. **`pixel_surface` must not** import `face/`, `filters/`, or `edit_graph`.
+2. **`image_forge` must not** import `package:flutter` or register `TextureRegistry`.
+3. **`image_forge_editor` must not** duplicate wgpu device creation — only call core + texture APIs.
+4. **`image_forge_camera` must not** import editor panels or Riverpod; exposes a small Dart API (`CameraBeautySession`, `CameraPreview`, etc.).
 5. **Face analysis** (still image) stays in core; **frame loop + smoothing** stays in camera runtime.
 
 ---
@@ -185,11 +185,11 @@ dependencies:
 
 | Phase | Deliverable | Rationale |
 |-------|-------------|-----------|
-| **P0.1** | Monorepo layout + CI per crate | `packages/rust_gpu_texture`, `packages/rust_image_core`, `packages/rust_image_editor` |
-| **P0.2** | Extract `rust_gpu_texture` | Clearest boundary; unblocks non-editor users; Sprint 22 texture code is fresh |
-| **P0.3** | **`packages/rust_image_core`** — engine + FRB + ffi plugin; `rust_image` path-dep only | **Done** — crates.io publish deferred; `rust_gpu_texture` Rust path dep wired |
-| **P0.4** | **`packages/rust_image_editor`**; `rust_image` re-exports editor | **Done** |
-| **P0.5** | Extract `rust_camera_runtime` | **Done** — [`packages/rust_camera_runtime/`](packages/rust_camera_runtime/); editor depends on it; `camera` / `permission_handler` removed from editor |
+| **P0.1** | Monorepo layout + CI per crate | `packages/pixel_surface`, `packages/image_forge`, `packages/image_forge_editor` |
+| **P0.2** | Extract `pixel_surface` | Clearest boundary; unblocks non-editor users; Sprint 22 texture code is fresh |
+| **P0.3** | **`packages/image_forge`** — engine + FRB + ffi plugin; `rust_image` path-dep only | **Done** — crates.io publish deferred; `pixel_surface` Rust path dep wired |
+| **P0.4** | **`packages/image_forge_editor`**; `rust_image` re-exports editor | **Done** |
+| **P0.5** | Extract `image_forge_camera` | **Done** — [`packages/image_forge_camera/`](packages/image_forge_camera/); editor depends on it; `camera` / `permission_handler` removed from editor |
 | **P0.6** | Docs, example apps per package, perf matrix per crate | **Done** — [P0_ACCEPTANCE.md](P0_ACCEPTANCE.md), [PACKAGE_PLATFORM_MATRIX.md](PACKAGE_PLATFORM_MATRIX.md), per-package CHANGELOG |
 
 **Do not** extract camera before texture + core boundaries are stable — camera is the highest coupling point.
@@ -200,10 +200,10 @@ dependencies:
 
 | Package | Semver policy |
 |---------|----------------|
-| `rust_gpu_texture` | Breaking: texture handle API, sync contract, min SDK |
-| `rust_image_core` | Breaking: FRB types, `EditGraph` serialization, shader uniforms |
-| `rust_image_editor` | Breaking: widget config, panel UX, provider names |
-| `rust_camera_runtime` | Breaking: stream config, permission model |
+| `pixel_surface` | Breaking: texture handle API, sync contract, min SDK |
+| `image_forge` | Breaking: FRB types, `EditGraph` serialization, shader uniforms |
+| `image_forge_editor` | Breaking: widget config, panel UX, provider names |
+| `image_forge_camera` | Breaking: stream config, permission model |
 
 **Pre-1.0:** Current `0.1.0` monolith can ship one `0.2.0` with split **or** go straight to `1.0.0` multi-package — prefer **no pub.dev publish** until P0.2–P0.4 complete so first public release is already split.
 
@@ -214,10 +214,10 @@ dependencies:
 ```text
 rust_image/                          # git monorepo (unchanged root)
 ├── packages/
-│   ├── rust_gpu_texture/            # Flutter plugin + rust/gpu_texture/
-│   ├── rust_image_core/             # rust/ + lib/src/rust/ (FRB)
-│   ├── rust_image_editor/           # lib/src/editor/ + example/
-│   └── rust_camera_runtime/         # P0.5
+│   ├── pixel_surface/            # Flutter plugin + rust/gpu_texture/
+│   ├── image_forge/             # rust/ + lib/src/rust/ (FRB)
+│   ├── image_forge_editor/           # lib/src/editor/ + example/
+│   └── image_forge_camera/         # P0.5
 ├── docs/
 │   ├── PUB_PACKAGE_SPLIT.md         # this file
 │   └── ...
@@ -230,23 +230,23 @@ Melos or plain `path:` dependencies for local dev; pub.dev publishes from each `
 
 ## Acceptance (ready to publish)
 
-- [x] `rust_gpu_texture` example: animated RGBA gradient in `Texture` with no `rust_image_core` — [`packages/rust_gpu_texture/example/`](packages/rust_gpu_texture/example/)
-- [x] `rust_image_core` example: RGBA filter + JPEG — [`packages/rust_image_core/example/`](packages/rust_image_core/example/); CLI via `rust_image_benchmark`
-- [x] `rust_image_editor` package: editor UI + tests; studio demo via `rust_image/example` (shim dep)
-- [x] Editor `pubspec` does not depend on `camera` / `permission_handler` directly — via `rust_camera_runtime`
+- [x] `pixel_surface` example: animated RGBA gradient in `Texture` with no `image_forge` — [`packages/pixel_surface/example/`](packages/pixel_surface/example/)
+- [x] `image_forge` example: RGBA filter + JPEG — [`packages/image_forge/example/`](packages/image_forge/example/); CLI via `rust_image_benchmark`
+- [x] `image_forge_editor` package: editor UI + tests; studio demo via `rust_image/example` (shim dep)
+- [x] Editor `pubspec` does not depend on `camera` / `permission_handler` directly — via `image_forge_camera`
 - [x] README per package with platform matrix — [PACKAGE_PLATFORM_MATRIX.md](PACKAGE_PLATFORM_MATRIX.md)
 - [x] CHANGELOG per package; root README links all four
 
 ---
 
-## Mapping from today’s monolith
+## Mapping from today's monolith
 
 | Today (`rust_image/`) | Target package |
 |------------------------|----------------|
-| `rust/` crate `rust_image_core` | **Package 2** (crate root moves) |
+| `rust/` crate `image_forge` | **Package 2** (crate root moves) |
 | `gpu/surface.rs`, texture API, texture plugins | **Package 1** |
 | `lib/src/editor/*` | **Package 3** |
-| `live_camera_service.dart`, temporal smoother | **Package 4** (`rust_camera_runtime`) |
+| `live_camera_service.dart`, temporal smoother | **Package 4** (`image_forge_camera`) |
 | YUV→RGBA camera worker (`convertCameraImage`) | **Package 3** for now (Squadron in editor) |
 | `face/` analysis (still) | **Package 2** |
 | `face/` smoothing + live mask stabilize | **Package 4** (calls core masks) |

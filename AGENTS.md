@@ -6,23 +6,23 @@ Instructions for AI agents working in this repository.
 
 - **Dart workspace** managed by `melos` (root `pubspec.yaml` has `melos:` config)
 - **Three Rust crates** — not a single Cargo workspace:
-  - `packages/rust_image_core/rust/` — image processing engine (standalone `Cargo.toml`)
-  - `packages/video_processor_core/rust/` — video engine (workspace root at `packages/video_processor_core/Cargo.toml`, member `rust/`)
-  - `packages/rust_media_runtime/rust/` — media playback engine (standalone `Cargo.toml`; FFmpeg + cpal for real-time video/audio decode and mixing)
+  - `packages/image_forge/rust/` — image processing engine (standalone `Cargo.toml`)
+  - `packages/video_forge/rust/` — video engine (workspace root at `packages/video_forge/Cargo.toml`, member `rust/`)
+  - `packages/media_forge/rust/` — media playback engine (standalone `Cargo.toml`; FFmpeg + cpal for real-time video/audio decode and mixing)
 
 ## Package boundaries
 
 
 | Package                   | Role                                        | Depends on                                         |
 | ------------------------- | ------------------------------------------- | -------------------------------------------------- |
-| `rust_gpu_texture`        | GPU Texture bridge only                     | —                                                  |
-| `rust_image_core`         | Rust engine + FRB APIs                     | `rust_gpu_texture`                                  |
-| `rust_image_editor`       | Editor UI (Riverpod)                       | `rust_image_core`, `rust_gpu_texture`, `rust_camera_runtime` |
-| `rust_camera_runtime`     | Live camera YUV stream                     | —                                                  |
-| `rust_media_runtime`      | Media playback runtime (decode, clock, texture, audio) | `rust_gpu_texture`                        |
-| `video_processor_core`    | Video Rust engine + FFmpeg                  | —                                                  |
-| `flutter_video_processor` | Video compress/thumbnails SDK               | `video_processor_core`, `rust_gpu_texture`, `video_thumbnail_cache` |
-| `video_thumbnail_cache`   | Optional disk cache                         | —                                                  |
+| `pixel_surface`        | GPU Texture bridge only                     | —                                                  |
+| `image_forge`         | Rust engine + FRB APIs                     | `pixel_surface`                                  |
+| `image_forge_editor`       | Editor UI (Riverpod)                       | `image_forge`, `pixel_surface`, `image_forge_camera` |
+| `image_forge_camera`     | Live camera YUV stream                     | —                                                  |
+| `media_forge`      | Media playback runtime (decode, clock, texture, audio) | `pixel_surface`                        |
+| `video_forge`    | Video Rust engine + FFmpeg                  | —                                                  |
+| `video_forge_kit` | Video compress/thumbnails SDK               | `video_forge`, `pixel_surface`, `video_forge_cache` |
+| `video_forge_cache`   | Optional disk cache                         | —                                                  |
 
 
 ## Logging & observability (required when writing code)
@@ -48,8 +48,8 @@ Use a **stable bracket tag** per subsystem, then a short message and key=value f
 | Layer | API | Example |
 | ----- | --- | ------- |
 | Dart / Flutter | `debugPrint` (or `kDebugMode` + `debugPrint`) | `debugPrint('[PreviewMux] ready ${durationMs}ms → $path');` |
-| Rust (`video_processor_core`, etc.) | `log::info!` / `warn!` / `error!` / `debug!` | `log::info!("[preview] seek target_ms={}", t);` |
-| Rust (`rust_media_runtime`) | `eprintln!` via `runtime_log!` macro | `runtime_log!("[AudioRuntime] cpal audio stream started successfully: rate={} channels={}", sample_rate, channels);` |
+| Rust (`video_forge`, etc.) | `log::info!` / `warn!` / `error!` / `debug!` | `log::info!("[preview] seek target_ms={}", t);` |
+| Rust (`media_forge`) | `eprintln!` via `runtime_log!` macro | `runtime_log!("[AudioRuntime] cpal audio stream started successfully: rate={} channels={}", sample_rate, channels);` |
 
 Rules:
 
@@ -92,11 +92,11 @@ Env knobs: `TEST_RUST_FEATURES` (default `gpu,blurhash`), `RUN_INTEGRATION=1`, `
 
 | **Layer**                      | **Command**                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| Rust image core                | `cd packages/rust_image_core/rust && cargo test --features gpu,blurhash`                        |
-| Rust video core                | `cd packages/video_processor_core && cargo test -p video_processor_core`                        |
-| Rust media runtime             | `cd packages/rust_media_runtime/rust && cargo test`                                              |
-| Dart unit tests (editor)       | `cd packages/rust_image_editor && flutter test test/editor/`                                                    |
-| Dart unit tests (media runtime) | `cd packages/rust_media_runtime && flutter test`                                                |
+| Rust image core                | `cd packages/image_forge/rust && cargo test --features gpu,blurhash`                        |
+| Rust video core                | `cd packages/video_forge && cargo test -p video_forge`                        |
+| Rust media runtime             | `cd packages/media_forge/rust && cargo test`                                              |
+| Dart unit tests (editor)       | `cd packages/image_forge_editor && flutter test test/editor/`                                                    |
+| Dart unit tests (media runtime) | `cd packages/media_forge && flutter test`                                                |
 | Dart integration               | `cd examples/image_editor && flutter test integration_test/ -d <device>`                           |
 | Dart analyze (all)              | `dart run melos analyze`                                                                        |
 
@@ -104,9 +104,9 @@ Env knobs: `TEST_RUST_FEATURES` (default `gpu,blurhash`), `RUN_INTEGRATION=1`, `
 ### **Per-package analyze via melos**
 
 ```
-dart run melos exec --scope=rust_image_editor -- flutter analyze lib test --no-fatal-infos --no-fatal-warnings
-dart run melos exec --scope=rust_gpu_texture -- flutter analyze --no-fatal-infos
-dart run melos exec --scope=rust_media_runtime -- flutter analyze --no-fatal-infos
+dart run melos exec --scope=image_forge_editor -- flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+dart run melos exec --scope=pixel_surface -- flutter analyze --no-fatal-infos
+dart run melos exec --scope=media_forge -- flutter analyze --no-fatal-infos
 ```
 
 ### **Benchmarks**
@@ -114,7 +114,7 @@ dart run melos exec --scope=rust_media_runtime -- flutter analyze --no-fatal-inf
 **Rust CLI (fastest, no Flutter):**
 
 ```
-cd packages/rust_image_core/rust
+cd packages/image_forge/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10
 ```
 
@@ -139,17 +139,17 @@ After editing `rust/src/api/*.rs`, regenerate Dart bindings:
 
 | Package | Command | Output |
 |---------|---------|--------|
-| `rust_image_core` | `cd packages/rust_image_core && flutter_rust_bridge_codegen generate` | `lib/src/rust/` |
-| `video_processor_core` | `cd packages/video_processor_core && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
-| `rust_media_runtime` | `cd packages/rust_media_runtime && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
+| `image_forge` | `cd packages/image_forge && flutter_rust_bridge_codegen generate` | `lib/src/rust/` |
+| `video_forge` | `cd packages/video_forge && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
+| `media_forge` | `cd packages/media_forge && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
 
 **Never edit generated** `frb_generated.rs` or `lib/src/rust/*.dart` or `lib/src/frb_generated/*.dart` — they are overwritten.
 
 FRB config per package: `flutter_rust_bridge.yaml` (rust_input: `crate::api`, dart_output varies by package).
 
-## **rust_media_runtime: real-time audio mixing**
+## **media_forge: real-time audio mixing**
 
-`rust_media_runtime` provides real-time overlay audio mixing via cpal (cross-platform audio I/O). The cpal callback mixes source video audio with overlay tracks in-process.
+`media_forge` provides real-time overlay audio mixing via cpal (cross-platform audio I/O). The cpal callback mixes source video audio with overlay tracks in-process.
 
 ### Architecture (simplified)
 
@@ -176,16 +176,16 @@ Background audio in `examples/media_studio` is **not** played by a second Flutte
 | ----- | ---- |
 | `video_creator_flow.dart` | Timeline UI, play/pause, seeks; calls preview mux when overlay tracks exist |
 | `preview_playback_mux.dart` | Builds a temporary MP4 via `VideoProcessor.compressJob` (same mix path as export) |
-| `video_processor_core` → `audio_mix.rs` | FFmpeg mix: original video audio + timeline `AudioTrackInput` lanes → one AAC stream |
+| `video_forge` → `audio_mix.rs` | FFmpeg mix: original video audio + timeline `AudioTrackInput` lanes → one AAC stream |
 | `NativePlaybackController` | Single `video_player` instance plays either the source file or the muxed preview file |
 
 **Design rule (CapCut / Instagram style):** one playback clock, one mixed soundtrack for preview — not `video_player` + `just_audio` fighting for the macOS audio session.
 
-When using the **Rust backend** (`_useRustBackend = true`), overlays are mixed in real-time by `rust_media_runtime`'s cpal callback — no preview mux is needed. The `syncOverlayTracks()` method on `RustBackend` adds/removes overlay tracks directly.
+When using the **Rust backend** (`_useRustBackend = true`), overlays are mixed in real-time by `media_forge`'s cpal callback — no preview mux is needed. The `syncOverlayTracks()` method on `RustBackend` adds/removes overlay tracks directly.
 
 **After changing Rust in `audio_mix.rs` or transcode:** hot restart is **not** enough. Rebuild native video core and re-run the app (e.g. `./scripts/run-video-macos.sh`). Old `preview_*.mp4` files in cache may have been built with a previous buggy encoder; delete `~/Library/Caches/.../preview_mux/` or add a new track to force a fresh mux.
 
-**After changing Rust in `rust_media_runtime/rust/src/api/runtime.rs`:** rebuild the native media core and re-run (e.g. `./scripts/run-rust-media-macos.sh`).
+**After changing Rust in `media_forge/rust/src/api/runtime.rs`:** rebuild the native media core and re-run (e.g. `./scripts/run-rust-media-macos.sh`).
 
 See also: `docs/VIDEO_MEDIA_RUNTIME.md` (audio roadmap A-2/A-3).
 
@@ -288,13 +288,13 @@ Follow **Logging & observability** above. These tags already exist for overlay-a
 | --- | ---- | --------- |
 | `[PreviewMux]` | `examples/media_studio/lib/services/preview_playback_mux.dart` | Cache miss, job start, `ready`, failures |
 | `[PreviewMux]` | `examples/media_studio/lib/video_creator_flow.dart` | `ensure ready`, `opened muxed=`, reopen decisions |
-| `[NativePlayback]` | `packages/flutter_video_processor/lib/src/playback/native_playback_controller.dart` | `open`, `volume`, `play` |
-| `[AudioRuntime]` | `packages/rust_media_runtime/rust/src/api/runtime.rs` | `cpal audio stream started`, `Muted=`, overlay add/remove |
-| `[OverlayDemuxer]` | `packages/rust_media_runtime/rust/src/api/runtime.rs` | Overlay demuxer seek/start/finish |
-| `[MediaPlaybackEngine]` | `packages/rust_media_runtime/rust/src/api/runtime.rs` | `Starting runtimes`, `Trim range set`, `Seeking to` |
+| `[NativePlayback]` | `packages/video_forge_kit/lib/src/playback/native_playback_controller.dart` | `open`, `volume`, `play` |
+| `[AudioRuntime]` | `packages/media_forge/rust/src/api/runtime.rs` | `cpal audio stream started`, `Muted=`, overlay add/remove |
+| `[OverlayDemuxer]` | `packages/media_forge/rust/src/api/runtime.rs` | Overlay demuxer seek/start/finish |
+| `[MediaPlaybackEngine]` | `packages/media_forge/rust/src/api/runtime.rs` | `Starting runtimes`, `Trim range set`, `Seeking to` |
 | `[RustBackend]` | `examples/media_studio/lib/services/rust_backend.dart` | `addOverlayAudio`, `removeOverlayAudio`, `setEmbeddedAudioMuted` |
 
-Rust side: `log::` in `packages/video_processor_core/rust/src/pipeline/` (preview, transcode, `audio_mix`); `runtime_log!` (eprintln) in `packages/rust_media_runtime/rust/src/api/runtime.rs`.
+Rust side: `log::` in `packages/video_forge/rust/src/pipeline/` (preview, transcode, `audio_mix`); `runtime_log!` (eprintln) in `packages/media_forge/rust/src/api/runtime.rs`.
 
 ### Example healthy sequence (copy when verifying fixes) — Native backend
 
@@ -327,12 +327,12 @@ If audio sequence appears but source audio is silent while overlay plays, check 
 
 - **AVIF encoder needs NASM** — builds fail on hosts without it. Use `TEST_RUST_FEATURES=gpu,blurhash` (no avif) unless NASM is installed.
 - **Android builds require** `rustup`, not Homebrew `rustc`. The repo has `rust/rust-toolchain.toml` for auto-installing Android targets. If you see `can't find crate for core`, run `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`.
-- **Three Rust crate roots** — `packages/rust_image_core/rust/` standalone; `packages/video_processor_core/Cargo.toml` workspace root with `rust/` member; `packages/rust_media_runtime/rust/` standalone.
+- **Three Rust crate roots** — `packages/image_forge/rust/` standalone; `packages/video_forge/Cargo.toml` workspace root with `rust/` member; `packages/media_forge/rust/` standalone.
 - `dart run` **does not work** for FRB-based benchmarks or apps. Always use `flutter run` or `flutter test`.
 - **First Android build** compiles Rust for each ABI — can take several minutes.
 - **Melos bootstrap** required after cloning: `dart pub get && dart run melos bootstrap`.
-- **rust_media_runtime needs FFmpeg with VideoToolbox** for HW decode on macOS. Run `bash scripts/build-ffmpeg-macos-vt.sh` first, then `bash scripts/run-rust-media-macos.sh`. Homebrew FFmpeg works for SW decode but lacks `hevc_videotoolbox` HW accel.
-- **rust_media_runtime is not yet in CI** — `.github/workflows/ci.yml` does not include `rust_media_runtime` analyze/test steps. Run them manually: `cd packages/rust_media_runtime && flutter analyze --no-fatal-infos` and `cd packages/rust_media_runtime/rust && cargo test`.
+- **media_forge needs FFmpeg with VideoToolbox** for HW decode on macOS. Run `bash scripts/build-ffmpeg-macos-vt.sh` first, then `bash scripts/run-rust-media-macos.sh`. Homebrew FFmpeg works for SW decode but lacks `hevc_videotoolbox` HW accel.
+- **media_forge is not yet in CI** — `.github/workflows/ci.yml` does not include `media_forge` analyze/test steps. Run them manually: `cd packages/media_forge && flutter analyze --no-fatal-infos` and `cd packages/media_forge/rust && cargo test`.
 
 ## **CI**
 

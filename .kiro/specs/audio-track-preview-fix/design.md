@@ -271,7 +271,7 @@ If the audio track is removed from the timeline while `_ensureAudioPreviewContro
 ## Dependencies
 
 - `video_player` Flutter package — used for `VideoPlayerController` to play the audio file.
-- `NativePlaybackController` (from `flutter_video_processor`) — the primary video player whose listener triggers drift maintenance.
+- `NativePlaybackController` (from `video_forge_kit`) — the primary video player whose listener triggers drift maintenance.
 - `TimelineController` — manages audio clips and fires `_onTimelineUpdated` on any timeline change.
 - `dart:async` `unawaited()` — used for fire-and-forget calls from synchronous contexts.
 

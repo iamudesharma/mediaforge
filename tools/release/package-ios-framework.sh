@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Package libvideo_processor_core for iOS device (physical iPhone).
+# Package libvideo_forge for iOS device (physical iPhone).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CORE_PKG="${REPO_ROOT}/packages/video_processor_core"
+CORE_PKG="${REPO_ROOT}/packages/video_forge"
 TRIPLE="aarch64-apple-ios"
 FFMPEG_DIR="${REPO_ROOT}/tools/ffmpeg/dist/apple/${TRIPLE}"
 
@@ -17,11 +17,11 @@ export CXX_aarch64_apple_ios="xcrun -sdk iphoneos clang++"
 export AR_aarch64_apple_ios="xcrun -sdk iphoneos ar"
 export CFLAGS_aarch64_apple_ios="-arch arm64 -miphoneos-version-min=16.0 -isysroot ${SDK_PATH}"
 export LDFLAGS_aarch64_apple_ios="-arch arm64 -miphoneos-version-min=16.0 -isysroot ${SDK_PATH}"
-export RUSTFLAGS_aarch64_apple_ios="-C link-arg=-miphoneos-version-min=16.0 -C link-arg=-isysroot -C link-arg=${SDK_PATH} -C link-arg=-Wl,-install_name,@rpath/video_processor_core.framework/video_processor_core"
+export RUSTFLAGS_aarch64_apple_ios="-C link-arg=-miphoneos-version-min=16.0 -C link-arg=-isysroot -C link-arg=${SDK_PATH} -C link-arg=-Wl,-install_name,@rpath/video_forge.framework/video_forge"
 export BINDGEN_EXTRA_CLANG_ARGS="-arch arm64 -miphoneos-version-min=16.0 -isysroot ${SDK_PATH} -I${FFMPEG_DIR}/include"
 export RUSTUP_TOOLCHAIN="${RUSTUP_TOOLCHAIN:-1.88.0}"
 
-FRAMEWORK_NAME="video_processor_core"
+FRAMEWORK_NAME="video_forge"
 FRAMEWORK_DIR="${CORE_PKG}/ios/Frameworks/${FRAMEWORK_NAME}.framework"
 MANIFEST="${CORE_PKG}/rust/Cargo.toml"
 
@@ -48,7 +48,7 @@ FFMPEG_DIR="${FFMPEG_DIR}" \
   PKG_CONFIG_ALLOW_CROSS=1 \
   "${CARGO}" build --release \
     --manifest-path "${MANIFEST}" \
-    -p video_processor_core \
+    -p video_forge \
     --lib \
     --target "${TRIPLE}"
 

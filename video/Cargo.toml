@@ -1,13 +1,13 @@
-# Rust workspace lives in packages/video_processor_core/Cargo.toml
+# Rust workspace lives in packages/video_forge/Cargo.toml
 [workspace]
-members = ["../packages/video_processor_core/rust"]
+members = ["../packages/video_forge/rust"]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"
-authors = ["flutter_video_processor contributors"]
+authors = ["video_forge_kit contributors"]
 
 [workspace.dependencies]
 anyhow = "1.0"

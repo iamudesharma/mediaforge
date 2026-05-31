@@ -1,0 +1,43 @@
+name: video_forge_kit
+resolution: workspace
+description: >
+  High-performance cross-platform video processing for Flutter — compress,
+  transcode, thumbnails, and job queue. Native engine in video_forge.
+version: 0.2.0
+homepage: https://github.com/iamudesharma/rust_image
+repository: https://github.com/iamudesharma/rust_image
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_rust_bridge: 2.12.0
+  video_player: ^2.9.2
+  pixel_surface:
+    path: ../pixel_surface
+  video_forge:
+    path: ../video_forge
+  video_forge_cache:
+    path: ../video_forge_cache
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        default_package: video_forge
+      ios:
+        default_package: video_forge
+      linux:
+        default_package: video_forge
+      macos:
+        default_package: video_forge
+      windows:
+        default_package: video_forge

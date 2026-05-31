@@ -1,6 +1,6 @@
 ---
 name: project-workflows
-description: Use when the user asks how to run any example in the repo, regenerate flutter_rust_bridge (FRB) bindings, run benchmarks, build FFmpeg, or rebuild native Rust for a specific platform. Covers media_studio, flutter_video_processor, rust_image_core, rust_media_runtime, rust_gpu_texture examples, Rust CLI benchmarks, and Dart benchmark suite.
+description: Use when the user asks how to run any example in the repo, regenerate flutter_rust_bridge (FRB) bindings, run benchmarks, build FFmpeg, or rebuild native Rust for a specific platform. Covers media_studio, video_forge_kit, image_forge, media_forge, pixel_surface examples, Rust CLI benchmarks, and Dart benchmark suite.
 ---
 
 # Project Workflows
@@ -9,15 +9,15 @@ description: Use when the user asks how to run any example in the repo, regenera
 
 | Package | Command |
 |---------|---------|
-| `rust_image_core` | `cd packages/rust_image_core && flutter_rust_bridge_codegen generate` |
-| `video_processor_core` | `cd packages/video_processor_core && flutter_rust_bridge_codegen generate` |
-| `rust_media_runtime` | `cd packages/rust_media_runtime && flutter_rust_bridge_codegen generate` |
+| `image_forge` | `cd packages/image_forge && flutter_rust_bridge_codegen generate` |
+| `video_forge` | `cd packages/video_forge && flutter_rust_bridge_codegen generate` |
+| `media_forge` | `cd packages/media_forge && flutter_rust_bridge_codegen generate` |
 
 **Never edit** generated `frb_generated.rs`, `lib/src/rust/*.dart`, or `lib/src/frb_generated/*.dart`.
 
 Some scripts run codegen automatically:
-- `scripts/rebuild-video-native-macos.sh` → runs `video_processor_core` codegen
-- `scripts/run-rust-media-macos.sh` → runs `rust_media_runtime` codegen
+- `scripts/rebuild-video-native-macos.sh` → runs `video_forge` codegen
+- `scripts/run-rust-media-macos.sh` → runs `media_forge` codegen
 
 The legacy `rust_image/flutter_rust_bridge.yaml` and `rust video/native/rust_core/flutter_rust_bridge.yaml` are **not active** — do not use them.
 
@@ -45,12 +45,12 @@ bash scripts/run-media-studio-android.sh --all [device_id]
 cd examples/media_studio && flutter run -d macos
 ```
 
-### flutter_video_processor example
+### video_forge_kit example
 
 ```bash
 bash scripts/run-video-macos.sh
 # Or:
-cd packages/flutter_video_processor/example && flutter run -d macos
+cd packages/video_forge_kit/example && flutter run -d macos
 
 # iOS:
 ./scripts/run-ios.sh [device_id]
@@ -60,7 +60,7 @@ cd packages/flutter_video_processor/example && flutter run -d macos
 ./scripts/run-android.sh --all [device_id]
 ```
 
-### rust_media_runtime example
+### media_forge example
 
 ```bash
 # One-time FFmpeg build (VT-capable, ~30-60 min):
@@ -79,17 +79,17 @@ VFP_DISABLE_HW_DECODE=1 flutter run -d macos
 cd rust_image/example && flutter run -d macos
 ```
 
-### rust_image_core example
+### image_forge example
 
 ```bash
-cd packages/rust_image_core/rust && cargo build --features gpu
+cd packages/image_forge/rust && cargo build --features gpu
 cd ../example && flutter run -d macos
 ```
 
-### rust_gpu_texture example
+### pixel_surface example
 
 ```bash
-cd packages/rust_gpu_texture/example && flutter run -d macos
+cd packages/pixel_surface/example && flutter run -d macos
 ```
 
 ---
@@ -99,7 +99,7 @@ cd packages/rust_gpu_texture/example && flutter run -d macos
 ### Rust CLI (fastest, no Flutter)
 
 ```bash
-cd packages/rust_image_core/rust
+cd packages/image_forge/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10
 # Single op:
 cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10 --only filter_rgba_blur --warmup 1
@@ -119,9 +119,9 @@ BENCH_PIPELINE=both ./run_dart_benchmark.sh    # both paths
 ### Video CLI benchmarks
 
 ```bash
-cd packages/video_processor_core
-cargo run --release -p video_processor_core --bin vp_compress -- <args>
-cargo run --release -p video_processor_core --bin vp_bench -- <args>
+cd packages/video_forge
+cargo run --release -p video_forge --bin vp_compress -- <args>
+cargo run --release -p video_forge --bin vp_bench -- <args>
 ```
 
 ---
@@ -149,19 +149,19 @@ Env knobs: `TEST_RUST_FEATURES` (default `gpu,blurhash`), `RUN_INTEGRATION=1`, `
 
 ```bash
 # Rust image core
-cd packages/rust_image_core/rust && cargo test --features gpu,blurhash
+cd packages/image_forge/rust && cargo test --features gpu,blurhash
 
 # Rust video core
-cd packages/video_processor_core && cargo test -p video_processor_core
+cd packages/video_forge && cargo test -p video_forge
 
 # Rust media runtime
-cd packages/rust_media_runtime/rust && cargo test
+cd packages/media_forge/rust && cargo test
 
 # Dart unit tests (editor)
 cd rust_image && flutter test test/editor/
 
 # Dart unit tests (media runtime)
-cd packages/rust_media_runtime && flutter test
+cd packages/media_forge && flutter test
 
 # Dart integration
 cd rust_image/example && flutter test integration_test/ -d <device>
@@ -172,5 +172,5 @@ cd rust_image/example && flutter test integration_test/ -d <device>
 ```bash
 dart run melos analyze
 # Per-package:
-dart run melos exec --scope=rust_image_editor -- flutter analyze lib test --no-fatal-infos --no-fatal-warnings
+dart run melos exec --scope=image_forge_editor -- flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 ```

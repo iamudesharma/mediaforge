@@ -1,0 +1,15 @@
+# Run with `dart run ffigen --config ffigen.yaml`.
+name: VideoForgeKitBindings
+description: |
+  Bindings for `src/video_forge_kit.h`.
+
+  Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
+output: 'lib/video_forge_kit_bindings_generated.dart'
+headers:
+  entry-points:
+    - 'src/video_forge_kit.h'
+  include-directives:
+    - 'src/video_forge_kit.h'
+comments:
+  style: any
+  length: full

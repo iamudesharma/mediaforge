@@ -1,0 +1,32 @@
+[package]
+name = "media_forge"
+version = "0.1.0"
+edition = "2021"
+description = "Media playback runtime engine"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+name = "media_forge"
+
+[dependencies]
+anyhow = "1.0"
+thiserror = "2.0"
+tokio = { version = "1.43", features = ["rt-multi-thread", "sync", "time"] }
+parking_lot = "0.12"
+flutter_rust_bridge = "=2.12.0"
+ffmpeg-next = "8.1.0"
+log = "0.4"
+env_logger = "0.11"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+cpal = "0.15"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[[bin]]
+name = "media_bench"
+path = "src/bin/media_bench.rs"
+
+[dev_dependencies]
+tempfile = "3.14"

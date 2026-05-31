@@ -11,8 +11,8 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-FRAMEWORK="${OUT}/VideoProcessorCore.xcframework"
-LIB_NAME="libvideo_processor_core.a"
+FRAMEWORK="${OUT}/VideoForge.xcframework"
+LIB_NAME="libvideo_forge.a"
 
 # Build Rust static libs for Apple targets
 cd "${ROOT}/native/rust_core"

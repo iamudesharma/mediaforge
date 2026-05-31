@@ -885,7 +885,7 @@ test('concurrent play and maintainDrift calls initialize each clip exactly once'
 |---|---|---|
 | `just_audio` | `^0.9.40` | Primary audio-only player — fast startup, precise seeking |
 | `video_player` | `^2.9.2` (existing) | Fallback `TrackPlayer` implementation |
-| `flutter_video_processor` | path dep (existing) | `NativePlaybackController`, `TimelineController`, `AudioTimelineClip` |
+| `video_forge_kit` | path dep (existing) | `NativePlaybackController`, `TimelineController`, `AudioTimelineClip` |
 | `dart:async` `unawaited` | stdlib | Fire-and-forget calls from synchronous contexts |
 | `propcheck` | `^0.x` (dev) | Property-based testing library for Dart |
 

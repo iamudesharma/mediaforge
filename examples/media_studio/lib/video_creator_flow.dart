@@ -6,7 +6,7 @@ import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_video_processor/flutter_video_processor.dart';
+import 'package:video_forge_kit/video_forge_kit.dart';
 import 'package:path/path.dart' as p;
 import 'services/media_ingest.dart';
 import 'services/playback_backend.dart';
@@ -216,7 +216,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     PreviewPlaybackMux.invalidate();
   }
 
-  /// Switch between Native (video_player) and Rust (rust_media_runtime) backends.
+  /// Switch between Native (video_player) and Rust (media_forge) backends.
   Future<void> _toggleBackend() async {
     final useRust = !_useRustBackend;
     final wasPlaying = _useRustBackend

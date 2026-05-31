@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:rust_image_benchmark_runner/rust_image_benchmark.dart';
+import 'package:rust_image_benchmark_runner/media_forge_benchmark.dart';
 
 /// How Dart reaches Rust — mirrors what you measure in production.
 enum BenchmarkPipeline {
