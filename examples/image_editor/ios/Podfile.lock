@@ -1,0 +1,39 @@
+PODS:
+  - Flutter (1.0.0)
+  - MediaPipeTasksCommon (0.10.14)
+  - MediaPipeTasksVision (0.10.14):
+    - MediaPipeTasksCommon (= 0.10.14)
+  - permission_handler_apple (9.3.0):
+    - Flutter
+  - rust_image (0.0.1):
+    - Flutter
+    - MediaPipeTasksVision (= 0.10.14)
+
+DEPENDENCIES:
+  - Flutter (from `Flutter`)
+  - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
+  - rust_image (from `.symlinks/plugins/rust_image/ios`)
+
+SPEC REPOS:
+  trunk:
+    - MediaPipeTasksCommon
+    - MediaPipeTasksVision
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  permission_handler_apple:
+    :path: ".symlinks/plugins/permission_handler_apple/ios"
+  rust_image:
+    :path: ".symlinks/plugins/rust_image/ios"
+
+SPEC CHECKSUMS:
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  MediaPipeTasksCommon: 5660099c2dd81f7ac4a7a5f51055785ead8e0e64
+  MediaPipeTasksVision: 0fac0db83c0b45e4d7811a9227be5e571403cf83
+  permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
+  rust_image: 569769eb16bb83b3110e5995e105a1770ebeb1db
+
+PODFILE CHECKSUM: fb1fe5bffa4579334e126b31943d652811370b13
+
+COCOAPODS: 1.16.2
