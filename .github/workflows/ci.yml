@@ -51,5 +51,8 @@ jobs:
       - name: Test video_forge_cache
         run: dart run melos exec --scope=video_forge_cache -- flutter test
 
+      - name: Install FFmpeg (Rust video_forge)
+        run: sudo apt-get update && sudo apt-get install -y libavcodec-dev libavformat-dev libavfilter-dev libavutil-dev libswscale-dev libswresample-dev
+
       - name: Rust video_forge
         run: cd packages/video_forge && cargo test -p video_forge
