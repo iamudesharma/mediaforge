@@ -918,6 +918,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "media_forge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cpal",
+ "env_logger",
+ "ffmpeg-next",
+ "flutter_rust_bridge",
+ "jni",
+ "log",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1220,25 +1239,6 @@ name = "regex-syntax"
 version = "0.8.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
-
-[[package]]
-name = "rust_media_runtime"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cpal",
- "env_logger",
- "ffmpeg-next",
- "flutter_rust_bridge",
- "jni",
- "log",
- "parking_lot",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
 
 [[package]]
 name = "rustc-demangle"

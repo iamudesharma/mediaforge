@@ -73,10 +73,10 @@ bash scripts/run-rust-media-macos.sh
 VFP_DISABLE_HW_DECODE=1 flutter run -d macos
 ```
 
-### rust_image example (thin shim)
+### mediaforge example
 
 ```bash
-cd rust_image/example && flutter run -d macos
+cd mediaforge/example && flutter run -d macos
 ```
 
 ### image_forge example
@@ -108,7 +108,7 @@ cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 
 ### Dart/Flutter benchmarks (must run inside Flutter, not `dart run`)
 
 ```bash
-cd rust_image/benchmark
+cd mediaforge/benchmark
 ./run_dart_benchmark.sh                     # direct FRB calls
 BENCH_PIPELINE=worker ./run_dart_benchmark.sh  # editor isolate path
 BENCH_PIPELINE=both ./run_dart_benchmark.sh    # both paths
@@ -164,7 +164,7 @@ cd rust_image && flutter test test/editor/
 cd packages/media_forge && flutter test
 
 # Dart integration
-cd rust_image/example && flutter test integration_test/ -d <device>
+cd mediaforge/example && flutter test integration_test/ -d <device>
 ```
 
 ### Melos analyze

@@ -48,7 +48,7 @@ Flutter Texture / RGBA preview → encode once on export
 | Android | MediaPipe AAR + Kotlin Tasks API (Nexus D) |
 | Desktop fallback | Vision on Apple; no-op beauty on other desktops |
 
-Models: optional download via [`scripts/download_mediapipe_models.sh`](../rust_image/scripts/download_mediapipe_models.sh) → `darwin/Resources/mediapipe/`.
+Models: optional download via [`scripts/download_mediapipe_models.sh`](../mediaforge/scripts/download_mediapipe_models.sh) → `darwin/Resources/mediapipe/`.
 
 ---
 

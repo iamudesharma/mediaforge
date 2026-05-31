@@ -10,7 +10,7 @@ Use this before the first pub.dev release of the four-package split. See [PUB_PA
 |-------|----------------|
 | **pixel_surface** — Texture only, no core | `cd packages/pixel_surface/example && flutter run -d macos` |
 | **image_forge** — RGBA filter + JPEG export | `cd packages/image_forge/example && flutter run -d macos` |
-| **image_forge_editor** — full UI | `cd rust_image/example && flutter run -d macos` |
+| **image_forge_editor** — full UI | `cd mediaforge/example && flutter run -d macos` |
 | **image_forge_camera** — unit smoke | `cd packages/image_forge_camera && flutter test` |
 
 ### Engine CLI (no Flutter UI)
@@ -56,14 +56,14 @@ See [PACKAGE_PLATFORM_MATRIX.md](PACKAGE_PLATFORM_MATRIX.md).
 |---------|--------|-----------|---------|
 | `pixel_surface` | [packages/pixel_surface/README.md](../packages/pixel_surface/README.md) | [CHANGELOG.md](../packages/pixel_surface/CHANGELOG.md) | [example/](../packages/pixel_surface/example/) |
 | `image_forge` | [packages/image_forge/README.md](../packages/image_forge/README.md) | [CHANGELOG.md](../packages/image_forge/CHANGELOG.md) | [example/](../packages/image_forge/example/) |
-| `image_forge_editor` | [packages/image_forge_editor/README.md](../packages/image_forge_editor/README.md) | [CHANGELOG.md](../packages/image_forge_editor/CHANGELOG.md) | [rust_image/example/](../rust_image/example/) |
+| `image_forge_editor` | [packages/image_forge_editor/README.md](../packages/image_forge_editor/README.md) | [CHANGELOG.md](../packages/image_forge_editor/CHANGELOG.md) | [mediaforge/example/](../mediaforge/example/) |
 | `image_forge_camera` | [packages/image_forge_camera/README.md](../packages/image_forge_camera/README.md) | [CHANGELOG.md](../packages/image_forge_camera/CHANGELOG.md) | (via editor Beauty → Live camera) |
 
 ---
 
 ## Perf matrix (studio)
 
-After editor changes, run scenarios in [ROADMAP.md](../ROADMAP.md#perf-matrix) on **rust_image Studio** (`rust_image/example`).
+After editor changes, run scenarios in [ROADMAP.md](../ROADMAP.md#perf-matrix) on **mediaforge Studio** (`mediaforge/example`).
 
 ---
 

@@ -42,7 +42,7 @@ post_install do |installer|
   exclude_x86_macos = `uname -m`.strip == 'arm64'
   rust_force_load = [
     '$(inherited)',
-    '-force_load', '$(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a',
+    '-force_load', '$(PODS_CONFIGURATION_BUILD_DIR)/image_forge/libimage_forge.a',
     '-Wl,-u,_frb_get_rust_content_hash',
     '-Wl,-u,_rust_image_link_rust_for_frb',
   ]
@@ -74,14 +74,14 @@ post_install do |installer|
 
   # Static CocoaPods frameworks do not always honor pod OTHER_LDFLAGS force_load;
   # link the Rust archive when building the app as well.
-  rust_ld_append = ' -force_load $(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a -Wl,-u,_frb_get_rust_content_hash -Wl,-u,_rust_image_link_rust_for_frb'
+  rust_ld_append = ' -force_load $(PODS_CONFIGURATION_BUILD_DIR)/image_forge/libimage_forge.a -Wl,-u,_frb_get_rust_content_hash -Wl,-u,_rust_image_link_rust_for_frb'
   installer.aggregate_targets.each do |aggregate_target|
     aggregate_target.xcconfigs.each do |config_name, xcconfig|
       xcconfig_path = aggregate_target.xcconfig_path(config_name)
       next unless File.exist?(xcconfig_path)
 
       lines = File.readlines(xcconfig_path)
-      next if lines.any? { |l| l.include?('librust_image_core.a') }
+      next if lines.any? { |l| l.include?('libimage_forge.a') }
 
       updated = lines.map do |line|
         if line.start_with?('OTHER_LDFLAGS =')

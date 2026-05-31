@@ -1,24 +1,27 @@
 PODS:
   - Flutter (1.0.0)
+  - image_forge (0.0.1):
+    - Flutter
+    - MediaPipeTasksVision (= 0.10.14)
+  - media_forge (0.1.0):
+    - Flutter
   - MediaPipeTasksCommon (0.10.14)
   - MediaPipeTasksVision (0.10.14):
     - MediaPipeTasksCommon (= 0.10.14)
   - permission_handler_apple (9.3.0):
     - Flutter
-  - rust_gpu_texture (0.1.0):
+  - pixel_surface (1.0.0):
     - Flutter
-  - rust_image_core (0.0.1):
-    - Flutter
-    - MediaPipeTasksVision (= 0.10.14)
-  - video_processor_core (0.1.0):
+  - video_forge (1.0.0):
     - Flutter
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
+  - image_forge (from `.symlinks/plugins/image_forge/ios`)
+  - media_forge (from `.symlinks/plugins/media_forge/ios`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
-  - rust_gpu_texture (from `.symlinks/plugins/rust_gpu_texture/ios`)
-  - rust_image_core (from `.symlinks/plugins/rust_image_core/ios`)
-  - video_processor_core (from `.symlinks/plugins/video_processor_core/ios`)
+  - pixel_surface (from `.symlinks/plugins/pixel_surface/ios`)
+  - video_forge (from `.symlinks/plugins/video_forge/ios`)
 
 SPEC REPOS:
   trunk:
@@ -28,23 +31,26 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
+  image_forge:
+    :path: ".symlinks/plugins/image_forge/ios"
+  media_forge:
+    :path: ".symlinks/plugins/media_forge/ios"
   permission_handler_apple:
     :path: ".symlinks/plugins/permission_handler_apple/ios"
-  rust_gpu_texture:
-    :path: ".symlinks/plugins/rust_gpu_texture/ios"
-  rust_image_core:
-    :path: ".symlinks/plugins/rust_image_core/ios"
-  video_processor_core:
-    :path: ".symlinks/plugins/video_processor_core/ios"
+  pixel_surface:
+    :path: ".symlinks/plugins/pixel_surface/ios"
+  video_forge:
+    :path: ".symlinks/plugins/video_forge/ios"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  image_forge: 2ce76d6eadba1307629f5a262c2fe6ee25d1581d
+  media_forge: 7cd854ecf254be2974b32eac453ebc4e0ce394ed
   MediaPipeTasksCommon: 5660099c2dd81f7ac4a7a5f51055785ead8e0e64
   MediaPipeTasksVision: 0fac0db83c0b45e4d7811a9227be5e571403cf83
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  rust_gpu_texture: dee07d375b50eaa38bec7cee88479731f8cb3d52
-  rust_image_core: 26ad278629f844f02d269424a3cff94210b197c1
-  video_processor_core: 407ea75d5d176fa703f50d0d732c219186ba8cfc
+  pixel_surface: 7746ffb0d1bd664ded815edf2176dfd5d2acdd92
+  video_forge: 20e687758c186a16e2881198ba991605e668dbda
 
 PODFILE CHECKSUM: 1857a7cdb7dfafe45f2b0e9a9af44644190f7506
 

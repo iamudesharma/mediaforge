@@ -4,7 +4,7 @@
 
 **Goal:** Four independently versioned packages with hard dependency boundaries. Host apps choose only what they need (texture-only, engine-only, full editor, or camera SDK).
 
-**Related:** [ROADMAP.md](../ROADMAP.md) — Sprint P0 (Package split), current [rust_image/README.md](../rust_image/README.md).
+**Related:** [ROADMAP.md](../ROADMAP.md) — Sprint P0 (Package split), current [mediaforge/README.md](../mediaforge/README.md).
 
 ---
 
@@ -212,7 +212,7 @@ dependencies:
 ## Repository layout (target)
 
 ```text
-rust_image/                          # git monorepo (unchanged root)
+mediaforge/                          # git monorepo (unchanged root)
 ├── packages/
 │   ├── pixel_surface/            # Flutter plugin + rust/gpu_texture/
 │   ├── image_forge/             # rust/ + lib/src/rust/ (FRB)
@@ -232,7 +232,7 @@ Melos or plain `path:` dependencies for local dev; pub.dev publishes from each `
 
 - [x] `pixel_surface` example: animated RGBA gradient in `Texture` with no `image_forge` — [`packages/pixel_surface/example/`](packages/pixel_surface/example/)
 - [x] `image_forge` example: RGBA filter + JPEG — [`packages/image_forge/example/`](packages/image_forge/example/); CLI via `rust_image_benchmark`
-- [x] `image_forge_editor` package: editor UI + tests; studio demo via `rust_image/example` (shim dep)
+- [x] `image_forge_editor` package: editor UI + tests; studio demo via `mediaforge/example` (shim dep)
 - [x] Editor `pubspec` does not depend on `camera` / `permission_handler` directly — via `image_forge_camera`
 - [x] README per package with platform matrix — [PACKAGE_PLATFORM_MATRIX.md](PACKAGE_PLATFORM_MATRIX.md)
 - [x] CHANGELOG per package; root README links all four
@@ -241,7 +241,7 @@ Melos or plain `path:` dependencies for local dev; pub.dev publishes from each `
 
 ## Mapping from today's monolith
 
-| Today (`rust_image/`) | Target package |
+| Today (`mediaforge/`) | Target package |
 |------------------------|----------------|
 | `rust/` crate `image_forge` | **Package 2** (crate root moves) |
 | `gpu/surface.rs`, texture API, texture plugins | **Package 1** |

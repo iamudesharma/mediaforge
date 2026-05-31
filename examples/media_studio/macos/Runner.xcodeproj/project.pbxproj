@@ -595,7 +595,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-force_load",
-					"$(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a",
+					"$(PODS_CONFIGURATION_BUILD_DIR)/image_forge/libimage_forge.a",
 					"-Wl,-u,_frb_get_rust_content_hash",
 					"-Wl,-u,_rust_image_link_rust_for_frb",
 				);
@@ -739,7 +739,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-force_load",
-					"$(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a",
+					"$(PODS_CONFIGURATION_BUILD_DIR)/image_forge/libimage_forge.a",
 					"-Wl,-u,_frb_get_rust_content_hash",
 					"-Wl,-u,_rust_image_link_rust_for_frb",
 				);
@@ -770,7 +770,7 @@
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-force_load",
-					"$(PODS_CONFIGURATION_BUILD_DIR)/rust_image_core/librust_image_core.a",
+					"$(PODS_CONFIGURATION_BUILD_DIR)/image_forge/libimage_forge.a",
 					"-Wl,-u,_frb_get_rust_content_hash",
 					"-Wl,-u,_rust_image_link_rust_for_frb",
 				);

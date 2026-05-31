@@ -1,4 +1,4 @@
-# rust_image benchmarks
+# mediaforge benchmarks
 
 ## Why not `dart run` or plain Node?
 
@@ -15,7 +15,7 @@ Plain **`dart run` does not work** here: the Dart VM’s FFI compiler crashes on
 
 ## What to run (Flutter — recommended)
 
-From `rust_image/benchmark`:
+From `mediaforge/benchmark`:
 
 ```bash
 chmod +x run_dart_benchmark.sh   # once
@@ -49,7 +49,7 @@ Optional env:
 Manual equivalent:
 
 ```bash
-cd rust_image/example
+cd mediaforge/example
 BENCH_PIPELINE=worker flutter run -d macos -t lib/benchmark_main.dart --release
 ```
 

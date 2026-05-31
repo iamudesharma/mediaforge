@@ -1,4 +1,4 @@
-# rust_image roadmap
+# mediaforge roadmap
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
@@ -42,7 +42,7 @@ Performance and architecture plan for reaching native-editor responsiveness (GPU
 | Component | Location |
 |-----------|----------|
 | Rust CLI (`rust_image_benchmark`) | `packages/image_forge/rust/src/benchmark/`, `src/bin/rust_image_benchmark.rs` |
-| Dart / FRB runner | `rust_image/benchmark/` |
+| Dart / FRB runner | `mediaforge/benchmark/` |
 
 Run before/after perf work: `cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10`. Export CSV with `--csv results.csv`. Details: [benchmark/README.md](rust_image/benchmark/README.md).
 - Adjust sliders run on ≤1280px edge until commit
@@ -76,7 +76,7 @@ Run before/after perf work: `cargo run --release --features gpu --bin rust_image
 **Verify:**
 
 ```bash
-cd rust_image/rust
+cd packages/image_forge/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- \
   --synthetic -n 10 --only filter_rgba_brightness
 RAYON_NUM_THREADS=4 cargo run --release --features gpu --bin rust_image_benchmark -- \
@@ -102,7 +102,7 @@ RAYON_NUM_THREADS=4 cargo run --release --features gpu --bin rust_image_benchmar
 **Exit criteria:** Blur/sharpen sliders on 1080p preview feel interactive on Mac Metal — verify in Studio.
 
 ```bash
-cd rust_image/rust
+cd packages/image_forge/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- \
   --synthetic -n 5 --only filter_rgba_sharpen
 cargo run --release --features gpu --bin rust_image_benchmark -- \
@@ -145,7 +145,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| README GPU coverage table (preview vs export) | Done | [`rust_image/README.md`](rust_image/README.md) |
+| README GPU coverage table (preview vs export) | Done | [`mediaforge/README.md`](mediaforge/README.md) |
 | `RustImageEditorConfig`: `liveEditMaxEdge`, `previewMaxEdge`, `showPerformanceInStatus` | Done | + `enableMediaPipeDownloadPrompt`, live camera knobs |
 | Per-tool backend hints | Done | Status line: `gpu_mood`, `gpu_teeth`, `cpu_plump`, live fps |
 
@@ -274,7 +274,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 **Backend note:** Metal / Vulkan / DX12 via wgpu `Backends::all()` — no separate `.metal` / GLSL tree.
 
 ```bash
-cd rust_image/rust
+cd packages/image_forge/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- \
   --synthetic -n 10 --only filter_rgba_mood_clarendon
 ```
@@ -652,7 +652,7 @@ Run in **rust_image Studio** after changes; record status-line timings.
 ## References
 
 - Root README: [README.md](README.md)
-- Plugin README: [rust_image/README.md](rust_image/README.md)
+- Plugin README: [mediaforge/README.md](mediaforge/README.md)
 - **pub.dev package split:** [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md)
 - Face / beauty design: [docs/PHASE3_MEDIAPIPE.md](docs/PHASE3_MEDIAPIPE.md)
 - Flutter state / rebuild rules: [docs/FLUTTER_STATE.md](docs/FLUTTER_STATE.md)

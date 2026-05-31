@@ -71,7 +71,7 @@ Rust `video_forge` cdylib, FRB bindings, native hook (FFmpeg). No `VideoProcesso
 ## Repository layout
 
 ```text
-rust_image/packages/
+mediaforge/packages/
 ├── video_forge/     # rust/ + lib/frb + hook + android/ios
 ├── video_forge_kit/  # SDK + example/
 └── video_forge_cache/

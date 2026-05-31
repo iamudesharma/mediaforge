@@ -229,7 +229,7 @@ See [benchmark/README.md](benchmark/README.md) for full options and CSV export.
 
 ## Running tests
 
-`rust_image` ships three test layers. Run any of them individually, or run all
+\`mediaforge\` ships three test layers. Run any of them individually, or run all
 of them via the repo-root convenience script:
 
 ```bash

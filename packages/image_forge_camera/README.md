@@ -1,6 +1,6 @@
 # image_forge_camera
 
-Live front-camera SDK for the rust_image monorepo (Sprint P0.5).
+Live front-camera SDK for the mediaforge monorepo (Sprint P0.5).
 
 ## Platform matrix
 

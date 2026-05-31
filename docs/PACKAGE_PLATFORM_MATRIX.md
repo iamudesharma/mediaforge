@@ -35,7 +35,7 @@ Requirements for **host apps** integrating each package. All packages need **Flu
 |-------------|--------|
 | Rust toolchain | [rustup](https://rustup.rs) — do not use Homebrew `rustc` on macOS for cross-compile |
 | Android | `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`; NDK via `local.properties` / `ANDROID_NDK_HOME` |
-| iOS | `platform :ios, '15.0'` in Podfile; Release: avoid stripping Rust symbols (see [rust_image/README.md](../rust_image/README.md)) |
+| iOS | `platform :ios, '15.0'` in Podfile; Release: avoid stripping Rust symbols (see [mediaforge/README.md](../mediaforge/README.md)) |
 | macOS | 12+; Apple Vision for face analysis; MediaPipe optional on iOS only |
 | Features | Default `gpu` feature — Metal / Vulkan via wgpu |
 | Face (still) | Vision (Apple); ML Kit (Android); optional MediaPipe `.task` download |
