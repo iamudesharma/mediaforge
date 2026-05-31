@@ -4,8 +4,8 @@ description: >
   Flutter GPU texture runtime — TextureRegistry bridge, CVPixelBuffer /
   SurfaceTexture upload, and GpuTextureView. No editor, filters, or beauty.
 version: 1.0.0
-homepage: https://github.com/iamudesharma/rust_image
-repository: https://github.com/iamudesharma/rust_image
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
 
 environment:
   sdk: ^3.12.0

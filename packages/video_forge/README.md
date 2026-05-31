@@ -2,135 +2,181 @@
 
 [![pub package](https://img.shields.io/pub/v/video_forge.svg)](https://pub.dev/packages/video_forge)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20macOS%20%7C%20Windows%20%7C%20Linux-green.svg)](#platform-matrix)
 
-High-performance Rust video processing and transcoding engine for Flutter, powered by **flutter_rust_bridge** (FRB) v2 and native **FFmpeg**. This package houses the core pipeline interfaces for video compression, frame-accurate previews, audio-track overlays, watermark burn-in, and fast thumbnail generation.
+> Open-source project maintained by the community. Found a bug or want to contribute? [PRs and issues are welcome](https://github.com/iamudesharma/mediaforge/issues).
+
+High-performance Rust video processing engine for Flutter — hardware-accelerated transcoding, frame-accurate previews, audio mixing, and fast thumbnail generation. Powered by native FFmpeg with platform codecs (MediaCodec, VideoToolbox).
 
 > [!NOTE]
-> This is a **low-level engine** package providing native Rust FFI bindings and raw pipeline access. It does **not** include the high-level disk cache or the `VideoProcessor` facade. For the standard developer-friendly SDK, check out [`video_forge_kit`](../video_forge_kit/) and [`video_forge_cache`](../video_forge_cache/).
+> This is a **low-level engine** (raw FFI bindings). For the developer-friendly SDK with job queues, presets, and cached thumbnails, use [`video_forge_kit`](../video_forge_kit/). See also [`video_forge_cache`](../video_forge_cache/) for optional disk cache.
 
 ---
 
-## Platform Matrix
+## Platform Support
 
-| Platform | Support | Hardware Accel | Notes |
-|---|---|---|---|
-| **Android** | Yes | Yes (MediaCodec) | Requires minSdk **24+**, NDK, and FFmpeg binary |
-| **iOS** | Yes | Yes (VideoToolbox) | Requires iOS **13+**, linked `video_forge.framework` |
-| **macOS** | Yes | Yes (VideoToolbox) | Requires macOS **10.15+**, VT-capable FFmpeg build |
-| **Linux** | Yes | Optional | Standard CPU transcoding via FFmpeg |
-| **Windows** | Yes | Optional | DirectX 12/DirectShow/NVENC options |
-| **Web** | No | — | Native FFmpeg linkage and threading not supported |
-
----
-
-## Key Features
-
-- **Metadata Probing**: Lightning-fast video inspection using an optimized `mp4parse` path (with FFmpeg fallback).
-- **Asynchronous Compression**: Spawns Tokio blocking tasks for parallel transcoding, reporting fine-grained phase progress (Probing, Decoding, Encoding, Muxing) and FPS/ETA statistics back to Dart streams.
-- **Overlay Burn-in**: Blends and composites raster overlay PNGs (e.g. stickers, watermarks, text boxes) onto decoded video frames at specific intervals with optional fade-in/fade-out transitions.
-- **Audio mixing & export**: Mixes external timeline audio tracks (`AudioTrackInput`) with the source video's audio, supporting custom offsets, durations, and per-track volume controls.
-- **Segmented GOP Thumbnailing**: Frame-accurate batch thumbnail extraction (filesystem output or in-memory byte arrays) with optimized keyframe seek heuristics (scrubber/filmstrip generation).
-- **Frame-Accurate Previews**: Decodes preview frames directly to raw RGBA or Apple zero-copy `CVPixelBuffer` textures without writing temporary files to disk.
-- **Decoder-Driven Playback Clock**: Supports playback sessions (`VideoPreviewSession`) driven by custom frame rate tick systems rather than generic media clocks.
-- **Buffer Pool Allocator**: Recycles raw preview byte vectors to eliminate memory allocations in interactive scrub loops.
+| Platform | Status |
+|---|---|
+| Android | Tested (SDK 24+, MediaCodec) |
+| iOS | Tested (13.0+, VideoToolbox) |
+| macOS | Tested (10.15+, VideoToolbox) |
+| Windows | In progress |
+| Linux | In progress |
+| Web | Not supported |
 
 ---
 
-## API Reference
+## Quick Start
 
-### 1. App Initialization & Controls
+```dart
+import 'package:video_forge/video_forge.dart';
 
-*   `initialize()` / `init_app()`: Initializes native loggers and verifies FFmpeg linkage.
-*   `active_job_count()`: Returns the number of currently executing asynchronous compression pipelines.
-*   `cancel_job(jobId)`: Forces cancellation of a running background job.
-*   `cleanup_job(jobId)`: Clears completed job stats and deallocates records from the registry.
+// Call once at app startup
+await initialize();
 
-### 2. Media Metadata & Network Prefetch
+// Probe video metadata
+final info = await getMediaInfo(path: '/path/to/video.mp4');
+print('${info.width}x${info.height} ${info.durationMs}ms');
 
-*   `get_media_info(path)`: Probe video parameters (dimensions, duration, framerate, rotation, bitrates, Dolby Vision markers, audio/video codecs).
-*   `prefetch_remote_input(url, destDir)`: Stream-copies a remote URL to a local cache directory to prevent redundant network connections during scrub sessions.
+// Compress with progress stream
+final progress = startCompress(options: CompressOptions(
+  inputPath: '/path/to/video.mp4',
+  outputPath: '/path/to/output.mp4',
+));
+await for (final event in progress) {
+  print('${event.phase}: ${event.fps} fps');
+}
 
-### 3. Video Transcoding & Compression
-
-*   `start_compress(options, progressSink)`: Starts background compression and returns a unique `jobId`. Emits progress events to Dart.
-*   `wait_for_job(jobId)`: Await completion of compression pipelines (returns file size, duration, used hardware accelerator, encoder names, and pipeline mode).
-
-### 4. Thumbnail & Filmstrip Extraction
-
-*   `thumbnail(options)` / `thumbnail_bytes(options)`: Extracts a single frame at `positionMs` as a file or raw bytes.
-*   `batch_thumbnails(options)` / `batch_thumbnail_bytes(options)`: Frame-accurately extracts a sequence of timestamps in a single demux pass.
-
-### 5. Interactive Decoders (`VideoPreviewSession`)
-
-A preview session allows scrubbing and playback of video frames directly:
-*   `VideoPreviewSession.create(inputPath, maxEdge, preferHw)`: Instantiates a preview session decoder.
-*   `next_frame_rgba()` / `next_frame_pixel_buffer()`: Read the next decoded frame.
-*   `seek_and_decode_rgba(positionMs)` / `seek_and_decode_pixel_buffer(positionMs)`: Seek and read frame.
-*   `start_playback(rate, progressSink)`: Starts streaming playback frames at the requested playback rate.
-*   `pause_playback()`: Pauses playback.
-*   `set_preview_max_edge(maxEdge)`: Dynamically updates the preview scale bounding box.
-*   `close()`: Releases native structures.
-
-### 6. Zero-Allocation Pool
-
-*   `buffer_pool_acquire(minCapacity)` / `buffer_pool_release(buf)` / `buffer_pool_stats()`: Reuses byte arrays for preview frames.
-
----
-
-## Requirements & Prerequisites
-
-### Build Requirements
-- **Rust Toolchain**: [rustup](https://rustup.rs).
-- **FFmpeg**: Libraries (`libavcodec`, `libavformat`, `libavfilter`, `libswscale`, etc.) must be installed and visible on your linker path.
-  - **macOS (VideoToolbox Accel)**: Requires FFmpeg compiled with VT support (refer to [`scripts/build-ffmpeg-macos-vt.sh`](../../scripts/build-ffmpeg-macos-vt.sh)).
-  - **Android (NDK)**: Cross-compiles for Android targets (configured via `local.properties`).
-
----
-
-## How to Run, Build & Test
-
-### 1. Run Unit/Integration Tests
-Verify your FFmpeg linkage and GOP seek code by running:
-```bash
-cd packages/video_forge
-cargo test -p video_forge
+// Extract a thumbnail
+final thumbPath = await thumbnail(options: ThumbnailOptions(
+  inputPath: '/path/to/video.mp4',
+  positionMs: 1500,
+  outputPath: '/path/to/thumb.jpg',
+));
 ```
 
-### 2. Run Dart Analyzer
-Check FFI interface bindings for compiler issues:
+---
+
+## What You Can Do
+
+- **Video transcoding** — Async compression with hardware acceleration (MediaCodec, VideoToolbox). Phase-based progress reporting with FPS and ETA.
+- **Metadata probing** — Fast MP4 inspection (mp4parse) with FFmpeg fallback. Dimensions, duration, framerate, codecs, rotation, Dolby Vision markers.
+- **Thumbnails & filmstrips** — Frame-accurate single/batch extraction with optimized GOP seek. Output to files or in-memory byte arrays.
+- **Frame-accurate previews** — Decode frames to raw RGBA or Apple zero-copy `CVPixelBuffer`. No temp files.
+- **Audio mixing** — Mix external audio tracks with source video. Per-track offsets, durations, and volume.
+- **Overlay burn-in** — Composite PNG overlays (watermarks, stickers) onto video frames with fade transitions.
+- **Playback sessions** — Decoder-driven playback with seek, play/pause, and custom frame-rate ticks.
+- **Buffer pool** — Recycled byte vectors to eliminate allocations during scrub sessions.
+
+For the full API, see the [Dart API reference](https://pub.dev/documentation/video_forge/latest/).
+
+---
+
+## Pros & Cons
+
+| Pros | Cons |
+|---|---|
+| Hardware-accelerated video processing | No web support |
+| Async jobs with progress updates | FFmpeg libraries add significant app size |
+| Android, iOS, macOS (Windows & Linux in progress) | FFmpeg setup can be involved (especially macOS VT) |
+| Frame-accurate previews without temp files | FFmpeg is LGPL — requires license notice in your app |
+| Built-in audio mixing for timeline editors | Needs native build toolchain, not pure Dart |
+| Fast thumbnail and filmstrip generation | Large binary from bundled video codecs |
+
+---
+
+## App Size
+
+The package includes native Rust code plus external FFmpeg libraries:
+
+| Component | Est. Size |
+|---|---|
+| Rust engine (transcoding, preview, thumbnails, audio mix) | **~5–8 MB** |
+| FFmpeg libraries (libavcodec, libavformat, libavfilter, libswscale) | **~15–30 MB** |
+| **Total** | **~20–38 MB** |
+
+FFmpeg is the dominant cost. The Rust engine itself is modest — most of the weight comes from video/audio codec libraries. Android uses App Bundles, so users only download their device's ABI.
+
+---
+
+## Installation
+
 ```bash
+flutter pub add video_forge
+```
+
+**Prerequisites:**
+
+- [Rust toolchain](https://rustup.rs) on your development machine
+- **FFmpeg** libraries (`libavcodec`, `libavformat`, `libavfilter`, `libswscale`) on your linker path
+- **macOS with VideoToolbox**: Build FFmpeg with VT support
+- **Android**: NDK configured in `local.properties`; install Android Rust targets:
+  ```bash
+  rustup target add aarch64-linux-android armv7-linux-androideabi \
+    x86_64-linux-android i686-linux-android
+  ```
+
+---
+
+## More Examples
+
+### Batch thumbnails (filmstrip)
+```dart
+final result = await batchThumbnails(options: BatchThumbnailOptions(
+  inputPath: '/path/to/video.mp4',
+  positionsMs: [0, 5000, 10000, 15000],
+  outputDir: '/tmp/thumbs',
+));
+
+// Or in-memory for UI display
+final frames = await batchThumbnailBytes(options: BatchThumbnailBytesOptions(
+  inputPath: '/path/to/video.mp4',
+  positionsMs: [0, 5000, 10000, 15000],
+));
+```
+
+### Frame-accurate preview decode
+```dart
+final frame = await decodePreviewFrameRgba(
+  inputPath: '/path/to/video.mp4',
+  positionMs: BigInt.from(4200),
+  maxEdge: 720,
+);
+// frame.width, frame.height, frame.data (RGBA bytes)
+```
+
+### Cancel a running job
+```dart
+final jobId = /* from startCompress */;
+await cancelJob(jobId: jobId);
+print('Active jobs: ${await activeJobCount()}');
+```
+
+---
+
+## Build & Test
+
+```bash
+# Rust unit tests
+cd packages/video_forge && cargo test -p video_forge
+
+# Dart analyzer
 dart run melos exec --scope=video_forge -- flutter analyze
-```
 
-### 3. Run Sample App
-Run the basic FFI probe and transcode demo:
-```bash
-cd packages/video_forge/example
-flutter run -d macos  # or android / ios
+# Run example app
+cd packages/video_forge/example && flutter run -d macos
 ```
 
 ---
 
-## Future Roadmap
+## Contributing
 
-- **Sprint 20: Video Clips & Audio Timeline Editors**
-  - Enhanced multi-track timeline split/merge APIs.
-  - Real-time CPU/GPU audio mixer integration inside the preview player session.
-- **Sprint V1: Video Media Runtime & Texture Preview**
-  - **Android Zero-Copy Preview**: Implement zero-copy `SurfaceTexture` rendering using `MediaCodec` direct decoding for resolutions up to 4K.
-  - **Scrub Coalescing**: Scrub frame-skipping optimizations to bound preview decoding queues.
-  - **Render Graph Integration**: Pluggable render filters (vignette, presets) running directly on the decoded preview texture.
+This package is part of the [MediaForge monorepo](https://github.com/iamudesharma/mediaforge). Issues and pull requests are welcome on [GitHub](https://github.com/iamudesharma/mediaforge/issues).
 
 ---
 
-## Known Issues & Cleanups
+## Links
 
-Keep the following items in mind when working on `video_forge`:
-
-1.  **Unused/Dead Code Warnings**:
-    *   Unused helper functions inside `src/pipeline/thumbnail.rs` (`downscale_rgb24`, `map_fir_buffer_err`, `map_resize_err`), `src/pipeline/audio_mix.rs` (unused mutability warnings), and `src/ffmpeg/vt_pipeline.rs` (`K_CV_NV12_BIPLANAR_VIDEO`) should be cleaned up.
-2.  **Telemetry Unused Fields**:
-    *   `started_at` in `JobRecord` (`src/jobs/registry.rs`) and `clip_start_ms` in `VideoTranscoder` (`src/pipeline/transcode.rs`) are defined but never read.
-3.  **Rustc cfg checks**:
-    *   Attribute macros generate `unexpected cfg condition name: frb_expand` warnings due to updated rustc `check-cfg` rules. These can be safely ignored or resolved by updating compiler rules in `Cargo.toml`.
+- [GitHub Repository](https://github.com/iamudesharma/mediaforge)
+- [Issue Tracker](https://github.com/iamudesharma/mediaforge/issues)
+- [Developer SDK (video_forge_kit)](../video_forge_kit/)
+- [Disk Cache (video_forge_cache)](../video_forge_cache/)

@@ -4,8 +4,8 @@ description: >
   Media playback runtime (FFI) plus optional Flutter presentation widgets
   (GPU texture hot path via pixel_surface).
 version: 0.1.0
-homepage: https://github.com/iamudesharma/rust_image
-repository: https://github.com/iamudesharma/rust_image
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
 
 environment:
   sdk: ^3.12.0

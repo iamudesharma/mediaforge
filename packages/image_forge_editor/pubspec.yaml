@@ -4,8 +4,8 @@ description: >
   Instagram-style Flutter image editor UI — panels, gestures, Riverpod shell.
   Engine: image_forge. GPU Texture: pixel_surface.
 version: 0.1.0
-homepage: https://github.com/iamudesharma/rust_image
-repository: https://github.com/iamudesharma/rust_image
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
 
 environment:
   sdk: ^3.12.0

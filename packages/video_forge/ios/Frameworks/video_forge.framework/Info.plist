@@ -7,7 +7,7 @@
   <key>CFBundleExecutable</key>
   <string>video_forge</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.video_forge.video_forge</string>
+  <string>dev.fluttervideoprocessor.core</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

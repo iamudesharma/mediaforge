@@ -1,11 +1,11 @@
 name: image_forge_camera
 resolution: workspace
 description: >
-  Live front-camera SDK for rust_image — stream capture, permissions,
+  Live front-camera SDK for mediaforge — stream capture, permissions,
   temporal face smoothing. Optional dep from image_forge_editor.
 version: 0.1.0
-homepage: https://github.com/iamudesharma/rust_image
-repository: https://github.com/iamudesharma/rust_image
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
 
 environment:
   sdk: ^3.12.0

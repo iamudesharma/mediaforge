@@ -1,11 +1,20 @@
 name: video_forge
 resolution: workspace
 description: >
-  Rust video processing engine for Flutter — FRB + FFmpeg native hook only.
-  No disk thumbnail cache or VideoProcessor facade.
+  High-performance Rust video processing engine for Flutter.
+  Hardware-accelerated video transcoding, frame-accurate previews, audio mixing, and fast thumbnail generation powered by FFmpeg.
+  Low-level engine — see video_forge_kit for the full developer SDK.
 version: 1.0.0
-homepage: https://github.com/iamudesharma/rust_image
-repository: https://github.com/iamudesharma/rust_image
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
+issue_tracker: https://github.com/iamudesharma/mediaforge/issues
+
+topics:
+  - video
+  - video-processing
+  - ffmpeg
+  - compression
+  - flutter
 
 environment:
   sdk: ^3.12.0

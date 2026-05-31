@@ -18,7 +18,7 @@ blurhash = ["blurhash_crate"]
 gpu = ["wgpu", "pollster", "bytemuck"]
 
 [dependencies]
-pixel_surface = { path = "../../pixel_surface/rust" }
+
 flutter_rust_bridge = "=2.12.0"
 image = { version = "0.25", default-features = false, features = [
     "jpeg",

@@ -4,8 +4,8 @@ description: >
   High-performance cross-platform video processing for Flutter — compress,
   transcode, thumbnails, and job queue. Native engine in video_forge.
 version: 0.2.0
-homepage: https://github.com/iamudesharma/rust_image
-repository: https://github.com/iamudesharma/rust_image
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
 
 environment:
   sdk: ^3.12.0
