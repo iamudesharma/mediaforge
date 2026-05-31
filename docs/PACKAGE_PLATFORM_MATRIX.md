@@ -8,17 +8,17 @@ Requirements for **host apps** integrating each package. All packages need **Flu
 
 | Package | Android | iOS | macOS | Linux | Windows | Web |
 |---------|---------|-----|-------|-------|---------|-----|
-| **rust_gpu_texture** | API 21+ | 12+ | 12+ | — | — | — |
-| **rust_image_core** | API 21+ + NDK + Rust targets | 15+ + Rust | 12+ + Rust | Rust + GPU optional | Rust + GPU optional | Not supported |
-| **rust_image_editor** | Same as core + camera runtime | Same | Same (no live cam) | Core only, reduced UX | Core only | Not supported |
-| **rust_camera_runtime** | API 21+ + camera permission | 15+ + `NSCameraUsageDescription` | — | — | — | — |
-| **video_processor_core** | API 24+ + NDK + FFmpeg | 13+ + FFmpeg | 10.15+ + FFmpeg | FFmpeg | FFmpeg | — |
-| **flutter_video_processor** | Same as core | Same | Same | Same | Same | — |
-| **video_thumbnail_cache** | Dart only | Dart only | Dart only | Dart only | Dart only | — |
+| **pixel_surface** | API 21+ | 12+ | 12+ | — | — | — |
+| **image_forge** | API 21+ + NDK + Rust targets | 15+ + Rust | 12+ + Rust | Rust + GPU optional | Rust + GPU optional | Not supported |
+| **image_forge_editor** | Same as core + camera runtime | Same | Same (no live cam) | Core only, reduced UX | Core only | Not supported |
+| **image_forge_camera** | API 21+ + camera permission | 15+ + `NSCameraUsageDescription` | — | — | — | — |
+| **video_forge** | API 24+ + NDK + FFmpeg | 13+ + FFmpeg | 10.15+ + FFmpeg | FFmpeg | FFmpeg | — |
+| **video_forge_kit** | Same as core | Same | Same | Same | Same | — |
+| **video_forge_cache** | Dart only | Dart only | Dart only | Dart only | Dart only | — |
 
 ---
 
-## rust_gpu_texture
+## pixel_surface
 
 | Requirement | Notes |
 |-------------|--------|
@@ -29,7 +29,7 @@ Requirements for **host apps** integrating each package. All packages need **Flu
 
 ---
 
-## rust_image_core
+## image_forge
 
 | Requirement | Notes |
 |-------------|--------|
@@ -42,41 +42,41 @@ Requirements for **host apps** integrating each package. All packages need **Flu
 
 ---
 
-## rust_image_editor
+## image_forge_editor
 
 | Requirement | Notes |
 |-------------|--------|
-| Transitive | `rust_image_core`, `rust_gpu_texture`, `rust_camera_runtime` |
+| Transitive | `image_forge`, `pixel_surface`, `image_forge_camera` |
 | Permissions | Gallery/export via `gal`; live camera via camera runtime (mobile) |
 | Riverpod | Internal only — host apps use `RustImageEditorWidget` without adding Riverpod |
 
 ---
 
-## rust_camera_runtime
+## image_forge_camera
 
 | Requirement | Notes |
 |-------------|--------|
 | Platforms | Android + iOS only (`LiveCameraService.isSupported`) |
 | Android | `CAMERA` permission in manifest (merged from `permission_handler` / `camera`) |
 | iOS | `NSCameraUsageDescription` in host `Info.plist` |
-| Deps | `camera`, `permission_handler`, `rust_image_core` (temporal FRB) |
+| Deps | `camera`, `permission_handler`, `image_forge` (temporal FRB) |
 
 ---
 
-## video_processor_core / flutter_video_processor
+## video_forge / video_forge_kit
 
 | Requirement | Notes |
 |-------------|--------|
 | Rust + FFmpeg | Prebuilt artifacts or local build — see [`tools/ffmpeg/`](../tools/ffmpeg/) |
 | Android minSdk | 24 (plugin); host app ≥ 24 recommended |
-| iOS | 13+; vendored `video_processor_core.framework` |
-| Hook | Native library via `video_processor_core` CodeAsset hook |
+| iOS | 13+; vendored `video_forge.framework` |
+| Hook | Native library via `video_forge` CodeAsset hook |
 
-## video_thumbnail_cache
+## video_forge_cache
 
 | Requirement | Notes |
 |-------------|--------|
-| Transitive | `video_processor_core` only |
+| Transitive | `video_forge` only |
 | Storage | App temp dir via `path_provider` |
 
 ---

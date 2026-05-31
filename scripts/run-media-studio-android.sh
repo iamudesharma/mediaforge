@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build video_processor_core for Android and run the media_studio example.
+# Build video_forge for Android and run the media_studio example.
 set -euo pipefail
 
 if [[ -d "${HOME}/.cargo/bin" ]]; then
@@ -16,10 +16,10 @@ if [[ "${1:-}" == "--all" ]]; then
   DEVICE="${2:-}"
 fi
 
-echo "==> Prebuild rust_image_core (arm64, avoids Gradle OOM)"
+echo "==> Prebuild image_forge (arm64, avoids Gradle OOM)"
 bash "${ROOT}/scripts/rebuild-rust-image-android.sh"
 
-echo "==> Building libvideo_processor_core.so (Android NDK + FFmpeg)"
+echo "==> Building libvideo_forge.so (Android NDK + FFmpeg)"
 if [[ "${BUILD_ALL_ABIS}" -eq 1 ]]; then
   "${ROOT}/scripts/package-video-android.sh" --all
 else
@@ -27,9 +27,9 @@ else
 fi
 
 echo "==> Clearing Flutter hook cache (not jniLibs — just rebuilt)"
-rm -rf "${ROOT}/packages/video_processor_core/rust/target/rust_hook"
-# Stale x86_64 rust_image_core artifacts break rebuilds after ABI narrowing.
-rm -rf "${EXAMPLE}/build/rust_image_core"
+rm -rf "${ROOT}/packages/video_forge/rust/target/rust_hook"
+# Stale x86_64 image_forge artifacts break rebuilds after ABI narrowing.
+rm -rf "${EXAMPLE}/build/image_forge"
 
 echo "==> flutter clean (example)"
 cd "${EXAMPLE}"

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build video_processor_core for Android and install into the monorepo plugin jniLibs/.
+# Build video_forge for Android and install into the monorepo plugin jniLibs/.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TOOLS="${ROOT}/tools"
-VP_PKG="${ROOT}/packages/video_processor_core"
+VP_PKG="${ROOT}/packages/video_forge"
 PLUGIN_JNI="${VP_PKG}/android/src/main/jniLibs"
 OUT="${ROOT}/platform-build/android"
 
@@ -49,23 +49,23 @@ for entry in "${ABIS[@]}"; do
     BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS} -I${ffmpeg_dir}/include" \
     "${CARGO}" build --release \
       --manifest-path "${manifest}" \
-      -p video_processor_core \
+      -p video_forge \
       --lib \
       --target "${triple}"
 
-  so="${target_dir}/${triple}/release/libvideo_processor_core.so"
+  so="${target_dir}/${triple}/release/libvideo_forge.so"
   if [[ ! -f "${so}" ]]; then
-    so="${target_dir}/${triple}/release/deps/libvideo_processor_core.so"
+    so="${target_dir}/${triple}/release/deps/libvideo_forge.so"
   fi
   if [[ ! -f "${so}" ]]; then
-    echo "Build did not produce libvideo_processor_core.so for ${triple}" >&2
+    echo "Build did not produce libvideo_forge.so for ${triple}" >&2
     exit 1
   fi
 
   mkdir -p "${PLUGIN_JNI}/${abi}" "${OUT}/jniLibs/${abi}"
   cp "${so}" "${PLUGIN_JNI}/${abi}/"
   cp "${so}" "${OUT}/jniLibs/${abi}/"
-  echo "    → ${PLUGIN_JNI}/${abi}/libvideo_processor_core.so"
+  echo "    → ${PLUGIN_JNI}/${abi}/libvideo_forge.so"
 done
 
 tar -czf "${OUT}/android.tar.gz" -C "${OUT}" jniLibs 2>/dev/null || true

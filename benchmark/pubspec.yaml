@@ -1,6 +1,6 @@
 name: rust_image_benchmark_runner
 resolution: workspace
-description: Benchmark rust_image Dart/FRB APIs — 10 cold iterations, CPU vs GPU.
+description: Benchmark image_forge and video_forge Dart/FRB APIs — 10 cold iterations, CPU vs GPU.
 publish_to: 'none'
 
 environment:
@@ -8,11 +8,11 @@ environment:
 
 dependencies:
   flutter_rust_bridge: 2.12.0
-  rust_image_editor:
-    path: ../packages/rust_image_editor
+  image_forge_editor:
+    path: ../packages/image_forge_editor
 
 dev_dependencies:
   lints: ^6.0.0
 
 executables:
-  rust_image_benchmark:
+  media_forge_benchmark:

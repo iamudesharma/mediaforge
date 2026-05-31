@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_video_processor/flutter_video_processor.dart';
+import 'package:video_forge_kit/video_forge_kit.dart';
 
 /// Common interface for video playback backends.
 ///
-/// Both [NativeBackend] (video_player) and [RustBackend] (rust_media_runtime)
+/// Both [NativeBackend] (video_player) and [RustBackend] (media_forge)
 /// implement this so [VideoCreatorFlow] can switch between them without
 /// conditional logic scattered throughout the UI.
 abstract class PlaybackBackend extends ChangeNotifier {

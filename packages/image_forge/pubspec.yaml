@@ -1,0 +1,43 @@
+name: image_forge
+resolution: workspace
+description: >
+  Rust image processing engine for Flutter — FRB APIs only (filters, beauty, layers).
+  No editor UI. Depends on pixel_surface for GPU texture boundaries.
+version: 1.0.0
+homepage: https://github.com/iamudesharma/rust_image
+repository: https://github.com/iamudesharma/rust_image
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_rust_bridge: 2.12.0
+  freezed_annotation: 3.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  freezed: 3.2.5
+  build_runner: ^2.15.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+        package: com.flutter_rust_bridge.image_forge
+        pluginClass: RustImageCorePlugin
+      ios:
+        ffiPlugin: true
+        pluginClass: RustImageCorePlugin
+      macos:
+        ffiPlugin: true
+        pluginClass: RustImageCorePlugin
+      linux:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

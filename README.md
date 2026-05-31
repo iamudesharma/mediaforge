@@ -1,6 +1,6 @@
-# rust_image
+# MediaForge
 
-Flutter image editor plugin with a **Rust** processing core and **flutter_rust_bridge** FFI.
+Flutter media editing toolkit — high-performance image and video processing powered by Rust and FFmpeg.
 
 ## Package location
 
@@ -8,13 +8,13 @@ Flutter image editor plugin with a **Rust** processing core and **flutter_rust_b
 
 | Package | Role |
 |---------|------|
-| [`rust_gpu_texture`](packages/rust_gpu_texture/) | GPU `Texture` bridge only |
-| [`rust_image_core`](packages/rust_image_core/) | Rust engine + FRB |
-| [`rust_image_editor`](packages/rust_image_editor/) | Editor UI |
-| [`rust_camera_runtime`](packages/rust_camera_runtime/) | Live camera (mobile) |
-| [`video_processor_core`](packages/video_processor_core/) | Video Rust engine + FRB + FFmpeg |
-| [`flutter_video_processor`](packages/flutter_video_processor/) | Video compress / thumbnails SDK |
-| [`video_thumbnail_cache`](packages/video_thumbnail_cache/) | Optional disk thumbnail cache |
+| [`pixel_surface`](packages/pixel_surface/) | GPU `Texture` bridge only |
+| [`image_forge`](packages/image_forge/) | Rust engine + FRB |
+| [`image_forge_editor`](packages/image_forge_editor/) | Editor UI |
+| [`image_forge_camera`](packages/image_forge_camera/) | Live camera (mobile) |
+| [`video_forge`](packages/video_forge/) | Video Rust engine + FRB + FFmpeg |
+| [`video_forge_kit`](packages/video_forge_kit/) | Video compress / thumbnails SDK |
+| [`video_forge_cache`](packages/video_forge_cache/) | Optional disk thumbnail cache |
 
 Split design: [docs/PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md) · checklist: [docs/P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) · platforms: [docs/PACKAGE_PLATFORM_MATRIX.md](docs/PACKAGE_PLATFORM_MATRIX.md). Video: [docs/VIDEO_PACKAGE_SPLIT.md](docs/VIDEO_PACKAGE_SPLIT.md) · preview runtime (Sprint V1): [docs/VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md) · FFmpeg tooling in [`tools/ffmpeg/`](tools/ffmpeg/).
 
@@ -39,12 +39,12 @@ Default features: `avif`, `blurhash`, `gpu` (disable with `default-features: fal
 
 ```yaml
 dependencies:
-  rust_image_editor:
-    path: ../packages/rust_image_editor   # or pub.dev when published
+  image_forge_editor:
+    path: ../packages/image_forge_editor   # or pub.dev when published
 ```
 
 ```dart
-import 'package:rust_image_editor/rust_image_editor.dart';
+import 'package:image_forge_editor/image_forge_editor.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,7 +67,7 @@ Future<void> main() async {
 }
 ```
 
-The widget includes import, transform, filters, adjust, draw, overlay, export, and advanced (RGBA/GPU) tabs — same UI as the studio demo, configurable via [RustImageEditorConfig](rust_image/lib/src/editor/rust_image_editor_config.dart).
+The widget includes import, transform, filters, adjust, draw, overlay, export, and advanced (RGBA/GPU) tabs — same UI as the studio demo, configurable via [RustImageEditorConfig](packages/image_forge_editor/lib/src/editor/image_forge_editor_config.dart).
 
 ## Quick start — APIs only
 
@@ -107,7 +107,7 @@ flutter run
 
 ## Android prerequisites
 
-Install Rust via [rustup](https://rustup.rs) (not only Homebrew `rustc`). The repo includes `packages/rust_image_core/rust/rust-toolchain.toml` so Android targets are installed automatically.
+Install Rust via [rustup](https://rustup.rs) (not only Homebrew `rustc`). The repo includes `packages/image_forge/rust/rust-toolchain.toml` so Android targets are installed automatically.
 
 If you see `can't find crate for core` / `aarch64-linux-android target may not be installed`:
 
@@ -134,7 +134,7 @@ If you see `Could not find method exec()` from `cargokit/gradle/plugin.gradle`, 
 After changing `rust/src/api/*.rs`:
 
 ```bash
-cd packages/rust_image_core
+cd packages/image_forge
 flutter_rust_bridge_codegen generate
 ```
 
@@ -142,22 +142,22 @@ flutter_rust_bridge_codegen generate
 
 ```
 packages/
-├── rust_image_core/      # Rust core + FRB
+├── image_forge/      # Rust core + FRB
 │   └── rust/src/
 │       ├── api/          # FRB exports
 │       ├── resize.rs
 │       ├── filters.rs
 │       ├── exif.rs
 │       └── ...
-├── rust_image_editor/    # Editor UI (Riverpod)
+├── image_forge_editor/    # Editor UI (Riverpod)
 │   └── lib/
 │       └── ...
-├── rust_gpu_texture/     # GPU Texture bridge
-├── rust_camera_runtime/  # Live camera YUV stream
-├── video_processor_core/ # Video Rust engine + FFmpeg
-├── flutter_video_processor/ # Video compress/thumbnails SDK
-├── rust_media_runtime/   # Media playback runtime
-└── video_thumbnail_cache/ # Optional disk cache
+├── pixel_surface/     # GPU Texture bridge
+├── image_forge_camera/  # Live camera YUV stream
+├── video_forge/ # Video Rust engine + FFmpeg
+├── video_forge_kit/ # Video compress/thumbnails SDK
+├── media_forge/   # Media playback runtime
+└── video_forge_cache/ # Optional disk cache
 
 examples/
 ├── image_editor/         # Image editor example app
@@ -219,7 +219,7 @@ Cold API benchmarks (10 runs per op, CPU vs GPU, no caching) live in [`benchmark
 **Rust CLI (fastest):**
 
 ```bash
-cd packages/rust_image_core/rust
+cd packages/image_forge/rust
 cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic --iterations 10
 ```
 
@@ -239,8 +239,8 @@ chmod +x test_all.sh   # one time
 
 | Layer | Command | What it covers |
 |-------|---------|----------------|
-| Rust  | `cd packages/rust_image_core/rust && cargo test --features gpu,blurhash` | Core image API (resize, crop, rotate, EXIF, compress, filters, draw, overlay, blurhash, RGBA pipeline, edit graph, batch, pool, backend). |
-| Dart unit | `cd packages/rust_image_editor && flutter test test/editor/` | Pure-Dart editor logic (edit graph, layer stack, filter descriptors, config defaults) — no device, no native lib. |
+| Rust  | `cd packages/image_forge/rust && cargo test --features gpu,blurhash` | Core image API (resize, crop, rotate, EXIF, compress, filters, draw, overlay, blurhash, RGBA pipeline, edit graph, batch, pool, backend). |
+| Dart unit | `cd packages/image_forge_editor && flutter test test/editor/` | Pure-Dart editor logic (edit graph, layer stack, filter descriptors, config defaults) — no device, no native lib. |
 | Integration | `cd examples/image_editor && flutter test integration_test/ -d <device>` | End-to-end `RustImageEditor` API on a real Flutter engine (smoke, thorough, RGBA pipeline, edit pipeline, BlendMode matrix + BlurHash). Requires a connected device or simulator. |
 
 ### `test_all.sh` environment knobs
@@ -253,7 +253,7 @@ chmod +x test_all.sh   # one time
 - `TEST_DEVICE` — Flutter device id passed to `flutter test -d`. Default
   `macos`. Use `flutter devices` to list available targets.
 - `SKIP_NATIVE_SYNC` — set to `1` to skip `cargo build` before Dart tests (faster).
-  `test_all.sh` runs `cargo build` so `rust/target/debug/librust_image_core.dylib`
+  `test_all.sh` runs `cargo build` so `rust/target/debug/libimage_forge.dylib`
   matches the Rust API; `editor_widget_smoke_test` may still log an FRB content-hash
   warning because `flutter test` often loads a cached plugin dylib — that is harmless
   for the mount-only check. Use `RUN_INTEGRATION=1` for full FFI on a device.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a native macOS FFmpeg with VideoToolbox HEVC/H.264 hwaccels for rust_media_runtime.
+# Build a native macOS FFmpeg with VideoToolbox HEVC/H.264 hwaccels for media_forge.
 #
 # FFmpeg 8 registers VideoToolbox as hwaccel (hevc decoder + hevc_videotoolbox hwaccel),
 # not as standalone decoders named hevc_videotoolbox.

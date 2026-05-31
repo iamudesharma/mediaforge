@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_video_processor/flutter_video_processor.dart'
-    show MediaInfo, VideoProcessor;
-import 'package:rust_media_runtime/rust_media_runtime.dart'
+import 'package:video_forge_kit/video_forge_kit.dart'
+    show AudioTrackInfo, MediaInfo, PlaybackBackend, VideoHandle;
+import 'package:media_forge/media_forge.dart'
     hide PlaybackState;
 
 import 'playback_backend.dart';
@@ -29,7 +29,7 @@ class AudioClipInfo {
   final bool muted;
 }
 
-/// Wraps [MediaPlaybackEngine] (rust_media_runtime) behind [PlaybackBackend].
+/// Wraps [MediaPlaybackEngine] (media_forge) behind [PlaybackBackend].
 ///
 /// Uses FFmpeg demuxing + HW decode + cpal audio output in Rust.
 /// Presents video frames via GPU texture (zero-copy on Apple).

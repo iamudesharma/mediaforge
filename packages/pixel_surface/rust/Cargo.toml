@@ -1,0 +1,21 @@
+[package]
+name = "pixel_surface"
+version = "1.0.0"
+edition = "2021"
+description = "GPU texture runtime — wgpu surfaces and Flutter texture bridge (Rust)"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+gpu = ["wgpu", "pollster", "bytemuck"]
+
+[dependencies]
+parking_lot = "0.12"
+wgpu = { version = "24", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gpu"))'] }

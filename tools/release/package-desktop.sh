@@ -8,13 +8,13 @@ cd "${ROOT}/native/rust_core"
 
 if [[ "$(uname -s)" == "Linux" ]]; then
   cargo build --release --target x86_64-unknown-linux-gnu
-  cp "${ROOT}/target/x86_64-unknown-linux-gnu/release/libvideo_processor_core.so" "${OUT}/"
+  cp "${ROOT}/target/x86_64-unknown-linux-gnu/release/libvideo_forge.so" "${OUT}/"
 fi
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   cargo build --release --target x86_64-apple-darwin
   cargo build --release --target aarch64-apple-darwin
-  cp "${ROOT}/target/x86_64-apple-darwin/release/libvideo_processor_core.dylib" "${OUT}/"
+  cp "${ROOT}/target/x86_64-apple-darwin/release/libvideo_forge.dylib" "${OUT}/"
 fi
 
 tar -czf "${OUT}/desktop.tar.gz" -C "${OUT}" .

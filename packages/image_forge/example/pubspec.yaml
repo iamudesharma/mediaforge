@@ -1,0 +1,23 @@
+name: image_forge_example
+resolution: workspace
+description: >
+  Demo — decode/filter/encode RGBA via image_forge only (no editor UI).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image_forge:
+  flutter_rust_bridge: 2.12.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,62 @@
+group = "dev.video_forge_kit"
+version = "1.0.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.7.3")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+
+android {
+    namespace = "dev.video_forge_kit"
+
+    compileSdk = 36
+    ndkVersion = android.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk = 24
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a", "x86_64"
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+// Native library: Flutter hook (CodeAsset) and/or prebuilt jniLibs from package-android.sh
+afterEvaluate {
+    // compileFlutterBuild* may refresh hook outputs; jniLibs merge must run after it.
+    tasks.configureEach { task ->
+        if (task.name.contains("merge") && task.name.contains("JniLibFolders")) {
+            rootProject.subprojects.each { sub ->
+                if (sub.plugins.hasPlugin("com.android.application")) {
+                    sub.tasks.matching { it.name.startsWith("compileFlutterBuild") }.configureEach { flutterTask ->
+                        task.dependsOn(flutterTask)
+                    }
+                }
+            }
+        }
+    }
+}

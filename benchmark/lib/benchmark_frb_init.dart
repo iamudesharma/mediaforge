@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:rust_image_editor/rust_image_editor.dart';
+import 'package:image_forge_editor/image_forge_editor.dart';
 
 bool _benchmarkFfiReady = false;
 
@@ -40,14 +40,14 @@ Future<void> ensureBenchmarkFfi() async {
 
 String? _discoverDylibPath() {
   const relDirs = [
-    'packages/rust_image_core/rust/target/release',
-    'packages/rust_image_core/rust/target/release/deps',
-    '../rust_image_core/rust/target/release',
-    '../rust_image_core/rust/target/release/deps',
-    '../../packages/rust_image_core/rust/target/release',
-    '../../packages/rust_image_core/rust/target/release/deps',
+    'packages/image_forge/rust/target/release',
+    'packages/image_forge/rust/target/release/deps',
+    '../image_forge/rust/target/release',
+    '../image_forge/rust/target/release/deps',
+    '../../packages/image_forge/rust/target/release',
+    '../../packages/image_forge/rust/target/release/deps',
   ];
-  const libNames = ['librust_image_core.dylib', 'librust_image_core.so'];
+  const libNames = ['libimage_forge.dylib', 'libimage_forge.so'];
 
   for (final dir in relDirs) {
     for (final name in libNames) {

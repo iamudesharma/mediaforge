@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_video_processor/flutter_video_processor.dart';
-import 'package:rust_image_editor/rust_image_editor.dart';
-import 'package:rust_media_runtime/rust_media_runtime.dart'
+import 'package:video_forge_kit/video_forge_kit.dart';
+import 'package:image_forge_editor/image_forge_editor.dart';
+import 'package:media_forge/media_forge.dart'
     as media_runtime show RustLib;
 
 import 'home_hub.dart';

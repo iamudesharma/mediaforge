@@ -1,0 +1,26 @@
+name: image_forge_camera
+resolution: workspace
+description: >
+  Live front-camera SDK for rust_image — stream capture, permissions,
+  temporal face smoothing. Optional dep from image_forge_editor.
+version: 0.1.0
+homepage: https://github.com/iamudesharma/rust_image
+repository: https://github.com/iamudesharma/rust_image
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image_forge:
+  pixel_surface:
+  flutter_rust_bridge: 2.12.0
+  camera: ^0.11.1
+  permission_handler: ^11.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

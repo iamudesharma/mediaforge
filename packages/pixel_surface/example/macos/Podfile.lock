@@ -1,0 +1,22 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - pixel_surface (0.1.0):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - pixel_surface (from `Flutter/ephemeral/.symlinks/plugins/pixel_surface/macos`)
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  pixel_surface:
+    :path: Flutter/ephemeral/.symlinks/plugins/pixel_surface/macos
+
+SPEC CHECKSUMS:
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  pixel_surface: 9f133a42cf51e7e65fc9023be5deb1484f936827
+
+PODFILE CHECKSUM: e08e57b58649e8521aa43a39a957c3443a184219
+
+COCOAPODS: 1.16.2

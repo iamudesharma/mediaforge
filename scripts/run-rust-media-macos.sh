@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Phase 0: rebuild rust_media_runtime with VT-capable FFmpeg and run the dashboard example.
+# Phase 0: rebuild media_forge with VT-capable FFmpeg and run the dashboard example.
 #
 # Usage (from repo root):
 #   bash scripts/run-rust-media-macos.sh
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PKG="${REPO_ROOT}/packages/rust_media_runtime"
+PKG="${REPO_ROOT}/packages/media_forge"
 EXAMPLE="${PKG}/example"
 TOOLS="${REPO_ROOT}/tools"
 TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"

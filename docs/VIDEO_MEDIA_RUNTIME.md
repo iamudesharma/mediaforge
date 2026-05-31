@@ -4,9 +4,9 @@
 
 **Goal:** Move from **preview-centric / frame-on-demand** to a **stream-centric** playback model with explicit **runtime ownership**, **decoder-clock** timing, **texture lifecycle**, and a **frame queue** — without building a custom full video engine in V1.
 
-**Related:** [VIDEO_PACKAGE_SPLIT.md](VIDEO_PACKAGE_SPLIT.md) · [V0_ACCEPTANCE.md](V0_ACCEPTANCE.md) · image texture bridge [`rust_gpu_texture`](../packages/rust_gpu_texture/) · legacy FFmpeg tooling now lives under `tools/ffmpeg/` (the old `rust video/docs/architecture.md` is no longer applicable).
+**Related:** [VIDEO_PACKAGE_SPLIT.md](VIDEO_PACKAGE_SPLIT.md) · [V0_ACCEPTANCE.md](V0_ACCEPTANCE.md) · image texture bridge [`pixel_surface`](../packages/pixel_surface/) · legacy FFmpeg tooling now lives under `tools/ffmpeg/` (the old `rust video/docs/architecture.md` is no longer applicable).
 
-**Prerequisite:** V0 package split done (`video_processor_core`, `flutter_video_processor`, `video_thumbnail_cache`).
+**Prerequisite:** V0 package split done (`video_forge`, `video_forge_kit`, `video_forge_cache`).
 
 **Not in V1:** Full render graph, HDR display pipeline, multi-track audio mixer — documented as **future sprints** below.
 
@@ -35,15 +35,15 @@
 └───────────────────────────────┬─────────────────────────────────┘
                                 │ listens to MediaRuntime
 ┌───────────────────────────────▼─────────────────────────────────┐
-│  flutter_video_processor — MediaRuntime (Dart)                     │
+│  video_forge_kit — MediaRuntime (Dart)                     │
 │  • single owner per open asset                                     │
 │  • PlaybackClock (decoder time)                                    │
 │  • FrameQueue (producer/consumer)                                  │
-│  • VideoTexturePool / lifecycle (rust_gpu_texture handles)         │
+│  • VideoTexturePool / lifecycle (pixel_surface handles)         │
 └───────────────┬─────────────────────────────┬───────────────────┘
                 │ FRB (decode, seek)            │ MethodChannel
 ┌───────────────▼───────────────┐   ┌──────────▼──────────────────┐
-│  video_processor_core          │   │  rust_gpu_texture            │
+│  video_forge          │   │  pixel_surface            │
 │  PreviewDecoder session        │   │  TextureRegistry, GpuTextureView │
 │  (FFmpeg; optional HW path)    │   │  (display only)              │
 └───────────────────────────────┘   └─────────────────────────────┘
@@ -51,10 +51,10 @@
 
 **Hard boundaries (unchanged from V0):**
 
-- `video_processor_core`: decode, timestamps, bytes/buffer handles — **no** Flutter plugin.
-- `rust_gpu_texture`: GPU/Flutter texture — **no** FFmpeg.
-- `flutter_video_processor`: **MediaRuntime** + optional `rust_gpu_texture` dependency.
-- **Do not** depend on `rust_image_core` / `GpuEditSurface` for video.
+- `video_forge`: decode, timestamps, bytes/buffer handles — **no** Flutter plugin.
+- `pixel_surface`: GPU/Flutter texture — **no** FFmpeg.
+- `video_forge_kit`: **MediaRuntime** + optional `pixel_surface` dependency.
+- **Do not** depend on `image_forge` / `GpuEditSurface` for video.
 
 ---
 
@@ -71,11 +71,11 @@ Synchronization is **time-only** (playhead ms ↔ timeline). No decoded frames a
 
 **`MediaRuntime`** remains for:
 
-- `flutter_video_processor` **example** studio (toggle: Native vs Rust texture)
+- `video_forge_kit` **example** studio (toggle: Native vs Rust texture)
 - Benchmarks / perf pages (`MediaRuntimePerf`)
 - Apple **CVPixelBuffer** zero-copy and Android **MediaCodec → SurfaceTexture** texture paths
 
-See [`packages/flutter_video_processor/README.md`](../packages/flutter_video_processor/README.md).
+See [`packages/video_forge_kit/README.md`](../packages/video_forge_kit/README.md).
 
 ---
 
@@ -113,7 +113,7 @@ runtime.pause();
 
 - At most **one** `PreviewDecoder` session per `MediaRuntime` instance.
 - `dispose()` cancels decode, drains queue, releases all texture handles.
-- Filmstrip thumbnails stay on **`video_thumbnail_cache`** — not through MediaRuntime.
+- Filmstrip thumbnails stay on **`video_forge_cache`** — not through MediaRuntime.
 
 ---
 
@@ -145,7 +145,7 @@ runtime.pause();
 
 **Purpose:** Avoid texture leaks, double-register, and resize races when scrubbing or rotating preview size.
 
-`VideoTexturePool` (Dart, uses `rust_gpu_texture`):
+`VideoTexturePool` (Dart, uses `pixel_surface`):
 
 | Operation | Behavior |
 |-----------|----------|
@@ -158,15 +158,15 @@ runtime.pause();
 
 **Compositor (V1.5):** `VideoCompositorCanvas` letterboxes the video frame and stacks `VideoOverlayItem` children filtered by `runtime.ptsMs` (`startMs` inclusive, `endMs` exclusive). Same pattern as image `LivePreview` — export does not bake overlays until Sprint 20/V2.
 
-**Android zero-copy (V1.6):** When longest edge ≤ `previewMaxEdge`, `GpuTextureRegistry.decodePreviewToSurface` uses **MediaCodec** + **MediaExtractor** to render into the Flutter `SurfaceTexture` (no RGBA upload). Larger sources or `VFP_DISABLE_HW_PREVIEW=1` fall back to FFmpeg RGBA. Implementation: `rust_gpu_texture` Kotlin (`AndroidPreviewDecoder.kt`), not Rust FFmpeg decode+encode.
+**Android zero-copy (V1.6):** When longest edge ≤ `previewMaxEdge`, `GpuTextureRegistry.decodePreviewToSurface` uses **MediaCodec** + **MediaExtractor** to render into the Flutter `SurfaceTexture` (no RGBA upload). Larger sources or `VFP_DISABLE_HW_PREVIEW=1` fall back to FFmpeg RGBA. Implementation: `pixel_surface` Kotlin (`AndroidPreviewDecoder.kt`), not Rust FFmpeg decode+encode.
 
-**Dolby Vision / iPhone HEVC (2026):** Photos and camera exports often use **Dolby Vision HEVC** in `.mov` with auxiliary tracks (`apac` spatial audio). VideoToolbox HW decode is unreliable after backward seek (`Could not find ref with POC`, `videotoolbox_vld` + `swscale`). `video_processor_core` probes `MediaInfo.hasDolbyVision` and opens preview with **software decode** (thumbnail-style settings). `MediaRuntime` skips `seekAndDecodePixelBuffer` when that flag is set. Compress/transcode may still use VideoToolbox encode; only **preview** avoids HW for DV.
+**Dolby Vision / iPhone HEVC (2026):** Photos and camera exports often use **Dolby Vision HEVC** in `.mov` with auxiliary tracks (`apac` spatial audio). VideoToolbox HW decode is unreliable after backward seek (`Could not find ref with POC`, `videotoolbox_vld` + `swscale`). `video_forge` probes `MediaInfo.hasDolbyVision` and opens preview with **software decode** (thumbnail-style settings). `MediaRuntime` skips `seekAndDecodePixelBuffer` when that flag is set. Compress/transcode may still use VideoToolbox encode; only **preview** avoids HW for DV.
 
 ---
 
 ## 4. Frame queue architecture
 
-**Purpose:** Decouple **decode producer** from **UI consumer** (stream-centric, not “await one frame per `setState`”).
+**Purpose:** Decouple **decode producer** from **UI consumer** (stream-centric, not "await one frame per `setState`").
 
 ```text
 PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (consumer)
@@ -186,7 +186,7 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 | Frame payload V1.4 | `HwPreviewFrame { ptsMs, bufferHandle }` on Apple |
 | Frame payload V1.6 | `PreviewFrame.presentedToSurface` on Android (MediaCodec → pool SurfaceTexture) |
 
-**Rust:** `PreviewDecoder` session in `video_processor_core` (new `pipeline/preview.rs`), reusing thumbnail seek helpers but **separate** from filmstrip CPU-only policy (preview may enable HW decode on Apple when stable).
+**Rust:** `PreviewDecoder` session in `video_forge` (new `pipeline/preview.rs`), reusing thumbnail seek helpers but **separate** from filmstrip CPU-only policy (preview may enable HW decode on Apple when stable).
 
 ---
 
@@ -204,8 +204,8 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 
 | Node type | Owner (likely) |
 |-----------|----------------|
-| Source / trim | `video_processor_core` |
-| Display present | `rust_gpu_texture` |
+| Source / trim | `video_forge` |
+| Display present | `pixel_surface` |
 | 2D overlays (stickers) | Flutter `Stack` first; optional GPU composite node later |
 | Transitions | Rust graph (V2) |
 
@@ -247,13 +247,13 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 
 | ID | Name | Deliverable | Package touchpoints |
 |----|------|-------------|---------------------|
-| **V1.1** | MediaRuntime + texture lifecycle | **Done** — `MediaRuntime`, `VideoTexturePool`, `VideoPreviewSurface`; FRB `decodePreviewFrameRgba`; studio scrub on texture | `flutter_video_processor`, `video_processor_core`, `rust_gpu_texture` |
+| **V1.1** | MediaRuntime + texture lifecycle | **Done** — `MediaRuntime`, `VideoTexturePool`, `VideoPreviewSurface`; FRB `decodePreviewFrameRgba`; studio scrub on texture | `video_forge_kit`, `video_forge`, `pixel_surface` |
 | **V1.2** | Frame queue + scrub stream | **Done** — `FrameQueue`, `PreviewFrame`, `scheduleScrub`; flush before decode | Same |
 | **V1.3** | Decoder-clock playback | **Done** — `PlaybackClock`, `play()` / `pause()`, async decode loop; PTS sets clock; video-only | Per-frame `decodePreviewFrameRgba` (session API deferred to V1.4+) |
-| **V1.4** | GPU residency (Apple first) | **Done** — VT HW `decodePreviewFramePixelBuffer`; `GpuTextureRegistry.presentPixelBuffer`; RGBA fallback | `rust_gpu_texture`, `video_processor_core`, `flutter_video_processor` |
-| **V1.5** | Overlay compositor shell | **Done** — `VideoCompositorCanvas`, `VideoOverlayItem` (`startMs`/`endMs`); studio demo | `flutter_video_processor` |
-| **V1.6** | Android zero-copy | **Done** — `decodePreviewToSurface`; MediaCodec → pool SurfaceTexture; RGBA if &gt; `previewMaxEdge` | `rust_gpu_texture`, `flutter_video_processor` |
-| **V1.7** | Metrics & perf matrix | **Done** — `MediaRuntimeMetrics`, `MediaRuntimePerf` (I/J/K); example **Preview** tab + studio status line | `flutter_video_processor` |
+| **V1.4** | GPU residency (Apple first) | **Done** — VT HW `decodePreviewFramePixelBuffer`; `GpuTextureRegistry.presentPixelBuffer`; RGBA fallback | `pixel_surface`, `video_forge`, `video_forge_kit` |
+| **V1.5** | Overlay compositor shell | **Done** — `VideoCompositorCanvas`, `VideoOverlayItem` (`startMs`/`endMs`); studio demo | `video_forge_kit` |
+| **V1.6** | Android zero-copy | **Done** — `decodePreviewToSurface`; MediaCodec → pool SurfaceTexture; RGBA if &gt; `previewMaxEdge` | `pixel_surface`, `video_forge_kit` |
+| **V1.7** | Metrics & perf matrix | **Done** — `MediaRuntimeMetrics`, `MediaRuntimePerf` (I/J/K); example **Preview** tab + studio status line | `video_forge_kit` |
 
 **Explicitly out of V1:** Custom full video engine, render graph execution, HDR display, audio mixer.
 
@@ -263,7 +263,7 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 
 | Piece | Keep? |
 |-------|--------|
-| `video_thumbnail_cache` + filmstrip | **Yes** — disk LRU for many frames |
+| `video_forge_cache` + filmstrip | **Yes** — disk LRU for many frames |
 | `VideoProcessor` compress / queue | **Yes** — separate from MediaRuntime |
 | `video_player` in status-only preview | **Optional** — simple loop screens; editor uses MediaRuntime |
 | Thumbnail CPU pipeline for batch strip | **Yes** — do not conflate with preview decode |
@@ -272,7 +272,7 @@ PreviewDecoder (producer)          FrameQueue (bounded)          Presenter (cons
 
 ## Perf matrix (video studio)
 
-Run in `flutter_video_processor` example after each sub-phase:
+Run in `video_forge_kit` example after each sub-phase:
 
 | ID | Scenario | Target |
 |----|----------|--------|
@@ -287,16 +287,16 @@ Run in `flutter_video_processor` example after each sub-phase:
 | Layer | Path (planned) |
 |-------|----------------|
 | Design | `docs/VIDEO_MEDIA_RUNTIME.md` (this file) |
-| Runtime | `packages/flutter_video_processor/lib/src/runtime/media_runtime.dart` |
-| Metrics | `packages/flutter_video_processor/lib/src/runtime/media_runtime_metrics.dart` |
-| Perf matrix | `packages/flutter_video_processor/lib/src/runtime/media_runtime_perf.dart` |
-| Queue | `packages/flutter_video_processor/lib/src/runtime/frame_queue.dart` |
-| Frame | `packages/flutter_video_processor/lib/src/runtime/preview_frame.dart` |
-| Clock | `packages/flutter_video_processor/lib/src/runtime/playback_clock.dart` |
-| Textures | `packages/flutter_video_processor/lib/src/runtime/video_texture_pool.dart` |
-| Widget | `packages/flutter_video_processor/lib/src/widgets/video_preview_surface.dart` |
-| Rust preview | `packages/video_processor_core/rust/src/pipeline/preview.rs` |
-| FRB | `packages/video_processor_core/rust/src/api/preview.rs` |
+| Runtime | `packages/video_forge_kit/lib/src/runtime/media_runtime.dart` |
+| Metrics | `packages/video_forge_kit/lib/src/runtime/media_runtime_metrics.dart` |
+| Perf matrix | `packages/video_forge_kit/lib/src/runtime/media_runtime_perf.dart` |
+| Queue | `packages/video_forge_kit/lib/src/runtime/frame_queue.dart` |
+| Frame | `packages/video_forge_kit/lib/src/runtime/preview_frame.dart` |
+| Clock | `packages/video_forge_kit/lib/src/runtime/playback_clock.dart` |
+| Textures | `packages/video_forge_kit/lib/src/runtime/video_texture_pool.dart` |
+| Widget | `packages/video_forge_kit/lib/src/widgets/video_preview_surface.dart` |
+| Rust preview | `packages/video_forge/rust/src/pipeline/preview.rs` |
+| FRB | `packages/video_forge/rust/src/api/preview.rs` |
 
 ---
 

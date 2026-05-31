@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Build video_processor_core for Android ABIs and install into the plugin jniLibs/.
+# Build video_forge for Android ABIs and install into the plugin jniLibs/.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # shellcheck source=android-env.sh
 source "${ROOT}/tools/release/android-env.sh"
 
-PLUGIN_JNI="${ROOT}/packages/flutter_video_processor/android/src/main/jniLibs"
+PLUGIN_JNI="${ROOT}/packages/video_forge_kit/android/src/main/jniLibs"
 OUT="${ROOT}/platform-build/android"
 mkdir -p "${PLUGIN_JNI}" "${OUT}/jniLibs"
 
@@ -43,11 +43,11 @@ for entry in "${ABIS[@]}"; do
   FFMPEG_DIR="${ffmpeg_dir}" \
     PKG_CONFIG_PATH="${ffmpeg_dir}/lib/pkgconfig" \
     BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS} -I${ffmpeg_dir}/include" \
-    "${CARGO}" build --release -p video_processor_core --lib --target "${triple}"
+    "${CARGO}" build --release -p video_forge --lib --target "${triple}"
 
-  so="${target_dir}/${triple}/release/libvideo_processor_core.so"
+  so="${target_dir}/${triple}/release/libvideo_forge.so"
   if [[ ! -f "${so}" ]]; then
-    so="${target_dir}/${triple}/release/deps/libvideo_processor_core.so"
+    so="${target_dir}/${triple}/release/deps/libvideo_forge.so"
   fi
   if [[ ! -f "${so}" ]]; then
     echo "Build did not produce ${so}" >&2
@@ -57,7 +57,7 @@ for entry in "${ABIS[@]}"; do
   mkdir -p "${PLUGIN_JNI}/${abi}" "${OUT}/jniLibs/${abi}"
   cp "${so}" "${PLUGIN_JNI}/${abi}/"
   cp "${so}" "${OUT}/jniLibs/${abi}/"
-  echo "    → ${PLUGIN_JNI}/${abi}/libvideo_processor_core.so"
+  echo "    → ${PLUGIN_JNI}/${abi}/libvideo_forge.so"
 done
 
 tar -czf "${OUT}/android.tar.gz" -C "${OUT}" jniLibs

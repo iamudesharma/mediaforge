@@ -127,7 +127,7 @@ Mask = union of `outerLips` + `innerLips` (Vision) or MP lip indices. Apply HSL 
 Soft pink/orange ellipses on cheek landmarks; multiply blend at low opacity.
 
 ### Beauty looks (Nexus C)
-Mirror [`mood_presets.rs`](../packages/rust_image_core/rust/src/filters/mood_presets.rs) pattern:
+Mirror [`mood_presets.rs`](../packages/image_forge/rust/src/filters/mood_presets.rs) pattern:
 
 ```rust
 pub struct BeautyRecipe {
@@ -180,7 +180,7 @@ Session holds `faceAnalysis` + cached regional masks; graph holds committed `Bea
 ## Acceptance
 
 ### Sprint 12 v1 (static) — done
-- Portrait import: skin smooth on face; no face → “No face detected”; export at full res
+- Portrait import: skin smooth on face; no face → "No face detected"; export at full res
 
 ### Nexus A — live camera
 - Front camera → `GpuEditSurface`; stable mask 24–30 fps; `TemporalSmoother` warm-up ~5 frames

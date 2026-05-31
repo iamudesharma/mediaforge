@@ -36,8 +36,8 @@ section() {
   echo "=============================================================="
 }
 
-RUST_DIR="${SCRIPT_DIR}/packages/rust_image_core/rust"
-DYLIB_DEBUG="${RUST_DIR}/target/debug/librust_image_core.dylib"
+RUST_DIR="${SCRIPT_DIR}/packages/image_forge/rust"
+DYLIB_DEBUG="${RUST_DIR}/target/debug/libimage_forge.dylib"
 
 section "Rust: cargo test + build --features ${TEST_RUST_FEATURES}"
 (
@@ -52,7 +52,7 @@ if [[ "${SKIP_NATIVE_SYNC:-0}" != "1" && -f "${DYLIB_DEBUG}" ]]; then
   echo "  RUST_IMAGE_DYLIB=${RUST_IMAGE_DYLIB} (for apps/benchmarks; widget smoke may still use cached plugin FFI)"
 fi
 (
-  cd "${SCRIPT_DIR}/packages/rust_image_editor"
+  cd "${SCRIPT_DIR}/packages/image_forge_editor"
   flutter test test/editor/
 )
 

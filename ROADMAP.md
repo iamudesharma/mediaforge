@@ -41,7 +41,7 @@ Performance and architecture plan for reaching native-editor responsiveness (GPU
 
 | Component | Location |
 |-----------|----------|
-| Rust CLI (`rust_image_benchmark`) | `packages/rust_image_core/rust/src/benchmark/`, `src/bin/rust_image_benchmark.rs` |
+| Rust CLI (`rust_image_benchmark`) | `packages/image_forge/rust/src/benchmark/`, `src/bin/rust_image_benchmark.rs` |
 | Dart / FRB runner | `rust_image/benchmark/` |
 
 Run before/after perf work: `cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 10`. Export CSV with `--csv results.csv`. Details: [benchmark/README.md](rust_image/benchmark/README.md).
@@ -163,7 +163,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 | Built-in sticker assets + `assets/stickers/` | Done | `StickerCatalog` + `pubspec.yaml` `assets/stickers/` |
 | `rust/src/layers.rs` + `bake_overlay_layers` FRB | Done | `composite_raster_layer` + `bake_overlay_layers` / `bakeLayersOnRgba` |
 | `EditorSession.layerStack` + export bake | Done | Layer undo/redo; `LayerBake.bakeOnto` on export |
-| `EditorTool.stickers` in mobile nav | Done | `tool_panels.dart`, `rust_image_editor_config.dart` default tools |
+| `EditorTool.stickers` in mobile nav | Done | `tool_panels.dart`, `image_forge_editor_config.dart` default tools |
 
 **Acceptance:** Multi emoji/sticker/text; pinch-drag-rotate; text background pill; export bakes full-res — **met**.
 
@@ -210,7 +210,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 |------|--------|-------|
 | `CropController` + `CropOverlay` | Done | Drag box + corners; aspects Free, 1:1, 4:5, 9:16, 16:9, Original |
 | Transform panel wired to shared crop state | Done | [`crop_controller.dart`](rust_image/lib/src/editor/crop_controller.dart), preview when Crop tool active |
-| Filter preset strength 0–100% | Done | `ImageFilter.preset { strength }` + lerp in Rust [`filters.rs`](packages/rust_image_core/rust/src/filters.rs) |
+| Filter preset strength 0–100% | Done | `ImageFilter.preset { strength }` + lerp in Rust [`filters.rs`](packages/image_forge/rust/src/filters.rs) |
 | Warmth / Fade / Vignette adjust | Done | New `ImageFilter` variants + Adjust panel sliders |
 | Paint eraser (stroke erase) | Done | `PaintStrokeInput.erase` + preview `BlendMode.clear` + export bake |
 | Widget / unit tests | Done | `crop_controller_test`, `filters_panel_preset_test`, `editor_crop_filters_widget_test` |
@@ -230,7 +230,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 | Text layer double-tap edit sheet | Done | [`text_layer_edit_sheet.dart`](rust_image/lib/src/editor/panels/text_layer_edit_sheet.dart) |
 | Marker / highlighter / neon brushes | Done | Preview + `PaintStrokeInput.brushKind` export |
 | Arrow on canvas | Done | Shapes panel → builtin `arrow` sticker |
-| Highlights / Shadows / Structure | Done | CPU [`filters.rs`](packages/rust_image_core/rust/src/filters.rs) + Adjust panel |
+| Highlights / Shadows / Structure | Done | CPU [`filters.rs`](packages/image_forge/rust/src/filters.rs) + Adjust panel |
 | Straighten slider + apply | Done | `rotate_rgba_arbitrary` + [`CropController`](rust_image/lib/src/editor/crop_controller.dart) |
 | Tests | Done | `layer_stack_test`, `filter_descriptor_test`, `paint_stroke_painter_test` |
 
@@ -252,7 +252,7 @@ Set `useRgbaPreview: false` to fall back to JPEG + `CachedPreviewImage`.
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `MoodFilterPreset` + parametric recipes | Done | [`mood_presets.rs`](packages/rust_image_core/rust/src/filters/mood_presets.rs) |
+| `MoodFilterPreset` + parametric recipes | Done | [`mood_presets.rs`](packages/image_forge/rust/src/filters/mood_presets.rs) |
 | `ImageFilter::Mood` + RGBA path | Done | Separate from `FilterPreset` / photon presets |
 | Swipe on preview + name chip | Done | [`swipe_mood_filter.dart`](rust_image/lib/src/editor/widgets/swipe_mood_filter.dart) |
 | Dedicated mood slot in edit graph | Done | `EditGraph.replaceMoodFilter` |
@@ -305,7 +305,7 @@ cargo run --release --features gpu --bin rust_image_benchmark -- \
 | GPU preview beauty pass | Done | `apply_gpu_beauty_pipeline` — skin/eye/lip/blush WGSL on texture preview (Nexus D) |
 | Design doc | Done | [`docs/PHASE3_MEDIAPIPE.md`](docs/PHASE3_MEDIAPIPE.md) |
 
-**Verify:** Import portrait → Beauty tab → slider (face only) → export. No face → “No face detected”. Mood/filters regression unchanged.
+**Verify:** Import portrait → Beauty tab → slider (face only) → export. No face → "No face detected". Mood/filters regression unchanged.
 
 ---
 
@@ -332,11 +332,11 @@ cargo run --release --features gpu --bin rust_image_benchmark -- \
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `build_lip_mask` / `build_eye_mask` / blush regions | Done | [`regions.rs`](packages/rust_image_core/rust/src/face/regions.rs); Vision lip indices; eraser exclude mask |
-| Eye brighten | Done | CPU + GPU [`eye_brighten.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/eye_brighten.wgsl) |
+| `build_lip_mask` / `build_eye_mask` / blush regions | Done | [`regions.rs`](packages/image_forge/rust/src/face/regions.rs); Vision lip indices; eraser exclude mask |
+| Eye brighten | Done | CPU + GPU [`eye_brighten.wgsl`](packages/image_forge/rust/src/gpu/shaders/eye_brighten.wgsl) |
 | Lip color + swatches | Done | HSL tint; Nude / Rose / Berry / Coral / Red |
-| Lip size (plump / thin) | Done | [`warp.rs`](packages/rust_image_core/rust/src/face/warp.rs) — CPU warp; cap ±15% at 100% |
-| Cheek blush | Done | Cheek ellipses; CPU + [`blush.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/blush.wgsl) |
+| Lip size (plump / thin) | Done | [`warp.rs`](packages/image_forge/rust/src/face/warp.rs) — CPU warp; cap ±15% at 100% |
+| Cheek blush | Done | Cheek ellipses; CPU + [`blush.wgsl`](packages/image_forge/rust/src/gpu/shaders/blush.wgsl) |
 | `BeautyParams` in edit graph | Done | Structured slot replaces scalar `skinSmooth` |
 | Beauty panel fine-tune sliders | Done | Collapsible section under looks strip; eraser |
 
@@ -346,7 +346,7 @@ cargo run --release --features gpu --bin rust_image_benchmark -- \
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `BeautyLookPreset` + `BeautyRecipe` | Done | [`face/looks.rs`](packages/rust_image_core/rust/src/face/looks.rs) — mirror [`mood_presets.rs`](packages/rust_image_core/rust/src/filters/mood_presets.rs) |
+| `BeautyLookPreset` + `BeautyRecipe` | Done | [`face/looks.rs`](packages/image_forge/rust/src/face/looks.rs) — mirror [`mood_presets.rs`](packages/image_forge/rust/src/filters/mood_presets.rs) |
 | Horizontal looks strip in Beauty panel | Done | Natural, Soft, Glow, Glam, Clear |
 | Tap to apply / commit | Done | Sets all regional sliders; user can override after |
 | Undo / redo / export | Done | Committed look + overrides in graph |
@@ -362,13 +362,13 @@ Example recipes (face-only, not global grade):
 | Glam | 0.50 | 0.40 | berry 0.5 | 0.25 | 0.10 |
 | Clear | 0.70 | 0.15 | none | 0.0 | 0.0 |
 
-**Acceptance:** Pick “Soft” → visible skin + lip change on face; tweak lip color → export matches preview.
+**Acceptance:** Pick "Soft" → visible skin + lip change on face; tweak lip color → export matches preview.
 
 ### Nexus D — Platform parity + GPU bind — done
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Bind `skin_smooth.wgsl` on GPU surface | Done | [`beauty_pass.rs`](packages/rust_image_core/rust/src/gpu/beauty_pass.rs) on texture preview |
+| Bind `skin_smooth.wgsl` on GPU surface | Done | [`beauty_pass.rs`](packages/image_forge/rust/src/gpu/beauty_pass.rs) on texture preview |
 | `lip_tint.wgsl`, `eye_brighten.wgsl`, `blush.wgsl` | Done | Chained on `GpuEditSurface`; lip plump CPU warp |
 | Android ML Kit face plugin | Done | [`RustImageFacePlugin.kt`](rust_image/android/src/main/kotlin/com/flutter_rust_bridge/rust_image/RustImageFacePlugin.kt) — same FRB shape |
 | Benchmark beauty passes | Done | `--only beauty_skin_smooth_gpu` / `beauty_skin_smooth_cpu` |
@@ -381,7 +381,7 @@ Example recipes (face-only, not global grade):
 | Item | Status | Notes |
 |-------|--------|-------|
 | Under-eye softening | Done | `under_eye` in `BeautyParams`; `build_under_eye_mask` |
-| Teeth whiten | Done | teeth_whiten CPU + [`teeth_whiten.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/teeth_whiten.wgsl) |
+| Teeth whiten | Done | teeth_whiten CPU + [`teeth_whiten.wgsl`](packages/image_forge/rust/src/gpu/shaders/teeth_whiten.wgsl) |
 | Compare-hold for beauty | Done | Compare shows pre-beauty RGBA on Beauty tool |
 | Preset thumbnails | Done | Gradient look chips in Beauty panel |
 
@@ -433,14 +433,14 @@ Example recipes (face-only, not global grade):
 
 | Item | Status | Notes |
 |------|--------|-------|
-| `SwipeLookPreset` + recipes | Done | [`swipe_looks.rs`](packages/rust_image_core/rust/src/filters/swipe_looks.rs) |
+| `SwipeLookPreset` + recipes | Done | [`swipe_looks.rs`](packages/image_forge/rust/src/filters/swipe_looks.rs) |
 | `ImageFilter::SwipeLook` + GPU LUT | Done | Separate slot from Filters-tab `ImageFilter::Mood` |
 | `setSwipeLook` atomic commit | Done | Grade + `BeautyParams` + undo |
 | Filters tab mood strip | Done | Rose, Clarendon, … + intensity slider |
-| Extras: glow, grain, halation, rgb split | Done | CPU + GPU post-grade in [`swipe_extras.rs`](packages/rust_image_core/rust/src/filters/swipe_extras.rs) |
-| Face warp (eye/jaw/nose/chin) | Done | [`warp_mesh.rs`](packages/rust_image_core/rust/src/face/warp_mesh.rs) |
+| Extras: glow, grain, halation, rgb split | Done | CPU + GPU post-grade in [`swipe_extras.rs`](packages/image_forge/rust/src/filters/swipe_extras.rs) |
+| Face warp (eye/jaw/nose/chin) | Done | [`warp_mesh.rs`](packages/image_forge/rust/src/face/warp_mesh.rs) |
 | Snow Princess particles | Done | Flutter overlay [`swipe_look_particles.dart`](rust_image/lib/src/editor/widgets/swipe_look_particles.dart) |
-| `skin_preserve_detail` | Done | CPU + [`skin_smooth.wgsl`](packages/rust_image_core/rust/src/gpu/shaders/skin_smooth.wgsl) |
+| `skin_preserve_detail` | Done | CPU + [`skin_smooth.wgsl`](packages/image_forge/rust/src/gpu/shaders/skin_smooth.wgsl) |
 
 **Config:** `enableSwipeLooks` (default true); `enableSwipeBeautyLooks` default false on Beauty tab swipe.
 
@@ -517,7 +517,7 @@ Example recipes (face-only, not global grade):
 
 ## Sprint V1 — Video media runtime & texture preview (planned)
 
-**Goal:** Stream-centric preview with explicit **MediaRuntime** ownership, **decoder-clock** playback, **texture lifecycle**, and a **bounded frame queue** — using FFmpeg + `rust_gpu_texture`, **not** a custom full video engine.
+**Goal:** Stream-centric preview with explicit **MediaRuntime** ownership, **decoder-clock** playback, **texture lifecycle**, and a **bounded frame queue** — using FFmpeg + `pixel_surface`, **not** a custom full video engine.
 
 **Design:** [`docs/VIDEO_MEDIA_RUNTIME.md`](docs/VIDEO_MEDIA_RUNTIME.md)
 
@@ -525,7 +525,7 @@ Example recipes (face-only, not global grade):
 
 | Phase | Deliverable | Status | Notes |
 |-------|-------------|--------|-------|
-| **V1.1** | `MediaRuntime` + `VideoTexturePool` + `VideoPreviewSurface` | **Done** | FRB `decode_preview_frame_rgba`; `rust_gpu_texture` dep; studio scrub on texture |
+| **V1.1** | `MediaRuntime` + `VideoTexturePool` + `VideoPreviewSurface` | **Done** | FRB `decode_preview_frame_rgba`; `pixel_surface` dep; studio scrub on texture |
 | **V1.2** | `FrameQueue` (depth 3) + scrub flush/coalesce | **Done** | `scheduleScrub` debounce on `MediaRuntime`; queue flush before decode |
 | **V1.3** | `PlaybackClock` + decoder-driven play/pause | **Done** | `play()` / `pause()`; PTS advances clock; video-only; step from `MediaInfo.fps` or `targetPreviewFps` |
 | **V1.4** | GPU residency — Apple CVPixelBuffer → texture | **Done** | `decodePreviewFramePixelBuffer` + `presentPixelBuffer`; VT transfer → BGRA; RGBA fallback |
@@ -541,7 +541,7 @@ Example recipes (face-only, not global grade):
 - **J** — 720p play 10 s within trim: ≥ 24 fps at preview edge (after V1.3).
 - **K** — 10× open/dispose: no texture handle leaks (after V1.1).
 
-**Out of scope for V1:** Replacing compress pipeline, filmstrip disk cache, `rust_image_core` GPU beauty, full multi-track editor.
+**Out of scope for V1:** Replacing compress pipeline, filmstrip disk cache, `image_forge` GPU beauty, full multi-track editor.
 
 ---
 
@@ -579,23 +579,23 @@ Example recipes (face-only, not global grade):
 
 | Package | Role | Status |
 |---------|------|--------|
-| **`rust_gpu_texture`** | TextureRegistry, Flutter `Texture`, CVPixelBuffer / SurfaceTexture — **no** editor/filters/beauty | **Done** (Flutter + native; wgpu surface still in core `rust/`) |
-| **`rust_image_core`** | Edit graph, filters, resize, GPU shaders, overlays, beauty, paint, layers — Rust + FRB only (**no** Flutter widgets) | **Done** — [`packages/rust_image_core/`](packages/rust_image_core/); `rust_image` path-dep |
-| **`rust_image_editor`** | Instagram UI, crop, panels, gestures, Riverpod shell — app-facing | **Done** — [`packages/rust_image_editor/`](packages/rust_image_editor/) |
-| **`rust_camera_runtime`** | Live camera: YUV stream, permissions, temporal smoothing | **Done** — [`packages/rust_camera_runtime/`](packages/rust_camera_runtime/) |
+| **`pixel_surface`** | TextureRegistry, Flutter `Texture`, CVPixelBuffer / SurfaceTexture — **no** editor/filters/beauty | **Done** (Flutter + native; wgpu surface still in core `rust/`) |
+| **`image_forge`** | Edit graph, filters, resize, GPU shaders, overlays, beauty, paint, layers — Rust + FRB only (**no** Flutter widgets) | **Done** — [`packages/image_forge/`](packages/image_forge/); `rust_image` path-dep |
+| **`image_forge_editor`** | Instagram UI, crop, panels, gestures, Riverpod shell — app-facing | **Done** — [`packages/image_forge_editor/`](packages/image_forge_editor/) |
+| **`image_forge_camera`** | Live camera: YUV stream, permissions, temporal smoothing | **Done** — [`packages/image_forge_camera/`](packages/image_forge_camera/) |
 
 | Phase | Deliverable | Status |
 |-------|-------------|--------|
 | P0.1 | Monorepo `packages/*` + CI per crate | **Done** — `melos.yaml`, `.github/workflows/ci.yml` |
-| P0.2 | Extract `rust_gpu_texture` | **Done** — [`packages/rust_gpu_texture/`](packages/rust_gpu_texture/); `rust_image` path dep |
-| P0.3 | Standalone `rust_image_core` (crates.io + FRB); depends on gpu texture crate | **Done** (monorepo package; crates.io later) |
-| P0.4 | `rust_image_editor` + optional `rust_image` re-export shim | **Done** |
-| P0.5 | `rust_camera_runtime` (editor dep; camera isolate still in editor) | **Done** |
+| P0.2 | Extract `pixel_surface` | **Done** — [`packages/pixel_surface/`](packages/pixel_surface/); `rust_image` path dep |
+| P0.3 | Standalone `image_forge` (crates.io + FRB); depends on gpu texture crate | **Done** (monorepo package; crates.io later) |
+| P0.4 | `image_forge_editor` + optional `rust_image` re-export shim | **Done** |
+| P0.5 | `image_forge_camera` (editor dep; camera isolate still in editor) | **Done** |
 | P0.6 | Per-package README, examples, acceptance checklist | **Done** — [P0_ACCEPTANCE.md](docs/P0_ACCEPTANCE.md) |
 
-**Why camera is last:** Live Nexus pipeline is already SDK-sized; embedding it in the editor package complicates permissions, platform matrix, and release cadence ([PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md#package-4--rust_camera_runtime-later)).
+**Why camera is last:** Live Nexus pipeline is already SDK-sized; embedding it in the editor package complicates permissions, platform matrix, and release cadence ([PUB_PACKAGE_SPLIT.md](docs/PUB_PACKAGE_SPLIT.md#package-4--image_forge_camera-later)).
 
-**Acceptance:** `rust_gpu_texture` demo runs without `rust_image_core`; editor `pubspec` has no `camera` unless camera package enabled; semver majors are per-package.
+**Acceptance:** `pixel_surface` demo runs without `image_forge`; editor `pubspec` has no `camera` unless camera package enabled; semver majors are per-package.
 
 ---
 
@@ -640,9 +640,9 @@ Run in **rust_image Studio** after changes; record status-line timings.
 | A | 768×1152 JPEG | Blur r=4 commit | auto | < 500 ms total |
 | B | 768×1152 | Adjust brightness live | auto | < 200 ms debounced |
 | C | 4K JPEG | Blur r=4 commit | auto | < 2 s (preview-scale live) |
-| D | 768×1152 | Preset “Dramatic” | auto | < 400 ms |
+| D | 768×1152 | Preset "Dramatic" | auto | < 400 ms |
 | E | 768×1152 | Resize 50% | auto | GPU path in status |
-| F | 768×1024 portrait | Beauty look “Soft” commit | auto | < 600 ms still |
+| F | 768×1024 portrait | Beauty look "Soft" commit | auto | < 600 ms still |
 | G | 768×1024 | Lip color live drag | auto | < 200 ms debounced |
 | H | 720p front camera | Skin smooth live | gpu | ≥ 24 fps sustained |
 | I | 720p video | Scrub playhead 5 s | texture | &lt; 300 ms debounced frame (Sprint V1) |
