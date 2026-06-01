@@ -18,7 +18,7 @@ pub struct MoodRecipe {
     pub shadows: f32,
     pub hue_degrees: f32,
     pub structure: f32,
-    
+
     // Cinematic extensions
     pub highlight_rolloff: f32,
     pub shadow_tint: [f32; 3],
@@ -375,14 +375,14 @@ pub fn apply_mood_color_rgba(buffer: &mut RgbaImageBuffer, recipe: MoodRecipe) {
     if recipe.hue_degrees.abs() > 0.001 {
         crate::parallel_ops::par_hue_rotate(&mut buffer.pixels, recipe.hue_degrees);
     }
-    
+
     super::filmic::apply_split_toning(
         &mut buffer.pixels,
         recipe.shadow_tint,
         recipe.midtone_tint,
         recipe.highlight_tint,
     );
-    
+
     if recipe.warmth.abs() > 0.001 {
         apply_warmth_rgba(&mut buffer.pixels, recipe.warmth);
     }
@@ -400,6 +400,10 @@ pub fn apply_mood_color_rgba(buffer: &mut RgbaImageBuffer, recipe: MoodRecipe) {
     }
 
     if let Some(orig) = original {
-        super::filmic::apply_skin_luma_protection(&orig, &mut buffer.pixels, recipe.skin_protection);
+        super::filmic::apply_skin_luma_protection(
+            &orig,
+            &mut buffer.pixels,
+            recipe.skin_protection,
+        );
     }
 }

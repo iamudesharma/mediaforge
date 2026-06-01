@@ -2,7 +2,6 @@
 
 use ffmpeg_next::codec::decoder::Video as DecoderVideo;
 use ffmpeg_next::codec::discard::Discard;
-use ffmpeg_next::format::context::Input;
 use ffmpeg_next::util::frame::video::Video;
 use ffmpeg_next::Rational;
 

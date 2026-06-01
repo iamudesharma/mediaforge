@@ -36,12 +36,24 @@ section() {
   echo "=============================================================="
 }
 
+# image_forge (full engine)
 RUST_DIR="${SCRIPT_DIR}/packages/image_forge/rust"
 DYLIB_DEBUG="${RUST_DIR}/target/debug/libimage_forge.dylib"
 
-section "Rust: cargo test + build --features ${TEST_RUST_FEATURES}"
+# image_forge_core (lightweight core)
+CORE_RUST_DIR="${SCRIPT_DIR}/packages/image_forge_core/rust"
+CORE_DYLIB_DEBUG="${CORE_RUST_DIR}/target/debug/libimage_forge_core.dylib"
+
+section "Rust (image_forge): cargo test + build --features ${TEST_RUST_FEATURES}"
 (
   cd "${RUST_DIR}"
+  cargo test --features "${TEST_RUST_FEATURES}"
+  cargo build --features "${TEST_RUST_FEATURES}"
+)
+
+section "Rust (image_forge_core): cargo test + build --features ${TEST_RUST_FEATURES}"
+(
+  cd "${CORE_RUST_DIR}"
   cargo test --features "${TEST_RUST_FEATURES}"
   cargo build --features "${TEST_RUST_FEATURES}"
 )
@@ -49,11 +61,21 @@ section "Rust: cargo test + build --features ${TEST_RUST_FEATURES}"
 section "Dart unit tests: flutter test test/editor/"
 if [[ "${SKIP_NATIVE_SYNC:-0}" != "1" && -f "${DYLIB_DEBUG}" ]]; then
   export RUST_IMAGE_DYLIB="${DYLIB_DEBUG}"
-  echo "  RUST_IMAGE_DYLIB=${RUST_IMAGE_DYLIB} (for apps/benchmarks; widget smoke may still use cached plugin FFI)"
+  echo "  RUST_IMAGE_DYLIB=${DYLIB_DEBUG} (for apps/benchmarks; widget smoke may still use cached plugin FFI)"
 fi
 (
   cd "${SCRIPT_DIR}/packages/image_forge_editor"
   flutter test test/editor/
+)
+
+section "Dart unit tests: image_forge_core test/types/"
+if [[ "${SKIP_NATIVE_SYNC:-0}" != "1" && -f "${CORE_DYLIB_DEBUG}" ]]; then
+  export RUST_IMAGE_CORE_DYLIB="${CORE_DYLIB_DEBUG}"
+  echo "  RUST_IMAGE_CORE_DYLIB=${CORE_DYLIB_DEBUG} (for image_forge_core tests)"
+fi
+(
+  cd "${SCRIPT_DIR}/packages/image_forge_core"
+  flutter test test/
 )
 
 if [[ "${RUN_INTEGRATION}" == "1" ]]; then

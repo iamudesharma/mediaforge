@@ -3,6 +3,7 @@ resolution: workspace
 description: >
   Media playback runtime (FFI) plus optional Flutter presentation widgets
   (GPU texture hot path via pixel_surface).
+publish_to: 'none'
 version: 0.1.0
 homepage: https://github.com/iamudesharma/mediaforge
 repository: https://github.com/iamudesharma/mediaforge
@@ -17,14 +18,14 @@ dependencies:
   flutter_rust_bridge: 2.12.0
   pixel_surface:
     path: ../pixel_surface
+  code_assets: ^1.0.0
+  hooks: ^1.0.3
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  hooks: ^1.0.3
-  code_assets: ^1.0.0
-  path: ^1.9.0
 
 flutter:
   plugin:

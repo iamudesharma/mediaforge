@@ -127,4 +127,29 @@ abstract final class GpuTextureRegistry {
       // no-op
     }
   }
+
+  /// Returns the raw `MTLTexture*` (as `int` bit-cast) and `CVPixelBuffer*`
+  /// (as `int` bit-cast) for the Flutter display texture associated with
+  /// [handle]. Rust adopts these into a `wgpu::Texture` for zero-copy
+  /// beauty compute writes; on other platforms returns `null`.
+  static Future<({int metalTexturePtr, int pixelBufferPtr})?>
+      getMetalTexturePtrForBeauty({required int handle}) async {
+    if (!isSupported) return null;
+    try {
+      final map = await _channel.invokeMapMethod<Object?, Object?>(
+        'getMetalTexturePtr',
+        {'handle': handle},
+      );
+      if (map == null) return null;
+      final mtl = map['metalTexturePtr'];
+      final pb = map['pixelBufferPtr'];
+      if (mtl is! int || pb is! int) return null;
+      if (mtl == 0 || pb == 0) return null;
+      return (metalTexturePtr: mtl, pixelBufferPtr: pb);
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
 }

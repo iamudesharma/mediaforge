@@ -17,5 +17,16 @@ wgpu = { version = "24", optional = true }
 pollster = { version = "0.4", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 
+[target.'cfg(target_vendor = "apple")'.dependencies]
+metal = "0.31"
+objc = "0.2"
+core-graphics-types = "0.1"
+block = "0.1"
+
+[target.'cfg(target_vendor = "apple")'.dependencies.wgpu]
+version = "24"
+optional = true
+features = ["metal"]
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gpu"))'] }

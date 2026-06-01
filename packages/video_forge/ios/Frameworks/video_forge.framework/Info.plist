@@ -7,7 +7,7 @@
   <key>CFBundleExecutable</key>
   <string>video_forge</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.fluttervideoprocessor.core</string>
+  <string>dev.video_forge</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -15,9 +15,9 @@
   <key>CFBundlePackageType</key>
   <string>FMWK</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>1.0.0</string>
   <key>CFBundleVersion</key>
-  <string>0.1.0</string>
+  <string>1</string>
   <key>MinimumOSVersion</key>
   <string>16.0</string>
 </dict>

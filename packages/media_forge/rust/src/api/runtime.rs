@@ -657,6 +657,7 @@ impl OverlayAudioState {
 
 /// One overlay audio track: owns its demuxer + decoder threads.
 #[frb(ignore)]
+#[allow(dead_code)]
 pub(crate) struct OverlayAudioTrack {
     pub id: u64,
     pub path: String,
@@ -836,7 +837,7 @@ impl OverlayAudioTrack {
                     }
                 }
             }
-            runtime_log!("[OverlayDemuxer] id={} finished", id);
+            runtime_log!("[OverlayDemuxer] id={} finished packets={}", id, count);
         });
 
         // ── Decoder thread ──
@@ -846,7 +847,7 @@ impl OverlayAudioTrack {
         let pq_dec = packet_queue.clone();
         let decoder_handle = thread::spawn(move || {
             runtime_log!("[OverlayDecoder] id={} started", id);
-            let mut ictx = match ffmpeg_next::format::input(&path_clone2) {
+            let ictx = match ffmpeg_next::format::input(&path_clone2) {
                 Ok(ctx) => ctx,
                 Err(e) => {
                     runtime_log!("[OverlayDecoder] id={} open failed: {}", id, e);
@@ -2285,6 +2286,7 @@ impl VideoRuntime {
 
 /// Simulates presenting a video frame to a GPU texture.
 pub struct GpuPresenter {
+    #[allow(dead_code)]
     texture_id: AtomicU32,
 }
 
@@ -2308,6 +2310,7 @@ struct PlaybackSession {
 }
 
 /// Unified playback engine facade that wraps all internal components.
+#[allow(dead_code)]
 pub struct MediaPlaybackEngine {
     clock: Arc<PlaybackClock>,
     video_packet_queue: Arc<PacketQueue>,

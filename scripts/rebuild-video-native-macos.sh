@@ -60,9 +60,8 @@ if [[ -z "${DYLIB}" ]]; then
   exit 1
 fi
 echo "    Using ${DYLIB}"
-FRAMEWORK_BIN="${VP}/macos/Frameworks/video_forge.framework/Versions/A/video_forge"
-cp "${DYLIB}" "${FRAMEWORK_BIN}"
-install_name_tool -id "@rpath/video_forge.framework/video_forge" "${FRAMEWORK_BIN}"
+# macOS no longer uses vendored_frameworks; it is bundled via hook/build.dart native-assets.
+
 
 echo "==> Verify FRB content hash in source"
 DART_HASH=$(grep -m1 'rustContentHash =>' "${VP}/lib/src/frb_generated/frb_generated.dart" | sed -E 's/.*=> *(-?[0-9]+).*/\1/')

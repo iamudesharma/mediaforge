@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::error::{Result, VideoProcessorError};
 use crate::ffmpeg::{
-    ensure_ffmpeg_initialized, ensure_input_accessible, is_remote_input, map_ffmpeg_error,
-    open_input, prefer_software_preview, stream_has_dolby_vision,
+    ensure_ffmpeg_initialized, ensure_input_accessible, is_remote_input, open_input,
+    prefer_software_preview, stream_has_dolby_vision,
 };
 use crate::ffmpeg::large_file::probe_mp4_fast;
 use crate::ffmpeg::probe_cache::{get as probe_cache_get, insert as probe_cache_insert};

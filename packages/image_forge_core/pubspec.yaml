@@ -1,0 +1,50 @@
+name: image_forge_core
+resolution: workspace
+description: >
+  Lightweight Rust image processing engine for Flutter.
+  Core operations: resize, crop, rotate, compress, thumbnails, EXIF, blurhash,
+  basic filters, GPU compute, and RGBA buffer pipeline.
+  Headless engine — no UI widgets. No face beauty or preset filters.
+version: 1.0.0
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
+issue_tracker: https://github.com/iamudesharma/mediaforge/issues
+license: Apache-2.0
+
+topics:
+  - image
+  - image-processing
+  - gpu
+  - ffi
+  - flutter
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_rust_bridge: ^2.12.0
+  freezed_annotation: ^3.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  freezed: 3.2.5
+  build_runner: ^2.15.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

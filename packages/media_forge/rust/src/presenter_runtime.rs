@@ -257,6 +257,7 @@ impl PresenterRuntime {
         self.display_frame.clone()
     }
 
+    #[allow(dead_code)]
     pub fn clear_display_frame(&self) {
         self.display_frame.lock().take();
     }

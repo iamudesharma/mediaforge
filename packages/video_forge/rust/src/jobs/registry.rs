@@ -35,7 +35,6 @@ impl CancellationToken {
 struct JobRecord {
     token: CancellationToken,
     result: Mutex<Option<std::result::Result<JobResult, VideoProcessorError>>>,
-    started_at: Instant,
 }
 
 pub struct JobRegistry {
@@ -77,7 +76,6 @@ impl JobRegistry {
             JobRecord {
                 token: token.clone(),
                 result: Mutex::new(None),
-                started_at: Instant::now(),
             },
         );
         (id, token)
@@ -131,7 +129,11 @@ impl JobRegistry {
     }
 
     pub fn active_count(&self) -> usize {
-        self.jobs.lock().len()
+        self.jobs
+            .lock()
+            .values()
+            .filter(|r| r.result.lock().is_none())
+            .count()
     }
 }
 

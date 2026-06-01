@@ -1,10 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:media_forge/media_forge.dart' hide PlaybackState;
 import 'package:video_forge_kit/video_forge_kit.dart'
-    show AudioTrackInfo, MediaInfo, PlaybackBackend, VideoHandle, VideoProcessor;
-import 'package:media_forge/media_forge.dart'
-    hide PlaybackState;
+    show MediaInfo, VideoProcessor;
 
 import 'playback_backend.dart';
 

@@ -1,4 +1,4 @@
-//! Benchmark harness for video_forge_kit (same Rust pipeline as the Flutter plugin).
+//! Benchmark harness for video_forge (same Rust pipeline as the Flutter plugin).
 //!
 //! Usage:
 //!   cargo run --release -p video_forge --bin vp_bench -- \

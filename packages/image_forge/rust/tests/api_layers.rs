@@ -217,8 +217,7 @@ fn bake_layers_local_blur_softens_interior() {
     assert_ne!(
         blurred, sharp,
         "blurred center {:?} should differ from sharp {:?}",
-        blurred,
-        sharp
+        blurred, sharp
     );
 }
 
@@ -266,5 +265,9 @@ fn bake_layers_filled_rect_paints_interior() {
     };
     let out = bake_layers_on_rgba(base, vec![], vec![stroke]).expect("bake ok");
     let inside = pixel(&out, 20, 20);
-    assert!(inside[1] > 200, "filled rect interior green = {}", inside[1]);
+    assert!(
+        inside[1] > 200,
+        "filled rect interior green = {}",
+        inside[1]
+    );
 }

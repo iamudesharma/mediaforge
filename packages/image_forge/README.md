@@ -5,10 +5,10 @@
 
 > Open-source project maintained by the community. Found a bug or want to contribute? [PRs and issues are welcome](https://github.com/iamudesharma/mediaforge/issues).
 
-High-performance Rust image processing engine for Flutter — GPU-accelerated filters, face beauty, layer composition, and multi-format encoding. Runs native Rust on device with SIMD and WGSL compute shaders.
+Full-featured Rust image processing engine for Flutter — GPU-accelerated filters, face beauty, layer composition, multi-format encoding, mood/swipe presets, LUT support, and GPU preview surface. Runs native Rust on device with SIMD and WGSL compute shaders.
 
 > [!NOTE]
-> This is a **headless engine** (no UI widgets). For the full editor with crop, filters panel, draw, layers, and export UI, use [`image_forge_editor`](../image_forge_editor/). For GPU texture display, see [`pixel_surface`](../pixel_surface/).
+> This is a **headless engine** (no UI widgets). For the full editor with crop, filters panel, draw, layers, and export UI, use [`image_forge_editor`](../image_forge_editor/). For GPU texture display, see [`pixel_surface`](../pixel_surface/). For lightweight image operations (resize, crop, compress, thumbnails), see [`image_forge_core`](../image_forge_core/) — a smaller version without face beauty or mood/swipe presets.
 
 ---
 
@@ -100,10 +100,10 @@ The package bundles native Rust libraries per platform. Size impact by component
 
 The beauty engine is tiny (~100 KB) — it's pure Rust without external ML dependencies. The GPU stack and AVIF encoder are the real size drivers.
 
-**Planned package split:**
-- `image_forge` — Core ops + filters + drawing (~7–9 MB)
-- `image_forge_beauty` — Face beauty engine (adds ~100 KB, depends on `image_forge`)
-- These will be independently versioned for faster feature iteration on beauty/camera features.
+**Package split available:**
+- [`image_forge_core`](../image_forge_core/) — Core ops + filters + drawing (~8-12 MB)
+- `image_forge` — Core + face beauty + mood/swipe presets + LUT + layers + GPU preview surface (~14-18 MB)
+- These are independently versioned. Use `image_forge_core` if you only need image processing without beauty/filter presets.
 
 ---
 

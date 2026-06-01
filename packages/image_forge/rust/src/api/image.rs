@@ -1,9 +1,7 @@
 use fast_image_resize::{FilterType, ResizeAlg};
 use rayon::prelude::*;
 
-use crate::{
-    buffer, crop, draw, exif, filters, overlay, resize, rotate, thumbnail, utils,
-};
+use crate::{buffer, crop, draw, exif, filters, overlay, resize, rotate, thumbnail, utils};
 
 #[flutter_rust_bridge::frb(init)]
 pub fn init_app() {
@@ -415,7 +413,11 @@ pub fn rotate_image(
 
 /// Rewrites the image file so that pixels match the physical EXIF orientation, clearing the EXIF tag.
 #[flutter_rust_bridge::frb(sync)]
-pub fn fix_exif_orientation(bytes: Vec<u8>, format: OutputFormat, quality: u8) -> Result<Vec<u8>, String> {
+pub fn fix_exif_orientation(
+    bytes: Vec<u8>,
+    format: OutputFormat,
+    quality: u8,
+) -> Result<Vec<u8>, String> {
     let img = process(&bytes, true)?;
     utils::encode(&img, format, quality)
 }
@@ -428,7 +430,11 @@ pub fn read_exif_orientation(bytes: Vec<u8>) -> Option<u16> {
 
 /// Re-compresses an image file with a specified quality and output format.
 #[flutter_rust_bridge::frb(sync)]
-pub fn compress_image(bytes: Vec<u8>, format: OutputFormat, quality: u8) -> Result<Vec<u8>, String> {
+pub fn compress_image(
+    bytes: Vec<u8>,
+    format: OutputFormat,
+    quality: u8,
+) -> Result<Vec<u8>, String> {
     let img = utils::decode(&bytes)?;
     utils::encode(&img, format, quality)
 }
@@ -569,7 +575,11 @@ fn encode_after_edit_rgba(
 /// Computes a BlurHash string from raw image bytes.
 #[cfg(feature = "blurhash")]
 #[flutter_rust_bridge::frb(sync)]
-pub fn encode_blurhash(bytes: Vec<u8>, components_x: u32, components_y: u32) -> Result<String, String> {
+pub fn encode_blurhash(
+    bytes: Vec<u8>,
+    components_x: u32,
+    components_y: u32,
+) -> Result<String, String> {
     let img = utils::decode(&bytes)?;
     crate::blurhash::encode(&img, components_x, components_y)
 }
@@ -616,9 +626,7 @@ pub fn decode_blurhash(
 #[derive(Debug, Clone)]
 pub enum EditOp {
     /// Apply an image filter.
-    Filter {
-        filter: ImageFilter,
-    },
+    Filter { filter: ImageFilter },
     /// Resize operation.
     Resize {
         width: u32,
@@ -633,9 +641,7 @@ pub enum EditOp {
         height: u32,
     },
     /// Rotate/flip operation.
-    Rotate {
-        rotation: Rotation,
-    },
+    Rotate { rotation: Rotation },
 }
 
 /// Regional beauty params for a combo swipe look.
@@ -671,7 +677,10 @@ pub fn apply_edit_pipeline(
     backend: ProcessingBackend,
 ) -> Result<RgbaImageBuffer, String> {
     let mut buf = buffer;
-    let is_gpu = matches!(crate::backend::resolve(backend), Ok(crate::backend::EffectiveBackend::Gpu));
+    let is_gpu = matches!(
+        crate::backend::resolve(backend),
+        Ok(crate::backend::EffectiveBackend::Gpu)
+    );
 
     if is_gpu {
         #[cfg(feature = "gpu")]
@@ -712,7 +721,7 @@ fn is_gpu_capable(op: &EditOp) -> bool {
                     | ImageFilter::Contrast { .. }
                     | ImageFilter::Saturation { .. }
                     | ImageFilter::HueRotate { .. }
-                    |                 ImageFilter::Blur { .. }
+                    | ImageFilter::Blur { .. }
                     | ImageFilter::Sharpen
                     | ImageFilter::Vignette { .. }
                     | ImageFilter::Mood { .. }
@@ -730,12 +739,17 @@ fn apply_single_op_cpu(buf: RgbaImageBuffer, op: &EditOp) -> Result<RgbaImageBuf
         EditOp::Filter { filter } => {
             buffer::filter_rgba_with_backend(buf, filter.clone(), ProcessingBackend::Cpu)
         }
-        EditOp::Resize { width, height, algorithm } => {
-            buffer::resize_rgba(buf, *width, *height, *algorithm, ProcessingBackend::Cpu)
-        }
-        EditOp::Crop { x, y, width, height } => {
-            buffer::crop_rgba(buf, *x, *y, *width, *height)
-        }
+        EditOp::Resize {
+            width,
+            height,
+            algorithm,
+        } => buffer::resize_rgba(buf, *width, *height, *algorithm, ProcessingBackend::Cpu),
+        EditOp::Crop {
+            x,
+            y,
+            width,
+            height,
+        } => buffer::crop_rgba(buf, *x, *y, *width, *height),
         EditOp::Rotate { rotation } => {
             let img = buf.into_dynamic()?;
             let rotated = rotate::rotate(img, *rotation);

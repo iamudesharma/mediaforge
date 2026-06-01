@@ -95,7 +95,12 @@ pub fn apply_face_warp_rgba(
         );
     }
     if params.face_slim > 0.001 {
-        out = warp_face_slim(&out, &analysis.landmarks, analysis.face_contour_count, params.face_slim);
+        out = warp_face_slim(
+            &out,
+            &analysis.landmarks,
+            analysis.face_contour_count,
+            params.face_slim,
+        );
     }
     out
 }

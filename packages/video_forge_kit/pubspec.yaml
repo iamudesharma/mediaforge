@@ -1,5 +1,6 @@
 name: video_forge_kit
 resolution: workspace
+publish_to: 'none'
 description: >
   High-performance cross-platform video processing for Flutter — compress,
   transcode, thumbnails, and job queue. Native engine in video_forge.

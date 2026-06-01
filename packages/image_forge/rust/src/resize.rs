@@ -43,13 +43,8 @@ pub fn resize_rgba_buffer(
         return Ok(buffer);
     }
 
-    let src = Image::from_vec_u8(
-        buffer.width,
-        buffer.height,
-        buffer.pixels,
-        PixelType::U8x4,
-    )
-    .map_err(|e| e.to_string())?;
+    let src = Image::from_vec_u8(buffer.width, buffer.height, buffer.pixels, PixelType::U8x4)
+        .map_err(|e| e.to_string())?;
 
     let mut dst = Image::new(width, height, PixelType::U8x4);
     let options = ResizeOptions::new().resize_alg(algorithm.into());
@@ -79,13 +74,8 @@ fn resize_cpu(
         return Ok(DynamicImage::ImageRgba8(rgba));
     }
 
-    let src = Image::from_vec_u8(
-        src_w,
-        src_h,
-        rgba.into_raw(),
-        PixelType::U8x4,
-    )
-    .map_err(|e| e.to_string())?;
+    let src = Image::from_vec_u8(src_w, src_h, rgba.into_raw(), PixelType::U8x4)
+        .map_err(|e| e.to_string())?;
 
     let mut dst = Image::new(width, height, PixelType::U8x4);
     let options = ResizeOptions::new().resize_alg(algorithm.into());

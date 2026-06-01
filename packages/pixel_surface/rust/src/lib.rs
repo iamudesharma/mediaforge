@@ -6,6 +6,11 @@
 
 pub mod buffer;
 
+#[cfg(target_vendor = "apple")]
+pub mod metal_iosurface;
+#[cfg(all(target_vendor = "apple", feature = "gpu"))]
+pub mod wgpu_metal_import;
+
 /// Crate version for diagnostics and pub.dev alignment.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

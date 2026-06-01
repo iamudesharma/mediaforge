@@ -51,6 +51,16 @@ class EditorSession extends ChangeNotifier {
   /// Flutter [Texture.textureId] from [GpuTextureRegistry].
   int? gpuTextureId;
 
+  /// Whether the host platform supports the zero-copy beauty output path
+  /// (Apple Metal with `Features::BGRA8UNORM_STORAGE`). Sticky after first
+  /// successful probe; cached on the session so the slider path stays cheap.
+  bool? _zeroCopyAvailable;
+
+  /// Handle of the GPU surface that has a zero-copy output texture attached.
+  /// The attachment is sticky for the surface lifetime — re-binding on each
+  /// beauty dispatch would be wasteful and would invalidate the wgpu import.
+  PlatformInt64? _zeroCopyAttachedFor;
+
   final gpuTextureListenable = ValueNotifier<int>(0);
 
   bool _isDisposed = false;
@@ -1431,6 +1441,18 @@ class EditorSession extends ChangeNotifier {
     required FaceAnalysisResult analysis,
     required BeautyParams params,
   }) async {
+    // Zero-copy path: write beauty output directly into the Flutter
+    // display's IOSurface-backed Metal texture, skipping the CPU readback.
+    if (await _ensureZeroCopyOutputTexture(handle)) {
+      await applyGpuBeautyPipelineZeroCopy(
+        id: handle,
+        analysis: analysis,
+        skinMask: skinMask,
+        params: params,
+        excludeMask: _beautyExcludeForBuffer(buffer),
+      );
+      return;
+    }
     await applyGpuBeautyPipeline(
       id: handle,
       analysis: analysis,
@@ -1438,6 +1460,38 @@ class EditorSession extends ChangeNotifier {
       params: params,
       excludeMask: _beautyExcludeForBuffer(buffer),
     );
+  }
+
+  /// Lazily attach a zero-copy output texture for [handle]. Returns true if
+  /// the output texture is now attached and zero-copy dispatches will land
+  /// directly in the Flutter display IOSurface. The result is sticky for
+  /// the lifetime of [gpuPreviewHandle].
+  Future<bool> _ensureZeroCopyOutputTexture(PlatformInt64 handle) async {
+    if (!_gpuBeautyDisplayViaTexture() || gpuTextureId == null) return false;
+    if (_zeroCopyAvailable != true) {
+      _zeroCopyAvailable = isZeroCopyBeautyAvailable();
+    }
+    if (_zeroCopyAvailable != true) return false;
+    if (_zeroCopyAttachedFor == handle) return true;
+    final ptrs = await GpuTextureRegistry.getMetalTexturePtrForBeauty(
+      handle: handle.toInt(),
+    );
+    if (ptrs == null) {
+      _zeroCopyAvailable = false;
+      return false;
+    }
+    try {
+      await attachZeroCopyOutputTexture(
+        id: handle,
+        mtlTexturePtr: BigInt.from(ptrs.metalTexturePtr),
+        pixelBufferPtr: BigInt.from(ptrs.pixelBufferPtr),
+      );
+      _zeroCopyAttachedFor = handle;
+      return true;
+    } catch (_) {
+      _zeroCopyAvailable = false;
+      return false;
+    }
   }
 
   /// Skin mask at [buffer] resolution (rebuilds from landmarks when sizes differ).
@@ -1597,12 +1651,44 @@ class EditorSession extends ChangeNotifier {
   }
 
   /// Readback GPU surface and publish to Texture and/or [previewRgba] (Sprint 22.2).
+  ///
+  /// Zero-copy path: when an output texture is attached, the beauty
+  /// compute already wrote the result into the Flutter display IOSurface
+  /// during `_applyGpuBeautyPipeline`. We just call `notifyFrameAvailable`
+  /// and skip the CPU readback entirely.
   Future<void> _syncGpuPreviewAfterBeauty({
     required PlatformInt64 handle,
     BeautyParams? params,
     int? gen,
   }) async {
     final g = gen ?? _opGeneration;
+    final zeroCopy = _zeroCopyAttachedFor == handle &&
+        _gpuBeautyDisplayViaTexture() &&
+        gpuTextureId != null;
+
+    if (zeroCopy) {
+      // The beauty result is already in the Flutter display texture; no
+      // readback needed. Just notify the platform to redraw.
+      if (g != _opGeneration) return;
+      previewRgba = null;
+      // Lazy copy: the cached display buffer would normally be populated
+      // from readback. We don't have it, so we leave rgbaBuffer as-is —
+      // compare / export paths that need RGBA pixels will go through
+      // readback explicitly.
+      await GpuTextureRegistry.notifyFrameAvailable(handle.toInt());
+      if (!_isDisposed) {
+        gpuTextureListenable.value = gpuTextureId!;
+      }
+      lastBeautyPath = 'gpu_beauty_zero_copy';
+      if (g == _opGeneration && params != null && params.hasEffect) {
+        final path = showPerformanceInStatus ? ' · zero_copy_beauty' : '';
+        status = 'Beauty${_gpuBeautyPathSuffix(params)}$path';
+        _bumpStatus();
+      }
+      notifyPreviewChanged();
+      return;
+    }
+
     final displayRb = await readbackGpuPreviewSurface(id: handle);
     if (g != _opGeneration) return;
 
@@ -2115,8 +2201,17 @@ class EditorSession extends ChangeNotifier {
   void _disposeGpuSurface() {
     final handle = gpuPreviewHandle;
     if (handle != null) {
+      // Detach the zero-copy output texture before destroying the surface.
+      if (_zeroCopyAttachedFor != null) {
+        detachZeroCopyOutputTexture(id: handle).catchError((e) {
+          debugPrint('[EditorSession] Ignored detach error: $e');
+        });
+        _zeroCopyAttachedFor = null;
+      }
       destroyGpuPreviewSurface(id: handle);
-      unawaited(GpuTextureRegistry.disposeTexture(handle.toInt()));
+      GpuTextureRegistry.disposeTexture(handle.toInt()).catchError((e) {
+        debugPrint('[EditorSession] Ignored dispose texture error: $e');
+      });
       gpuPreviewHandle = null;
       gpuTextureId = null;
       if (!_isDisposed) {

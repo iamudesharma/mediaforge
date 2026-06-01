@@ -35,9 +35,7 @@ impl TemporalSmoother {
         };
 
         let segmentation = match (&self.prev_mask, &raw.segmentation) {
-            (Some(prev), Some(next))
-                if prev.width == next.width && prev.height == next.height =>
-            {
+            (Some(prev), Some(next)) if prev.width == next.width && prev.height == next.height => {
                 let a = self.alpha;
                 let b = 1.0 - a;
                 let pixels = prev
@@ -82,7 +80,11 @@ mod tests {
     fn ema_converges_toward_new_sample() {
         let mut s = TemporalSmoother::new(0.5);
         let first = FaceAnalysisResult {
-            landmarks: vec![Landmark2D { x: 0.0, y: 0.0, z: 0.0 }],
+            landmarks: vec![Landmark2D {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            }],
             confidence: 1.0,
             segmentation: None,
             face_contour_count: 0,
@@ -90,7 +92,11 @@ mod tests {
         };
         let _ = s.smooth(first);
         let second = FaceAnalysisResult {
-            landmarks: vec![Landmark2D { x: 1.0, y: 1.0, z: 0.0 }],
+            landmarks: vec![Landmark2D {
+                x: 1.0,
+                y: 1.0,
+                z: 0.0,
+            }],
             confidence: 1.0,
             segmentation: None,
             face_contour_count: 0,

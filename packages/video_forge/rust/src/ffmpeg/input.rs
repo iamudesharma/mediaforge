@@ -6,7 +6,7 @@ use ffmpeg_next::Dictionary;
 use crate::error::{Result, VideoProcessorError};
 
 const USER_AGENT: &str =
-    "Mozilla/5.0 (compatible; video_forge_kit/1.0; +https://github.com)";
+    "Mozilla/5.0 (compatible; video_forge/1.0; +https://github.com)";
 
 /// True when [input] is a remote URL FFmpeg can open (HTTP, HTTPS, RTMP, RTSP, FTP).
 pub fn is_remote_input(input: &str) -> bool {

@@ -633,7 +633,7 @@ enum VideoQuality {
   /// 720p, small files for messaging.
   whatsapp,
 
-  /// 1280p, messaging app uploads.
+  /// 720p (max 1280×720), messaging app uploads.
   telegram,
 
   /// 1080p, higher bitrate for video platforms.

@@ -46,15 +46,15 @@ fn filmic_curve(x: f32, strength: f32) -> f32 {
     if strength < 0.001 {
         return x;
     }
-    
+
     // Pegtop soft-light inspired S-curve with configurable toe/shoulder
-    let toe = 0.04 + strength * 0.08;   // shadow lift
+    let toe = 0.04 + strength * 0.08; // shadow lift
     let shoulder = 0.92 - strength * 0.12; // highlight compression
-    
+
     // Cubic hermite S-curve between toe and shoulder
     let t = ((x - toe) / (shoulder - toe)).clamp(0.0, 1.0);
     let s = t * t * (3.0 - 2.0 * t); // smoothstep
-    
+
     // Mix between linear and S-curve based on strength
     let linear = x;
     let curved = toe + s * (shoulder - toe);
@@ -92,28 +92,34 @@ pub fn apply_split_toning(
     highlight_tint: [f32; 3], // RGB offset for bright areas
 ) {
     // Check if tints are zero
-    let has_shadow = shadow_tint[0].abs() > 0.001 || shadow_tint[1].abs() > 0.001 || shadow_tint[2].abs() > 0.001;
-    let has_midtone = midtone_tint[0].abs() > 0.001 || midtone_tint[1].abs() > 0.001 || midtone_tint[2].abs() > 0.001;
-    let has_highlight = highlight_tint[0].abs() > 0.001 || highlight_tint[1].abs() > 0.001 || highlight_tint[2].abs() > 0.001;
-    
+    let has_shadow = shadow_tint[0].abs() > 0.001
+        || shadow_tint[1].abs() > 0.001
+        || shadow_tint[2].abs() > 0.001;
+    let has_midtone = midtone_tint[0].abs() > 0.001
+        || midtone_tint[1].abs() > 0.001
+        || midtone_tint[2].abs() > 0.001;
+    let has_highlight = highlight_tint[0].abs() > 0.001
+        || highlight_tint[1].abs() > 0.001
+        || highlight_tint[2].abs() > 0.001;
+
     if !has_shadow && !has_midtone && !has_highlight {
         return;
     }
 
     for chunk in pixels.chunks_exact_mut(4) {
         let luma = luminance_f32(chunk);
-        
+
         // Shadow zone: strong in darks, fades out in mids
         let shadow_weight = (1.0 - luma * 2.5).clamp(0.0, 1.0).powf(1.5);
         // Highlight zone: strong in brights, fades out in mids
         let highlight_weight = ((luma - 0.4) * 2.5).clamp(0.0, 1.0).powf(1.5);
         // Midtone zone: bell curve peaking at ~0.45
         let midtone_weight = (1.0 - ((luma - 0.45) / 0.35).powi(2)).clamp(0.0, 1.0);
-        
+
         for c in 0..3 {
             let shift = shadow_tint[c] * shadow_weight * 40.0
-                      + midtone_tint[c] * midtone_weight * 30.0
-                      + highlight_tint[c] * highlight_weight * 35.0;
+                + midtone_tint[c] * midtone_weight * 30.0
+                + highlight_tint[c] * highlight_weight * 35.0;
             chunk[c] = (chunk[c] as f32 + shift).clamp(0.0, 255.0) as u8;
         }
     }
@@ -122,7 +128,7 @@ pub fn apply_split_toning(
 /// Protect skin tones from extreme color shifts during grading.
 /// Detects skin-range hues and reduces color transform intensity.
 pub fn apply_skin_luma_protection(
-    original: &[u8],  // pre-grade pixels
+    original: &[u8],   // pre-grade pixels
     graded: &mut [u8], // post-grade pixels to modify
     strength: f32,     // 0 = no protection, 1 = full protection
 ) {
@@ -133,13 +139,13 @@ pub fn apply_skin_luma_protection(
         // Detect skin hue range (peach/beige in HSV)
         let (h, s, _) = rgb_to_hsv_inline(orig[0], orig[1], orig[2]);
         let is_skin_hue = h >= 5.0 && h <= 50.0 && s >= 0.1 && s <= 0.75;
-        
+
         if is_skin_hue {
             let skin_factor = strength * 0.4; // partial protection
             for c in 0..3 {
                 // Blend back toward original to protect skin
                 graded_chunk[c] = (graded_chunk[c] as f32 * (1.0 - skin_factor)
-                                 + orig[c] as f32 * skin_factor)
+                    + orig[c] as f32 * skin_factor)
                     .clamp(0.0, 255.0) as u8;
             }
         }

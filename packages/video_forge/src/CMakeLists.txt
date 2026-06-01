@@ -9,7 +9,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Corrosion)
 
-set(RUST_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/../../../native/rust_core/Cargo.toml")
+set(RUST_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/../rust/Cargo.toml")
 
 corrosion_import_crate(
   MANIFEST_PATH "${RUST_MANIFEST}"
@@ -26,8 +26,8 @@ if(ANDROID)
   target_link_options(video_forge PRIVATE "-Wl,-z,max-page-size=16384")
 endif()
 
-add_library(video_forge_kit SHARED IMPORTED GLOBAL)
+add_library(video_forge SHARED IMPORTED GLOBAL)
 set_target_properties(
-  video_forge_kit PROPERTIES
+  video_forge PROPERTIES
   IMPORTED_LOCATION "$<TARGET_FILE:video_forge>"
 )

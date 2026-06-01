@@ -9,6 +9,7 @@ use super::swipe_extras::{
 
 /// Optional post-grade effects (Phase 1+).
 #[derive(Debug, Clone, Copy, Default)]
+#[allow(dead_code)]
 pub struct SwipeLookExtras {
     pub glow: f32,
     pub grain: f32,
@@ -20,6 +21,7 @@ pub struct SwipeLookExtras {
 
 /// Combo swipe look: global mood grade + regional beauty params.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub struct SwipeLookRecipe {
     pub mood: MoodRecipe,
     pub beauty: BeautyParams,
@@ -353,6 +355,7 @@ pub fn recipe_for(preset: SwipeLookPreset) -> SwipeLookRecipe {
     }
 }
 
+#[allow(dead_code)]
 pub fn display_name(preset: SwipeLookPreset) -> &'static str {
     match preset {
         SwipeLookPreset::CleanGirlGlow => "Clean Girl Glow",
@@ -427,9 +430,7 @@ fn apply_mood_recipe_with_strength(
 
 fn apply_mood_recipe_full(buffer: &mut RgbaImageBuffer, recipe: MoodRecipe) {
     use super::mood_presets::apply_mood_color_rgba;
-    use super::{
-        apply_structure_rgba, apply_vignette_rgba,
-    };
+    use super::{apply_structure_rgba, apply_vignette_rgba};
     apply_mood_color_rgba(buffer, recipe);
     if recipe.structure.abs() > 0.001 {
         apply_structure_rgba(buffer, recipe.structure);
@@ -441,10 +442,13 @@ fn apply_mood_recipe_full(buffer: &mut RgbaImageBuffer, recipe: MoodRecipe) {
 
 fn blend_pixels(out: &mut [u8], orig: &[u8], t: f32) {
     for (o, s) in out.iter_mut().zip(orig.iter()) {
-        *o = (*o as f32 * t + *s as f32 * (1.0 - t)).round().clamp(0.0, 255.0) as u8;
+        *o = (*o as f32 * t + *s as f32 * (1.0 - t))
+            .round()
+            .clamp(0.0, 255.0) as u8;
     }
 }
 
+#[cfg(test)]
 use crate::api::image::RgbaImageBuffer as RgbaBuf;
 
 #[cfg(test)]
@@ -476,9 +480,7 @@ mod tests {
         let mut buf = RgbaBuf {
             width: 64,
             height: 64,
-            pixels: (0..64 * 64)
-                .flat_map(|_| [180u8, 140, 120, 255])
-                .collect(),
+            pixels: (0..64 * 64).flat_map(|_| [180u8, 140, 120, 255]).collect(),
         };
         let before = buf.pixels.clone();
         buf = apply_swipe_look_grade_rgba(buf, CleanGirlGlow, 1.0);

@@ -4,6 +4,10 @@
 //
 // See `image_forge_editor_thorough_test.dart` for error paths and format
 
+import 'dart:typed_data';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
 import 'package:image_forge_editor/image_forge_editor.dart';
 
 import 'test_fixtures.dart';

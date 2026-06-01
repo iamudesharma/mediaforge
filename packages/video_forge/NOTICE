@@ -1,5 +1,5 @@
-video_forge_kit
-Copyright (c) video_forge_kit contributors
+video_forge
+Copyright (c) video_forge contributors
 
 This package links against FFmpeg (https://ffmpeg.org/) under LGPL 2.1 or later.
 
@@ -12,7 +12,7 @@ FFmpeg configure flags (minimal mobile build):
 NO GPL components (x264/x265) are included in official builds.
 
 To obtain FFmpeg source corresponding to linked binaries, see:
-  https://github.com/your-org/video_forge_kit/releases
+  https://github.com/iamudesharma/mediaforge/releases
 
 For LGPL compliance, your app must provide:
   1. A copy of the LGPL license

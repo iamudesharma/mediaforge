@@ -1,28 +1,30 @@
 use image::DynamicImage;
 use photon_rs::PhotonImage;
 use photon_rs::{
-    colour_spaces, conv, effects, filters as photon_filters,
-    native::open_image_from_bytes,
+    colour_spaces, conv, effects, filters as photon_filters, native::open_image_from_bytes,
 };
 
-mod mood_presets;
-mod swipe_looks;
-mod swipe_extras;
 pub(crate) mod filmic;
 pub(crate) mod lut_hald;
+mod mood_presets;
+mod swipe_extras;
+mod swipe_looks;
 
-use crate::api::image::{FilterPreset, ImageFilter, MoodFilterPreset, RgbaImageBuffer, SwipeLookPreset};
+use crate::api::image::{FilterPreset, ImageFilter, RgbaImageBuffer};
 
-pub use mood_presets::{apply_mood_filter_rgba, apply_mood_color_rgba, recipe_for, MoodRecipe};
-pub use swipe_looks::{
-    apply_swipe_look_extras_rgba, apply_swipe_look_grade_rgba,
-    display_name as swipe_look_display_name, recipe_for as swipe_look_recipe_for,
-};
+#[allow(unused_imports)]
+pub use mood_presets::{apply_mood_color_rgba, apply_mood_filter_rgba, recipe_for, MoodRecipe};
 pub use swipe_extras::{
     apply_dewy_highlight_rgba, apply_glow_rgba, apply_grain_rgba, apply_halation_rgba,
     apply_rgb_split_rgba,
 };
+#[allow(unused_imports)]
+pub use swipe_looks::{
+    apply_swipe_look_extras_rgba, apply_swipe_look_grade_rgba,
+    display_name as swipe_look_display_name, recipe_for as swipe_look_recipe_for,
+};
 
+#[allow(dead_code)]
 pub fn apply(bytes: &[u8], filter: ImageFilter) -> Result<DynamicImage, String> {
     let mut photon = open_image_from_bytes(bytes).map_err(|e| e.to_string())?;
     apply_to_photon(&mut photon, filter);
@@ -30,7 +32,10 @@ pub fn apply(bytes: &[u8], filter: ImageFilter) -> Result<DynamicImage, String> 
 }
 
 /// Apply a filter directly on an RGBA buffer (no PNG encode/decode).
-pub fn apply_rgba(mut buffer: RgbaImageBuffer, filter: ImageFilter) -> Result<RgbaImageBuffer, String> {
+pub fn apply_rgba(
+    mut buffer: RgbaImageBuffer,
+    filter: ImageFilter,
+) -> Result<RgbaImageBuffer, String> {
     match filter {
         ImageFilter::Brightness { amount } => {
             crate::parallel_ops::par_brightness(&mut buffer.pixels, amount);
@@ -75,12 +80,20 @@ pub fn apply_rgba(mut buffer: RgbaImageBuffer, filter: ImageFilter) -> Result<Rg
         ImageFilter::Mood { preset, strength } => Ok(mood_presets::apply_mood_filter_rgba(
             buffer, preset, strength,
         )),
-        ImageFilter::SwipeLook { preset, strength } => Ok(swipe_looks::apply_swipe_look_grade_rgba(
-            buffer, preset, strength,
-        )),
-        ImageFilter::LutPng { png_bytes, strength } => {
+        ImageFilter::SwipeLook { preset, strength } => Ok(
+            swipe_looks::apply_swipe_look_grade_rgba(buffer, preset, strength),
+        ),
+        ImageFilter::LutPng {
+            png_bytes,
+            strength,
+        } => {
             if let Ok((lut_data, lut_size)) = lut_hald::parse_hald_clut(&png_bytes) {
-                lut_hald::apply_lut_3d_with_strength_rgba(&mut buffer, &lut_data, lut_size, strength);
+                lut_hald::apply_lut_3d_with_strength_rgba(
+                    &mut buffer,
+                    &lut_data,
+                    lut_size,
+                    strength,
+                );
             }
             Ok(buffer)
         }
@@ -148,7 +161,10 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
             buf = swipe_looks::apply_swipe_look_grade_rgba(buf, preset, strength);
             *photon = PhotonImage::new(buf.pixels, w, h);
         }
-        ImageFilter::LutPng { png_bytes, strength } => {
+        ImageFilter::LutPng {
+            png_bytes,
+            strength,
+        } => {
             let w = photon.get_width();
             let h = photon.get_height();
             let mut buf = RgbaImageBuffer {
@@ -178,7 +194,7 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
         ImageFilter::Vignette { amount } => {
             let w = photon.get_width();
             let h = photon.get_height();
-            let mut px = photon.get_raw_pixels().to_vec();
+            let px = photon.get_raw_pixels().to_vec();
             let mut buf = RgbaImageBuffer {
                 width: w,
                 height: h,
@@ -204,7 +220,7 @@ fn apply_to_photon(photon: &mut PhotonImage, filter: ImageFilter) {
         ImageFilter::Structure { amount } => {
             let w = photon.get_width();
             let h = photon.get_height();
-            let mut px = photon.get_raw_pixels().to_vec();
+            let px = photon.get_raw_pixels().to_vec();
             let mut buf = RgbaImageBuffer {
                 width: w,
                 height: h,
@@ -391,7 +407,9 @@ fn apply_preset(img: &mut PhotonImage, preset: FilterPreset) {
 }
 
 fn photon_to_dynamic(img: PhotonImage) -> DynamicImage {
-    photon_to_rgba_buffer(img).to_dynamic().expect("valid photon buffer")
+    photon_to_rgba_buffer(img)
+        .to_dynamic()
+        .expect("valid photon buffer")
 }
 
 fn photon_to_rgba_buffer(img: PhotonImage) -> RgbaImageBuffer {

@@ -1,6 +1,12 @@
 use image::{DynamicImage, GenericImageView};
 
-pub fn crop(img: DynamicImage, x: u32, y: u32, width: u32, height: u32) -> Result<DynamicImage, String> {
+pub fn crop(
+    img: DynamicImage,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+) -> Result<DynamicImage, String> {
     let (img_w, img_h) = img.dimensions();
     if width == 0 || height == 0 {
         return Err("crop width and height must be greater than zero".into());

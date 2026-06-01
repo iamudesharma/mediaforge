@@ -1,0 +1,48 @@
+[package]
+name = "image_forge_core"
+version = "1.0.0"
+edition = "2021"
+description = "Lightweight image processing core for Flutter (resize, crop, compress, basic filters)"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[[bin]]
+name = "image_forge_core_benchmark"
+path = "src/bin/image_forge_core_benchmark.rs"
+
+[features]
+default = ["avif", "blurhash", "gpu"]
+avif = ["ravif", "rgb"]
+blurhash = ["blurhash_crate"]
+gpu = ["wgpu", "pollster", "bytemuck"]
+
+[dependencies]
+
+flutter_rust_bridge = "=2.12.0"
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "bmp",
+    "tiff",
+] }
+fast_image_resize = "5"
+imageproc = { version = "0.25", default-features = false }
+photon-rs = { version = "0.3", default-features = false }
+kamadak-exif = "0.6"
+rayon = "1"
+mozjpeg = "0.10"
+oxipng = { version = "9", default-features = false }
+ab_glyph = "0.2"
+blurhash_crate = { package = "blurhash", version = "0.2", optional = true }
+ravif = { version = "0.13", optional = true }
+rgb = { version = "0.8", optional = true }
+parking_lot = "0.12"
+wgpu = { version = "24", optional = true }
+pollster = { version = "0.4", optional = true }
+bytemuck = { version = "1", features = ["derive"], optional = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)', 'cfg(feature, values("gpu", "avif", "blurhash"))'] }

@@ -1,6 +1,6 @@
+use crate::api::image::SwipeLookPreset;
 use crate::api::image::{MoodFilterPreset, RgbaImageBuffer};
 use crate::filters::{apply_mood_color_rgba, recipe_for, swipe_look_recipe_for, MoodRecipe};
-use crate::api::image::SwipeLookPreset;
 
 /// Edge length of baked 3D LUT cubes (33³ ≈ 36k entries).
 pub const LUT_SIZE: u32 = 33;
@@ -52,7 +52,9 @@ fn channel_from_index(i: usize, size: usize) -> u8 {
     if size <= 1 {
         return 0;
     }
-    ((i as f32 / (size - 1) as f32) * 255.0).round().clamp(0.0, 255.0) as u8
+    ((i as f32 / (size - 1) as f32) * 255.0)
+        .round()
+        .clamp(0.0, 255.0) as u8
 }
 
 /// Pack LUT RGBA bytes into wgpu-friendly u32 RGBA pixels.

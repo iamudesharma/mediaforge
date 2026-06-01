@@ -87,10 +87,7 @@ impl LandmarkRegions {
 
     /// Gather landmarks by MP index table.
     pub fn gather_mp_indices(lm: &[Landmark2D], indices: &[usize]) -> Vec<Landmark2D> {
-        indices
-            .iter()
-            .filter_map(|&i| lm.get(i).copied())
-            .collect()
+        indices.iter().filter_map(|&i| lm.get(i).copied()).collect()
     }
 
     fn from_region_counts(analysis: &FaceAnalysisResult) -> Option<Self> {
@@ -158,13 +155,7 @@ impl LandmarkRegions {
             return Some(VISION_FALLBACK_COUNTS.to_vec());
         }
         if analysis.region_counts.len() == 11 {
-            return Some(
-                analysis
-                    .region_counts
-                    .iter()
-                    .map(|&c| c as usize)
-                    .collect(),
-            );
+            return Some(analysis.region_counts.iter().map(|&c| c as usize).collect());
         }
         // Legacy: Swift once bundled face contour as regionCounts[0].
         if analysis.region_counts.len() == 12 {
@@ -224,19 +215,35 @@ mod tests {
         }
         // eyes at y~0.42
         for _ in 0..16 {
-            landmarks.push(Landmark2D { x: 0.4, y: 0.42, z: 0.0 });
+            landmarks.push(Landmark2D {
+                x: 0.4,
+                y: 0.42,
+                z: 0.0,
+            });
         }
         // brows + nose + median 38 pts
         for _ in 0..38 {
-            landmarks.push(Landmark2D { x: 0.5, y: 0.48, z: 0.0 });
+            landmarks.push(Landmark2D {
+                x: 0.5,
+                y: 0.48,
+                z: 0.0,
+            });
         }
         // lips at y~0.62
         for _ in 0..20 {
-            landmarks.push(Landmark2D { x: 0.5, y: 0.62, z: 0.0 });
+            landmarks.push(Landmark2D {
+                x: 0.5,
+                y: 0.62,
+                z: 0.0,
+            });
         }
         // pupils
         for _ in 0..2 {
-            landmarks.push(Landmark2D { x: 0.5, y: 0.42, z: 0.0 });
+            landmarks.push(Landmark2D {
+                x: 0.5,
+                y: 0.42,
+                z: 0.0,
+            });
         }
         FaceAnalysisResult {
             landmarks,

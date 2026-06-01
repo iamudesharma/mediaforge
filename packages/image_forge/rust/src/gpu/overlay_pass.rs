@@ -46,16 +46,16 @@ pub fn composite_overlay_on_cache(
     let packed: Vec<u32> = overlay
         .pixels
         .chunks_exact(4)
-        .map(|p| {
-            u32::from_le_bytes([p[0], p[1], p[2], p[3]])
-        })
+        .map(|p| u32::from_le_bytes([p[0], p[1], p[2], p[3]]))
         .collect();
 
-    let overlay_buf = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("overlay_rgba"),
-        contents: bytemuck::cast_slice(&packed),
-        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-    });
+    let overlay_buf = gpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("overlay_rgba"),
+            contents: bytemuck::cast_slice(&packed),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
 
     let params = OverlayParams {
         width,
@@ -64,24 +64,30 @@ pub fn composite_overlay_on_cache(
         blend_mode,
         _pad: 0,
     };
-    let params_buf = gpu.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("overlay_params"),
-        contents: bytemuck::bytes_of(&params),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
+    let params_buf = gpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("overlay_params"),
+            contents: bytemuck::bytes_of(&params),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
 
-    let shader = gpu.device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("overlay_composite_shader"),
-        source: wgpu::ShaderSource::Wgsl(OVERLAY_SHADER.into()),
-    });
-    let pipeline = gpu.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some("overlay_composite_pipeline"),
-        layout: None,
-        module: &shader,
-        entry_point: Some("main"),
-        compilation_options: Default::default(),
-        cache: None,
-    });
+    let shader = gpu
+        .device
+        .create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("overlay_composite_shader"),
+            source: wgpu::ShaderSource::Wgsl(OVERLAY_SHADER.into()),
+        });
+    let pipeline = gpu
+        .device
+        .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("overlay_composite_pipeline"),
+            layout: None,
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
 
     let (input, output) = if active_is_1 {
         (&storage_buf1, &storage_buf2)
@@ -112,9 +118,11 @@ pub fn composite_overlay_on_cache(
         ],
     });
 
-    let mut encoder = gpu.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("overlay_composite_encoder"),
-    });
+    let mut encoder = gpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("overlay_composite_encoder"),
+        });
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("overlay_composite_pass"),

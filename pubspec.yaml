@@ -8,6 +8,8 @@ environment:
 workspace:
   - packages/image_forge_editor
   - packages/image_forge
+  - packages/image_forge_core
+  - packages/image_forge_core/example
   - packages/pixel_surface
   - packages/pixel_surface/example
   - packages/image_forge_camera

@@ -1,11 +1,14 @@
 import CoreVideo
 import VideoToolbox
+import Accelerate
 
 #if canImport(FlutterMacOS)
 import Cocoa
 import FlutterMacOS
+import Metal
 #else
 import Flutter
+import Metal
 #endif
 
 private final class RustGpuPixelTexture: NSObject, FlutterTexture {
@@ -21,6 +24,8 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
   private var textures: [Int64: RustGpuPixelTexture] = [:]
   private var textureIds: [Int64: Int64] = [:]
   private weak var textureRegistry: FlutterTextureRegistry?
+  private var metalTextureCache: CVMetalTextureCache?
+  private let metalTextureCacheLock = NSLock()
 
   public static func register(with registrar: FlutterPluginRegistrar) {
 #if canImport(FlutterMacOS)
@@ -100,14 +105,32 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       src.withUnsafeBytes { raw in
         guard let srcPtr = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
         let dst = base.assumingMemoryBound(to: UInt8.self)
-        for y in 0..<height {
-          for x in 0..<width {
-            let si = (y * width + x) * 4
-            let di = y * rowBytes + x * 4
-            dst[di + 0] = srcPtr[si + 2]
-            dst[di + 1] = srcPtr[si + 1]
-            dst[di + 2] = srcPtr[si + 0]
-            dst[di + 3] = srcPtr[si + 3]
+        if rowBytes == width * 4 {
+          // Tightly packed rows: vectorized BGRA swap (R/B per pixel) via
+          // vImagePermuteChannels_ARGB8888 — ~1 GB/s on Apple Silicon.
+          var srcBuf = vImage_Buffer(
+            data: UnsafeMutableRawPointer(mutating: srcPtr),
+            height: vImagePixelCount(height),
+            width: vImagePixelCount(width),
+            rowBytes: width * 4
+          )
+          var dstBuf = vImage_Buffer(
+            data: dst,
+            height: vImagePixelCount(height),
+            width: vImagePixelCount(width),
+            rowBytes: rowBytes
+          )
+          let permute: [UInt8] = [2, 1, 0, 3]
+          vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
+        } else {
+          for y in 0..<height {
+            let si = y * width * 4
+            let di = y * rowBytes
+            swapBgraRow(
+              src: srcPtr.advanced(by: si),
+              dst: dst.advanced(by: di),
+              count: width
+            )
           }
         }
       }
@@ -171,6 +194,60 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       }
       textures.removeValue(forKey: handle)
       registry.unregisterTexture(texId)
+      result(nil)
+
+    case "getMetalTexturePtr":
+      // Returns the raw MTLTexture* + CVPixelBuffer* of the Flutter display
+      // texture for the given handle. Rust uses these to import the same
+      // IOSurface-backed GPU resource as a wgpu::Texture and write beauty
+      // output into it without any CPU readback.
+      guard let args = call.arguments as? [String: Any],
+            let handle = Self.handleFromArgs(args["handle"]),
+            let tex = textures[handle],
+            let pb = tex.pixelBuffer
+      else {
+        result(FlutterError(code: "bad_args", message: "handle/pixelBuffer not found", details: nil))
+        return
+      }
+      guard let cache = acquireMetalTextureCache() else {
+        result(FlutterError(code: "no_cache", message: "CVMetalTextureCache unavailable", details: nil))
+        return
+      }
+      let width = CVPixelBufferGetWidth(pb)
+      let height = CVPixelBufferGetHeight(pb)
+      var cvTexture: CVMetalTexture?
+      let status = CVMetalTextureCacheCreateTextureFromImage(
+        kCFAllocatorDefault, cache, pb, nil,
+        MTLPixelFormat.bgra8Unorm, width, height, 0, &cvTexture
+      )
+      guard status == kCVReturnSuccess, let cvTexture, let mtlTexture = CVMetalTextureGetTexture(cvTexture) else {
+        result(FlutterError(code: "create_failed", message: "CVMetalTextureCacheCreateTextureFromImage failed: status=\(status)", details: nil))
+        return
+      }
+      // Retain +1 each so the caller (Rust) gets its own reference.
+      let pbUnmanaged = Unmanaged<CVPixelBuffer>.passRetained(pb)
+      let texUnmanaged = Unmanaged<MTLTexture>.passRetained(mtlTexture)
+      let pbPtr = UInt(bitPattern: pbUnmanaged.toOpaque())
+      let texPtr = UInt(bitPattern: texUnmanaged.toOpaque())
+      result([
+        "metalTexturePtr": NSNumber(value: texPtr),
+        "pixelBufferPtr": NSNumber(value: pbPtr),
+      ])
+
+    case "attachOutputTexture":
+      // No-op on the Swift side: Rust already holds the +1 retain. Just
+      // make sure the next frame is visible.
+      guard let args = call.arguments as? [String: Any],
+            let handle = Self.handleFromArgs(args["handle"]),
+            let tex = textures[handle],
+            let _ = tex.pixelBuffer,
+            let registry = textureRegistry,
+            let texId = textureIds[handle]
+      else {
+        result(FlutterError(code: "bad_args", message: "handle/pixelBuffer required", details: nil))
+        return
+      }
+      let _ = registry.textureFrameAvailable(texId)
       result(nil)
 
     default:
@@ -290,5 +367,35 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       )
     }
     return true
+  }
+
+  /// Per-row R/B channel swap (BGRA ↔ RGBA) for a tightly packed row of
+  /// [count] pixels. Used when CVPixelBuffer rows are not contiguous.
+  @inline(__always)
+  private static func swapBgraRow(src: UnsafePointer<UInt8>, dst: UnsafeMutablePointer<UInt8>, count: Int) {
+    var si = 0
+    var di = 0
+    for _ in 0..<count {
+      dst[di + 0] = src[si + 2]
+      dst[di + 1] = src[si + 1]
+      dst[di + 2] = src[si + 0]
+      dst[di + 3] = src[si + 3]
+      si += 4
+      di += 4
+    }
+  }
+
+  /// Lazily-create the plugin's `CVMetalTextureCache`. Thread-safe via lock.
+  private func acquireMetalTextureCache() -> CVMetalTextureCache? {
+    metalTextureCacheLock.lock()
+    defer { metalTextureCacheLock.unlock() }
+    if let cache = metalTextureCache { return cache }
+    let device = MTLCreateSystemDefaultDevice()
+    guard let device else { return nil }
+    var cache: CVMetalTextureCache?
+    let err = CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
+    guard err == kCVReturnSuccess, let cache else { return nil }
+    metalTextureCache = cache
+    return cache
   }
 }

@@ -5,7 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:image_forge_editor/image_forge_editor.dart';
 import 'package:rust_image_benchmark_runner/benchmark_frb_init.dart';
 import 'package:rust_image_benchmark_runner/benchmark_runner.dart';
-import 'package:rust_image_benchmark_runner/rust_image_benchmark.dart';
+import 'package:rust_image_benchmark_runner/media_forge_benchmark.dart';
 
 /// Headless entry for worker-isolate benchmarks only.
 ///

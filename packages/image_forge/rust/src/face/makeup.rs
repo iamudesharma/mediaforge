@@ -118,11 +118,7 @@ pub fn apply_lip_tint_rgba(
             continue;
         }
         let o = i * 4;
-        let (h, l, sat) = rgb_to_hsl(
-            out[o] as f32,
-            out[o + 1] as f32,
-            out[o + 2] as f32,
-        );
+        let (h, l, sat) = rgb_to_hsl(out[o] as f32, out[o + 1] as f32, out[o + 2] as f32);
         let new_h = lerp_angle(h, target_h, s * 0.85);
         let new_sat = (sat + 0.25 * s).min(1.0);
         let (r, g, b) = hsl_to_rgb(new_h, l, new_sat);

@@ -33,12 +33,7 @@ pub fn draw_text(mut rgba: RgbaImage, overlay: TextOverlay) -> Result<RgbaImage,
 }
 
 pub fn draw_line(mut rgba: RgbaImage, line: DrawLine) -> Result<RgbaImage, String> {
-    let color = Rgba([
-        line.color_r,
-        line.color_g,
-        line.color_b,
-        line.color_a,
-    ]);
+    let color = Rgba([line.color_r, line.color_g, line.color_b, line.color_a]);
     draw_line_segment_mut(
         &mut rgba,
         (line.x0 as f32, line.y0 as f32),

@@ -1,6 +1,6 @@
 //! Download remote inputs to a local file via FFmpeg stream copy (no re-encode).
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use ffmpeg_next::codec::Id;
 use ffmpeg_next::format;
@@ -9,9 +9,7 @@ use ffmpeg_next::util::rational::Rational;
 use uuid::Uuid;
 
 use crate::error::{Result, VideoProcessorError};
-use crate::ffmpeg::{
-    ensure_ffmpeg_initialized, is_remote_input, map_ffmpeg_error, normalize_remote_input, open_input,
-};
+use crate::ffmpeg::{ensure_ffmpeg_initialized, is_remote_input, map_ffmpeg_error, open_input};
 
 /// Stream-copy a remote URL to `{dest_dir}/{uuid}_prefetch.mp4`.
 pub fn prefetch_remote_input(url: &str, dest_dir: &Path) -> Result<String> {

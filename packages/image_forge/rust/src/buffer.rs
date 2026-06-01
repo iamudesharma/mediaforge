@@ -2,7 +2,7 @@ use image::{DynamicImage, Rgba, RgbaImage};
 
 use crate::api::image::{
     BlendMode, DrawCircle, DrawLine, ImageFilter, OutputFormat, PreviewQuality, ProcessingBackend,
-    RgbaImageBuffer, ResizeAlgorithm, TextOverlay,
+    ResizeAlgorithm, RgbaImageBuffer, TextOverlay,
 };
 use crate::backend::EffectiveBackend;
 use crate::resize;
@@ -69,7 +69,11 @@ impl RgbaImageBuffer {
     }
 }
 
-pub fn decode_to_rgba(bytes: &[u8], fix_exif: bool, max_edge: Option<u32>) -> Result<RgbaImageBuffer, String> {
+pub fn decode_to_rgba(
+    bytes: &[u8],
+    fix_exif: bool,
+    max_edge: Option<u32>,
+) -> Result<RgbaImageBuffer, String> {
     let img = utils::decode(bytes)?;
     let img = if fix_exif {
         crate::exif::apply_orientation(img, bytes)?
@@ -152,7 +156,10 @@ pub fn draw_line_rgba(buffer: RgbaImageBuffer, line: DrawLine) -> Result<RgbaIma
     })
 }
 
-pub fn draw_circle_rgba(buffer: RgbaImageBuffer, circle: DrawCircle) -> Result<RgbaImageBuffer, String> {
+pub fn draw_circle_rgba(
+    buffer: RgbaImageBuffer,
+    circle: DrawCircle,
+) -> Result<RgbaImageBuffer, String> {
     let w = buffer.width;
     let h = buffer.height;
     let rgba = RgbaImage::from_raw(w, h, buffer.pixels)
@@ -165,7 +172,10 @@ pub fn draw_circle_rgba(buffer: RgbaImageBuffer, circle: DrawCircle) -> Result<R
     })
 }
 
-pub fn draw_text_rgba(buffer: RgbaImageBuffer, overlay: TextOverlay) -> Result<RgbaImageBuffer, String> {
+pub fn draw_text_rgba(
+    buffer: RgbaImageBuffer,
+    overlay: TextOverlay,
+) -> Result<RgbaImageBuffer, String> {
     let w = buffer.width;
     let h = buffer.height;
     let rgba = RgbaImage::from_raw(w, h, buffer.pixels)
@@ -250,7 +260,10 @@ pub fn crop_rgba(
     buffer.crop_direct(x, y, width, height)
 }
 
-pub fn filter_rgba(buffer: RgbaImageBuffer, filter: ImageFilter) -> Result<RgbaImageBuffer, String> {
+pub fn filter_rgba(
+    buffer: RgbaImageBuffer,
+    filter: ImageFilter,
+) -> Result<RgbaImageBuffer, String> {
     crate::filters::apply_rgba(buffer, filter)
 }
 

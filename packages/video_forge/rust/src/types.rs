@@ -22,7 +22,7 @@ pub enum VideoQuality {
     Instagram,
     /// 720p, small files for messaging.
     Whatsapp,
-    /// 1280p, messaging app uploads.
+    /// 720p (max 1280×720), messaging app uploads.
     Telegram,
     /// 1080p, higher bitrate for video platforms.
     Youtube,

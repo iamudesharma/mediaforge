@@ -17,7 +17,8 @@ pub fn composite(
     let (mut ow, mut oh) = overlay.dimensions();
 
     if target_width > 0 && target_height > 0 && (target_width != ow || target_height != oh) {
-        overlay = image::imageops::resize(&overlay, target_width, target_height, FilterType::Triangle);
+        overlay =
+            image::imageops::resize(&overlay, target_width, target_height, FilterType::Triangle);
         ow = target_width;
         oh = target_height;
     }

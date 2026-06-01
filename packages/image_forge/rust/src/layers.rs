@@ -1,4 +1,4 @@
-use image::{imageops, Rgba, RgbaImage};
+use image::{Rgba, RgbaImage};
 use imageproc::drawing::draw_line_segment_mut;
 use imageproc::geometric_transformations::{rotate_about_center, Interpolation};
 
@@ -45,12 +45,7 @@ pub fn composite_raster_layer(
     if layer.scale != 1.0 && layer.scale > 0.0 {
         let nw = ((layer.width as f32) * layer.scale).round().max(1.0) as u32;
         let nh = ((layer.height as f32) * layer.scale).round().max(1.0) as u32;
-        overlay = image::imageops::resize(
-            &overlay,
-            nw,
-            nh,
-            image::imageops::FilterType::Triangle,
-        );
+        overlay = image::imageops::resize(&overlay, nw, nh, image::imageops::FilterType::Triangle);
     }
 
     if layer.rotation_rad.abs() > 0.001 {
@@ -134,7 +129,14 @@ pub fn composite_paint_strokes(
             let y_start = y_min.clamp(0, h as i32) as u32;
             let y_end = y_max.clamp(0, h as i32) as u32;
             if x_end > x_start && y_end > y_start {
-                apply_local_blur(&mut base, x_start, y_start, x_end - x_start, y_end - y_start, 15);
+                apply_local_blur(
+                    &mut base,
+                    x_start,
+                    y_start,
+                    x_end - x_start,
+                    y_end - y_start,
+                    15,
+                );
             }
         } else if stroke.brush_kind == 15 {
             let x_min = stroke.points[0].0.min(stroke.points[1].0).round() as i32;
@@ -146,7 +148,14 @@ pub fn composite_paint_strokes(
             let y_start = y_min.clamp(0, h as i32) as u32;
             let y_end = y_max.clamp(0, h as i32) as u32;
             if x_end > x_start && y_end > y_start {
-                apply_local_pixelate(&mut base, x_start, y_start, x_end - x_start, y_end - y_start, 15);
+                apply_local_pixelate(
+                    &mut base,
+                    x_start,
+                    y_start,
+                    x_end - x_start,
+                    y_end - y_start,
+                    15,
+                );
             }
         }
     }
@@ -175,7 +184,14 @@ pub fn composite_paint_strokes(
     Ok(base)
 }
 
-fn apply_local_blur(base: &mut RgbaImageBuffer, x_start: u32, y_start: u32, crop_w: u32, crop_h: u32, radius: usize) {
+fn apply_local_blur(
+    base: &mut RgbaImageBuffer,
+    x_start: u32,
+    y_start: u32,
+    crop_w: u32,
+    crop_h: u32,
+    radius: usize,
+) {
     if crop_w == 0 || crop_h == 0 {
         return;
     }
@@ -265,7 +281,14 @@ fn apply_local_blur(base: &mut RgbaImageBuffer, x_start: u32, y_start: u32, crop
     }
 }
 
-fn apply_local_pixelate(base: &mut RgbaImageBuffer, x_start: u32, y_start: u32, crop_w: u32, crop_h: u32, block_size: u32) {
+fn apply_local_pixelate(
+    base: &mut RgbaImageBuffer,
+    x_start: u32,
+    y_start: u32,
+    crop_w: u32,
+    crop_h: u32,
+    block_size: u32,
+) {
     if crop_w == 0 || crop_h == 0 || block_size == 0 {
         return;
     }
@@ -344,7 +367,13 @@ fn stroke_draw_color(stroke: &PaintStroke) -> Rgba<u8> {
     Rgba([r, g, b, a])
 }
 
-fn draw_thick_line_segment(img: &mut RgbaImage, p1: (f32, f32), p2: (f32, f32), color: Rgba<u8>, width: f32) {
+fn draw_thick_line_segment(
+    img: &mut RgbaImage,
+    p1: (f32, f32),
+    p2: (f32, f32),
+    color: Rgba<u8>,
+    width: f32,
+) {
     draw_line_segment_mut(img, p1, p2, color);
     let r = (width / 2.0) as i32;
     if r > 0 {
@@ -353,7 +382,14 @@ fn draw_thick_line_segment(img: &mut RgbaImage, p1: (f32, f32), p2: (f32, f32), 
     }
 }
 
-fn draw_arrow(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), color: Rgba<u8>, thickness: f32, double_arrow: bool) {
+fn draw_arrow(
+    img: &mut RgbaImage,
+    start: (f32, f32),
+    end: (f32, f32),
+    color: Rgba<u8>,
+    thickness: f32,
+    double_arrow: bool,
+) {
     draw_thick_line_segment(img, start, end, color, thickness);
 
     let dx = end.0 - start.0;
@@ -381,7 +417,15 @@ fn draw_arrow(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), color: Rg
     }
 }
 
-fn draw_dashed_line(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), color: Rgba<u8>, thickness: f32, dash_length: f32, gap_length: f32) {
+fn draw_dashed_line(
+    img: &mut RgbaImage,
+    start: (f32, f32),
+    end: (f32, f32),
+    color: Rgba<u8>,
+    thickness: f32,
+    dash_length: f32,
+    gap_length: f32,
+) {
     let dx = end.0 - start.0;
     let dy = end.1 - start.1;
     let distance = (dx * dx + dy * dy).sqrt();
@@ -394,7 +438,10 @@ fn draw_dashed_line(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), col
     let mut current_distance = 0.0f32;
     while current_distance < distance {
         let next_dash = (current_distance + dash_length).min(distance);
-        let p1 = (start.0 + dir_x * current_distance, start.1 + dir_y * current_distance);
+        let p1 = (
+            start.0 + dir_x * current_distance,
+            start.1 + dir_y * current_distance,
+        );
         let p2 = (start.0 + dir_x * next_dash, start.1 + dir_y * next_dash);
 
         draw_thick_line_segment(img, p1, p2, color, thickness);
@@ -402,7 +449,13 @@ fn draw_dashed_line(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), col
     }
 }
 
-fn draw_dash_dot_line(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), color: Rgba<u8>, thickness: f32) {
+fn draw_dash_dot_line(
+    img: &mut RgbaImage,
+    start: (f32, f32),
+    end: (f32, f32),
+    color: Rgba<u8>,
+    thickness: f32,
+) {
     let dx = end.0 - start.0;
     let dy = end.1 - start.1;
     let distance = (dx * dx + dy * dy).sqrt();
@@ -421,13 +474,19 @@ fn draw_dash_dot_line(img: &mut RgbaImage, start: (f32, f32), end: (f32, f32), c
     while current_distance < distance {
         if is_dash {
             let next_dash = (current_distance + dash_len).min(distance);
-            let p1 = (start.0 + dir_x * current_distance, start.1 + dir_y * current_distance);
+            let p1 = (
+                start.0 + dir_x * current_distance,
+                start.1 + dir_y * current_distance,
+            );
             let p2 = (start.0 + dir_x * next_dash, start.1 + dir_y * next_dash);
             draw_thick_line_segment(img, p1, p2, color, thickness);
             current_distance += dash_len + gap_len;
         } else {
             let next_dot = (current_distance + dot_len).min(distance);
-            let p1 = (start.0 + dir_x * current_distance, start.1 + dir_y * current_distance);
+            let p1 = (
+                start.0 + dir_x * current_distance,
+                start.1 + dir_y * current_distance,
+            );
             let p2 = (start.0 + dir_x * next_dot, start.1 + dir_y * next_dot);
             draw_thick_line_segment(img, p1, p2, color, thickness);
             current_distance += dot_len + gap_len;
@@ -457,10 +516,18 @@ fn draw_filled_polygon(img: &mut RgbaImage, vertices: &[(f32, f32)], color: Rgba
     let mut min_y = vertices[0].1;
     let mut max_y = vertices[0].1;
     for &p in vertices.iter().skip(1) {
-        if p.0 < min_x { min_x = p.0; }
-        if p.0 > max_x { max_x = p.0; }
-        if p.1 < min_y { min_y = p.1; }
-        if p.1 > max_y { max_y = p.1; }
+        if p.0 < min_x {
+            min_x = p.0;
+        }
+        if p.0 > max_x {
+            max_x = p.0;
+        }
+        if p.1 < min_y {
+            min_y = p.1;
+        }
+        if p.1 > max_y {
+            max_y = p.1;
+        }
     }
 
     let x_start = min_x.floor().max(0.0) as i32;
@@ -557,7 +624,8 @@ fn draw_stroke_on_image(img: &mut RgbaImage, stroke: &PaintStroke) {
                     let y_max = p1.1.max(p2.1).round() as i32;
                     for y in y_min..=y_max {
                         for x in x_min..=x_max {
-                            if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32 {
+                            if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32
+                            {
                                 img.put_pixel(x as u32, y as u32, color);
                             }
                         }
@@ -590,7 +658,8 @@ fn draw_stroke_on_image(img: &mut RgbaImage, stroke: &PaintStroke) {
                     let r_sq = r * r;
                     for y in y_min..=y_max {
                         for x in x_min..=x_max {
-                            if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32 {
+                            if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32
+                            {
                                 let dx = x as f32 - center.0;
                                 let dy = y as f32 - center.1;
                                 if dx * dx + dy * dy <= r_sq {
@@ -607,7 +676,8 @@ fn draw_stroke_on_image(img: &mut RgbaImage, stroke: &PaintStroke) {
                     let half_t = w / 2.0;
                     for y in y_min..=y_max {
                         for x in x_min..=x_max {
-                            if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32 {
+                            if x >= 0 && y >= 0 && x < img.width() as i32 && y < img.height() as i32
+                            {
                                 let dx = x as f32 - center.0;
                                 let dy = y as f32 - center.1;
                                 let dist = (dx * dx + dy * dy).sqrt();
@@ -643,7 +713,13 @@ fn draw_stroke_on_image(img: &mut RgbaImage, stroke: &PaintStroke) {
                     draw_filled_polygon(img, &stroke.points, color);
                 } else {
                     for i in 0..stroke.points.len() {
-                        draw_thick_line_segment(img, stroke.points[i], stroke.points[(i + 1) % stroke.points.len()], color, w);
+                        draw_thick_line_segment(
+                            img,
+                            stroke.points[i],
+                            stroke.points[(i + 1) % stroke.points.len()],
+                            color,
+                            w,
+                        );
                     }
                 }
             }
@@ -670,12 +746,7 @@ fn erase_stroke_on_image(img: &mut RgbaImage, stroke: &PaintStroke) {
         let (x1, y1) = window[1];
         draw_line_segment_mut(img, (x0, y0), (x1, y1), clear);
         let r = (w / 2.0) as i32;
-        imageproc::drawing::draw_filled_circle_mut(
-            img,
-            (x1 as i32, y1 as i32),
-            r.max(1),
-            clear,
-        );
+        imageproc::drawing::draw_filled_circle_mut(img, (x1 as i32, y1 as i32), r.max(1), clear);
     }
 }
 
@@ -685,11 +756,7 @@ fn blend_overlay_at_buffer(base: &mut RgbaImageBuffer, overlay: &RgbaImage, x: i
         for ox in 0..ow {
             let bx = x + ox as i32;
             let by = y + oy as i32;
-            if bx < 0
-                || by < 0
-                || bx >= base.width as i32
-                || by >= base.height as i32
-            {
+            if bx < 0 || by < 0 || bx >= base.width as i32 || by >= base.height as i32 {
                 continue;
             }
             let o = overlay.get_pixel(ox, oy);

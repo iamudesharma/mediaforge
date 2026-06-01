@@ -9,7 +9,7 @@ abstract final class NativeLibraryLoader {
   static Future<ExternalLibrary> load() async {
     // iOS: linked via CocoaPods vendored_frameworks — not a loose CodeAsset dylib.
     if (Platform.isIOS) {
-      // Linked via CocoaPods vendored_frameworks (see ios/video_forge_kit.podspec).
+      // Linked via CocoaPods vendored_frameworks (see ios/video_forge.podspec).
       for (final name in [
         'video_forge.framework/video_forge',
         _bundledLibName(),
@@ -125,7 +125,7 @@ abstract final class NativeLibraryLoader {
     if (Platform.isMacOS || Platform.isIOS) {
       paths.addAll([
         '/usr/local/lib/${_dylibFileName()}',
-        '${Platform.environment['HOME']}/.video_forge_kit/${_dylibFileName()}',
+        '${Platform.environment['HOME']}/.video_forge/${_dylibFileName()}',
       ]);
     }
 

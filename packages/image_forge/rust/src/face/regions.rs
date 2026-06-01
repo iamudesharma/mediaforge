@@ -17,10 +17,7 @@ pub fn apply_exclude_mask(
     let Some(ex) = exclude else {
         return mask.clone();
     };
-    if ex.width != mask.width
-        || ex.height != mask.height
-        || ex.pixels.len() != mask.pixels.len()
-    {
+    if ex.width != mask.width || ex.height != mask.height || ex.pixels.len() != mask.pixels.len() {
         return mask.clone();
     }
     let pixels: Vec<u8> = mask
@@ -37,11 +34,7 @@ pub fn apply_exclude_mask(
 }
 
 /// Build edit-resolution skin mask: face oval (contour landmarks) ∩ segmenter, minus features.
-pub fn build_skin_mask(
-    analysis: &FaceAnalysisResult,
-    width: u32,
-    height: u32,
-) -> SegmentationMask {
+pub fn build_skin_mask(analysis: &FaceAnalysisResult, width: u32, height: u32) -> SegmentationMask {
     let w = width as usize;
     let h = height as usize;
     let mut skin = vec![0u8; w * h];
@@ -93,11 +86,7 @@ pub fn build_skin_mask(
 }
 
 /// Soft eye-region mask from left/right eye landmarks.
-pub fn build_eye_mask(
-    analysis: &FaceAnalysisResult,
-    width: u32,
-    height: u32,
-) -> SegmentationMask {
+pub fn build_eye_mask(analysis: &FaceAnalysisResult, width: u32, height: u32) -> SegmentationMask {
     let w = width as usize;
     let h = height as usize;
     let mut pixels = vec![0u8; w * h];
@@ -241,24 +230,11 @@ fn fill_under_eye_from_eye_region(
     let fh = (max_y - min_y).max(0.015);
     let cx = (min_x + max_x) * 0.5;
     let cy = max_y + fh * 0.55;
-    fill_ellipse(
-        pixels,
-        width,
-        height,
-        cx,
-        cy,
-        fw * 1.05,
-        fh * 0.95,
-        255,
-    );
+    fill_ellipse(pixels, width, height, cx, cy, fw * 1.05, fh * 0.95, 255);
 }
 
 /// Lip mask — inner lip polygon primary; trimmed outer ring; clip above cupid's bow.
-pub fn build_lip_mask(
-    analysis: &FaceAnalysisResult,
-    width: u32,
-    height: u32,
-) -> SegmentationMask {
+pub fn build_lip_mask(analysis: &FaceAnalysisResult, width: u32, height: u32) -> SegmentationMask {
     let w = width as usize;
     let h = height as usize;
     let mut pixels = vec![0u8; w * h];
@@ -312,7 +288,14 @@ pub fn build_lip_mask(
 
             clear_above_normalized_y(&mut pixels, width, height, cupid_y - lip_span * 0.05);
         } else if oc >= 3 && os + oc <= lm.len() {
-            fill_lip_ellipse_from_landmarks(lm, regions.outer_lips, width, height, &mut pixels, 0.92);
+            fill_lip_ellipse_from_landmarks(
+                lm,
+                regions.outer_lips,
+                width,
+                height,
+                &mut pixels,
+                0.92,
+            );
         }
     } else if analysis.landmarks.len() >= 20 {
         let (min_x, max_x, min_y, max_y) = face_contour_bounds(analysis);
@@ -530,12 +513,7 @@ fn fill_landmark_polygon(
     fill_landmark_polygon_slice(&landmarks[start..start + count], width, height, mask);
 }
 
-fn fill_landmark_polygon_slice(
-    landmarks: &[Landmark2D],
-    width: u32,
-    height: u32,
-    mask: &mut [u8],
-) {
+fn fill_landmark_polygon_slice(landmarks: &[Landmark2D], width: u32, height: u32, mask: &mut [u8]) {
     if landmarks.len() < 3 {
         return;
     }
@@ -550,7 +528,10 @@ fn fill_landmark_polygon_slice(
             )
         })
         .collect();
-    let (min_y, max_y) = pts.iter().map(|p| p.1).fold((h, 0), |(a, b), y| (a.min(y), b.max(y)));
+    let (min_y, max_y) = pts
+        .iter()
+        .map(|p| p.1)
+        .fold((h, 0), |(a, b), y| (a.min(y), b.max(y)));
     for y in min_y.max(0)..=max_y.min(h - 1) {
         let mut xs = Vec::new();
         for i in 0..pts.len() {
@@ -601,16 +582,7 @@ fn fill_skin_oval(landmarks: &[Landmark2D], width: u32, height: u32, mask: &mut 
     let cx = (min_x + max_x) * 0.5;
     // Bias oval upward slightly — cheeks + forehead, less jaw/chin.
     let cy = min_y + fh * 0.46;
-    fill_ellipse(
-        mask,
-        width,
-        height,
-        cx,
-        cy,
-        fw * 0.34,
-        fh * 0.36,
-        255,
-    );
+    fill_ellipse(mask, width, height, cx, cy, fw * 0.34, fh * 0.36, 255);
 }
 
 fn fill_ellipse(
@@ -761,15 +733,7 @@ fn landmark_bounds_tuple(landmarks: &[Landmark2D]) -> (f32, f32, f32, f32) {
     (min_x, max_x, min_y, max_y)
 }
 
-fn clear_ellipse(
-    mask: &mut [u8],
-    width: u32,
-    height: u32,
-    cx: f32,
-    cy: f32,
-    rx: f32,
-    ry: f32,
-) {
+fn clear_ellipse(mask: &mut [u8], width: u32, height: u32, cx: f32, cy: f32, rx: f32, ry: f32) {
     fill_ellipse(mask, width, height, cx, cy, rx, ry, 0);
 }
 
@@ -833,9 +797,21 @@ mod tests {
     fn build_mask_dimensions() {
         let analysis = FaceAnalysisResult {
             landmarks: vec![
-                Landmark2D { x: 0.2, y: 0.2, z: 0.0 },
-                Landmark2D { x: 0.8, y: 0.2, z: 0.0 },
-                Landmark2D { x: 0.5, y: 0.8, z: 0.0 },
+                Landmark2D {
+                    x: 0.2,
+                    y: 0.2,
+                    z: 0.0,
+                },
+                Landmark2D {
+                    x: 0.8,
+                    y: 0.2,
+                    z: 0.0,
+                },
+                Landmark2D {
+                    x: 0.5,
+                    y: 0.8,
+                    z: 0.0,
+                },
             ],
             confidence: 1.0,
             segmentation: Some(SegmentationMask {

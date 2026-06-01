@@ -5,8 +5,8 @@
 use std::time::{Duration, Instant};
 
 use crate::api::image::{
-    DrawLine, ImageFilter, OutputFormat, PreviewQuality, ProcessingBackend,
-    ResizeAlgorithm, RgbaImageBuffer, TextOverlay,
+    DrawLine, ImageFilter, OutputFormat, PreviewQuality, ProcessingBackend, ResizeAlgorithm,
+    RgbaImageBuffer, TextOverlay,
 };
 use crate::{buffer, decode, filters, resize, thumbnail, utils};
 
@@ -104,9 +104,7 @@ impl Default for BenchConfig {
 pub fn matches_only(name: &str, only: Option<&str>) -> bool {
     match only {
         None => true,
-        Some(filter) => {
-            name == filter || name.contains(filter) || filter.contains(name)
-        }
+        Some(filter) => name == filter || name.contains(filter) || filter.contains(name),
     }
 }
 
@@ -251,9 +249,9 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
         let pb = backend.to_processing().unwrap();
 
         push_bytes(
-        &mut rows,
-        config,
-        only,
+            &mut rows,
+            config,
+            only,
             "resize_image_50pct",
             backend,
             image_bytes,
@@ -268,9 +266,9 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
         )?;
 
         push_bytes(
-        &mut rows,
-        config,
-        only,
+            &mut rows,
+            config,
+            only,
             "thumbnail_512",
             backend,
             image_bytes,
@@ -318,11 +316,7 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
             backend,
             image_bytes,
             |buf| {
-                let _ = buffer::filter_rgba_with_backend(
-                    buf,
-                    ImageFilter::Blur { radius: 4 },
-                    pb,
-                )?;
+                let _ = buffer::filter_rgba_with_backend(buf, ImageFilter::Blur { radius: 4 }, pb)?;
                 Ok(())
             },
         )?;
@@ -470,7 +464,10 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
     }
 
     // --- RGBA preview encode (Fast = app default, Quality = stress) ---
-    if matches!(config.preview_profiles, PreviewProfileMode::Fast | PreviewProfileMode::Both) {
+    if matches!(
+        config.preview_profiles,
+        PreviewProfileMode::Fast | PreviewProfileMode::Both
+    ) {
         push_rgba(
             &mut rows,
             config,
@@ -573,9 +570,21 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
 
             let analysis = FaceAnalysisResult {
                 landmarks: vec![
-                    Landmark2D { x: 0.25, y: 0.25, z: 0.0 },
-                    Landmark2D { x: 0.75, y: 0.25, z: 0.0 },
-                    Landmark2D { x: 0.5, y: 0.75, z: 0.0 },
+                    Landmark2D {
+                        x: 0.25,
+                        y: 0.25,
+                        z: 0.0,
+                    },
+                    Landmark2D {
+                        x: 0.75,
+                        y: 0.25,
+                        z: 0.0,
+                    },
+                    Landmark2D {
+                        x: 0.5,
+                        y: 0.75,
+                        z: 0.0,
+                    },
                 ],
                 confidence: 1.0,
                 segmentation: Some(SegmentationMask {
@@ -601,15 +610,31 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
         BenchBackend::Gpu,
         image_bytes,
         |buf| {
-            use crate::api::face::{BeautyParams, FaceAnalysisResult, Landmark2D, SegmentationMask};
+            use crate::api::face::{
+                BeautyParams, FaceAnalysisResult, Landmark2D, SegmentationMask,
+            };
             use crate::face::build_skin_mask;
-            use crate::gpu::{create_surface, engine, readback_surface, upload_surface};
+            use crate::gpu::{
+                apply_surface_beauty_pipeline, create_surface, readback_surface, upload_surface,
+            };
 
             let analysis = FaceAnalysisResult {
                 landmarks: vec![
-                    Landmark2D { x: 0.25, y: 0.25, z: 0.0 },
-                    Landmark2D { x: 0.75, y: 0.25, z: 0.0 },
-                    Landmark2D { x: 0.5, y: 0.75, z: 0.0 },
+                    Landmark2D {
+                        x: 0.25,
+                        y: 0.25,
+                        z: 0.0,
+                    },
+                    Landmark2D {
+                        x: 0.75,
+                        y: 0.25,
+                        z: 0.0,
+                    },
+                    Landmark2D {
+                        x: 0.5,
+                        y: 0.75,
+                        z: 0.0,
+                    },
                 ],
                 confidence: 1.0,
                 segmentation: Some(SegmentationMask {
@@ -621,26 +646,13 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
                 region_counts: vec![],
             };
             let mask = build_skin_mask(&analysis, buf.width, buf.height);
-            let gpu = engine()?;
             let id = create_surface(buf.width, buf.height)?;
             upload_surface(id, buf.clone())?;
             let params = BeautyParams {
                 skin_smooth: 0.6,
                 ..Default::default()
             };
-            gpu.apply_beauty_on_cache(
-                gpu.beauty_pipelines(),
-                &params,
-                &mask,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            )?;
+            apply_surface_beauty_pipeline(id, &analysis, &mask, &params, None)?;
             let _ = readback_surface(id)?;
             Ok(())
         },
@@ -710,6 +722,130 @@ pub fn run_all(image_bytes: &[u8], config: &BenchConfig) -> Result<BenchReport, 
             Ok(())
         },
     )?;
+
+    // Steady-state beauty compute: surface + output texture pre-allocated
+    // once, so the per-iteration cost is the actual dispatch + readback (or
+    // swizzle, for the zero-copy variant). This is the "sustained slider
+    // drag" scenario the Beauty Pipeline Optimization doc targets.
+    #[cfg(all(feature = "gpu", target_vendor = "apple"))]
+    {
+        use crate::api::face::{BeautyParams, FaceAnalysisResult, Landmark2D, SegmentationMask};
+        use crate::face::build_skin_mask;
+        use crate::gpu::{
+            apply_surface_beauty_pipeline, apply_surface_beauty_pipeline_with_output,
+            attach_output_texture_wgpu, create_surface, destroy_surface, engine, readback_surface,
+            upload_surface,
+        };
+
+        let analysis = FaceAnalysisResult {
+            landmarks: vec![
+                Landmark2D {
+                    x: 0.25,
+                    y: 0.25,
+                    z: 0.0,
+                },
+                Landmark2D {
+                    x: 0.75,
+                    y: 0.25,
+                    z: 0.0,
+                },
+                Landmark2D {
+                    x: 0.5,
+                    y: 0.75,
+                    z: 0.0,
+                },
+            ],
+            confidence: 1.0,
+            segmentation: Some(SegmentationMask {
+                width: 0,
+                height: 0,
+                pixels: Vec::new(),
+            }),
+            face_contour_count: 3,
+            region_counts: vec![],
+        };
+        let build_state = || -> Result<(i64, u32, u32, SegmentationMask, BeautyParams), String> {
+            let fresh_bytes = image_bytes.to_vec();
+            let buf = buffer::decode_to_rgba(&fresh_bytes, true, None)
+                .map_err(|e| format!("decode: {e}"))?;
+            let skin_mask = build_skin_mask(&analysis, buf.width, buf.height);
+            let w = buf.width;
+            let h = buf.height;
+            let id = create_surface(w, h)?;
+            upload_surface(id, buf)?;
+            let params = BeautyParams {
+                skin_smooth: 0.6,
+                ..Default::default()
+            };
+            Ok((id, w, h, skin_mask, params))
+        };
+
+        if matches_only("beauty_skin_smooth_gpu_steady", only) {
+            let (id, _w, _h, skin_mask, params) = build_state()?;
+            for _ in 0..config.warmup_iterations {
+                apply_surface_beauty_pipeline(id, &analysis, &skin_mask, &params, None)?;
+                let _ = readback_surface(id)?;
+            }
+            let mut samples = Vec::with_capacity(config.iterations as usize);
+            for _ in 0..config.iterations {
+                let start = Instant::now();
+                apply_surface_beauty_pipeline(id, &analysis, &skin_mask, &params, None)?;
+                let _ = readback_surface(id)?;
+                samples.push(start.elapsed());
+            }
+            destroy_surface(id);
+            rows.push(stats_from_samples(
+                "beauty_skin_smooth_gpu_steady",
+                BenchBackend::Gpu,
+                config.iterations,
+                &samples,
+                "cpu".to_string(),
+            ));
+            cooldown_between_ops(config);
+        }
+
+        if matches_only("beauty_skin_smooth_gpu_zero_copy_steady", only) {
+            let gpu = engine().map_err(|e| e.to_string())?;
+            let (id, w, h, skin_mask, params) = build_state()?;
+            let output_tex = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("zero_copy_output_steady"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Bgra8Unorm,
+                usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            attach_output_texture_wgpu(id, output_tex, w, h).map_err(|e| e.to_string())?;
+            for _ in 0..config.warmup_iterations {
+                apply_surface_beauty_pipeline_with_output(
+                    id, &analysis, &skin_mask, &params, None,
+                )?;
+            }
+            let mut samples = Vec::with_capacity(config.iterations as usize);
+            for _ in 0..config.iterations {
+                let start = Instant::now();
+                apply_surface_beauty_pipeline_with_output(
+                    id, &analysis, &skin_mask, &params, None,
+                )?;
+                samples.push(start.elapsed());
+            }
+            destroy_surface(id);
+            rows.push(stats_from_samples(
+                "beauty_skin_smooth_gpu_zero_copy_steady",
+                BenchBackend::Gpu,
+                config.iterations,
+                &samples,
+                "cpu".to_string(),
+            ));
+            cooldown_between_ops(config);
+        }
+    }
 
     Ok(BenchReport {
         image_label: format!("{}x{}", info.width, info.height),
@@ -788,7 +924,13 @@ fn run_bytes(
         std::hint::black_box(&fresh);
     }
 
-    Ok(stats_from_samples(name, backend, config.iterations, &samples, path))
+    Ok(stats_from_samples(
+        name,
+        backend,
+        config.iterations,
+        &samples,
+        path,
+    ))
 }
 
 fn run_rgba_op(
@@ -816,7 +958,13 @@ fn run_rgba_op(
         samples.push(start.elapsed());
     }
 
-    Ok(stats_from_samples(name, backend, config.iterations, &samples, path))
+    Ok(stats_from_samples(
+        name,
+        backend,
+        config.iterations,
+        &samples,
+        path,
+    ))
 }
 
 fn clone_rgba(b: &RgbaImageBuffer) -> RgbaImageBuffer {
@@ -829,7 +977,7 @@ fn clone_rgba(b: &RgbaImageBuffer) -> RgbaImageBuffer {
 
 fn execution_path_label(
     name: &str,
-    backend: BenchBackend,
+    _backend: BenchBackend,
     pb: Option<ProcessingBackend>,
 ) -> String {
     if let Some(pb) = pb {
@@ -975,7 +1123,9 @@ pub fn parse_preview_profile(s: &str) -> Result<PreviewProfileMode, String> {
         "fast" => Ok(PreviewProfileMode::Fast),
         "quality" => Ok(PreviewProfileMode::Quality),
         "both" => Ok(PreviewProfileMode::Both),
-        _ => Err(format!("unknown preview profile {s:?} (use fast|quality|both)")),
+        _ => Err(format!(
+            "unknown preview profile {s:?} (use fast|quality|both)"
+        )),
     }
 }
 

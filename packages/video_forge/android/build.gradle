@@ -1,4 +1,4 @@
-group = "dev.video_forge_kit"
+group = "dev.video_forge"
 version = "1.0.0"
 
 buildscript {
@@ -21,7 +21,7 @@ rootProject.allprojects {
 apply plugin: "com.android.library"
 
 android {
-    namespace = "dev.video_forge_kit"
+    namespace = "dev.video_forge"
 
     compileSdk = 36
     ndkVersion = android.ndkVersion

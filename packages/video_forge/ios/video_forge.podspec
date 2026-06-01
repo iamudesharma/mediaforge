@@ -13,9 +13,9 @@ Pod::Spec.new do |s|
   s.description      = <<-DESC
 High-performance video compression, transcoding, and thumbnails powered by Rust + FFmpeg.
                        DESC
-  s.homepage         = 'https://github.com/your-org/video_forge'
+  s.homepage         = 'https://github.com/iamudesharma/mediaforge'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'video_forge' => 'dev@example.com' }
+  s.author           = { 'video_forge' => 'dev@video-forge.dev' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
   s.dependency 'Flutter'

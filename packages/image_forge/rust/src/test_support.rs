@@ -30,8 +30,7 @@ pub fn synthetic_rgba(w: u32, h: u32) -> RgbaImageBuffer {
 }
 
 fn rgba_to_image(buf: &RgbaImageBuffer) -> RgbaImage {
-    RgbaImage::from_raw(buf.width, buf.height, buf.pixels.clone())
-        .expect("tiny_rgba dimensions")
+    RgbaImage::from_raw(buf.width, buf.height, buf.pixels.clone()).expect("tiny_rgba dimensions")
 }
 
 /// JPEG bytes via `image` 0.25 encoder (quality 1–100).

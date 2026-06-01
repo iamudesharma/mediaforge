@@ -1,5 +1,5 @@
-use image::DynamicImage;
 use exif::{In, Reader, Tag};
+use image::DynamicImage;
 
 pub fn apply_orientation(mut img: DynamicImage, bytes: &[u8]) -> Result<DynamicImage, String> {
     let Some(orientation) = read_orientation(bytes) else {

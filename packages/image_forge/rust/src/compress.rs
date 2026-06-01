@@ -60,11 +60,8 @@ fn encode_jpeg_inner_optimized(
         comp.set_optimize_coding(false);
     }
 
-    let mut comp = comp
-        .start_compress(Vec::new())
-        .map_err(|e| e.to_string())?;
-    comp.write_scanlines(pixels)
-        .map_err(|e| e.to_string())?;
+    let mut comp = comp.start_compress(Vec::new()).map_err(|e| e.to_string())?;
+    comp.write_scanlines(pixels).map_err(|e| e.to_string())?;
     let out = comp.finish().map_err(|e| e.to_string())?;
 
     if let Some(buf) = rgb_storage_vec {
@@ -88,12 +85,7 @@ pub fn encode_png(img: &DynamicImage, optimize: bool) -> Result<Vec<u8>, String>
     };
 
     image::codecs::png::PngEncoder::new(&mut raw)
-        .write_image(
-            pixels,
-            w,
-            h,
-            image::ExtendedColorType::Rgba8,
-        )
+        .write_image(pixels, w, h, image::ExtendedColorType::Rgba8)
         .map_err(|e| e.to_string())?;
 
     if !optimize {
@@ -120,10 +112,7 @@ pub fn encode_avif(img: &DynamicImage, quality: u8) -> Result<Vec<u8>, String> {
     let (w, h) = img.dimensions();
 
     let pixels: &[RGBA8] = unsafe {
-        std::slice::from_raw_parts(
-            pixels_u8.as_ptr() as *const RGBA8,
-            pixels_u8.len() / 4,
-        )
+        std::slice::from_raw_parts(pixels_u8.as_ptr() as *const RGBA8, pixels_u8.len() / 4)
     };
 
     ravif::Encoder::new()
@@ -134,7 +123,11 @@ pub fn encode_avif(img: &DynamicImage, quality: u8) -> Result<Vec<u8>, String> {
         .map(|r| r.avif_file)
 }
 
-pub fn optimize_bytes(bytes: &[u8], format: crate::api::image::OutputFormat) -> Result<Vec<u8>, String> {
+#[allow(dead_code)]
+pub fn optimize_bytes(
+    bytes: &[u8],
+    format: crate::api::image::OutputFormat,
+) -> Result<Vec<u8>, String> {
     match format {
         crate::api::image::OutputFormat::Jpeg => {
             let img = crate::utils::decode(bytes)?;

@@ -10,8 +10,6 @@
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use fast_image_resize::images::Image as FirImage;
-use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
 use ffmpeg_next::codec::context::Context as CodecContext;
 use ffmpeg_next::codec::decoder::Video as DecoderVideo;
 use ffmpeg_next::codec::discard::Discard;
@@ -848,33 +846,6 @@ fn copy_rgb24_plane(rgb: &Video) -> Result<Vec<u8>> {
     Ok(data)
 }
 
-fn downscale_rgb24(
-    data: Vec<u8>,
-    src_w: u32,
-    src_h: u32,
-    out_w: u32,
-    out_h: u32,
-) -> Result<Vec<u8>> {
-    let src_image =
-        FirImage::from_vec_u8(src_w, src_h, data, PixelType::U8x3).map_err(map_fir_buffer_err)?;
-    let mut dst_image = FirImage::new(out_w, out_h, PixelType::U8x3);
-    let mut resizer = Resizer::new();
-    let options =
-        ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Bilinear));
-    resizer
-        .resize(&src_image, &mut dst_image, Some(&options))
-        .map_err(map_resize_err)?;
-    Ok(dst_image.into_vec())
-}
-
-fn map_fir_buffer_err(err: fast_image_resize::ImageBufferError) -> VideoProcessorError {
-    VideoProcessorError::Internal(format!("thumbnail image buffer: {err:?}"))
-}
-
-fn map_resize_err(err: fast_image_resize::ResizeError) -> VideoProcessorError {
-    VideoProcessorError::Internal(format!("thumbnail resize: {err}"))
-}
-
 fn encode_rgb_to_bytes(frame: &RgbFrame, format: &ThumbnailFormat) -> Result<Vec<u8>> {
     let img: RgbImage =
         ImageBuffer::from_raw(frame.width, frame.height, frame.data.clone()).ok_or_else(|| {
@@ -912,7 +883,7 @@ fn ensure_output_parent(path: &Path) -> Result<()> {
 
 fn default_thumb_dir() -> PathBuf {
     std::env::temp_dir()
-        .join("video_forge_kit")
+        .join("video_forge")
         .join("thumbnails")
 }
 

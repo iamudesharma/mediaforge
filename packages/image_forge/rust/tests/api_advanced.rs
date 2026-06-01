@@ -131,9 +131,8 @@ fn resize_rgba_buffer_all_algorithms_cpu() {
     ];
     for algo in algorithms {
         let buf = common::synthetic_rgba(120, 80);
-        let out =
-            resize_rgba_buffer(buf, 60, 40, algo, ProcessingBackend::Cpu)
-                .unwrap_or_else(|e| panic!("algo {algo:?} failed: {e}"));
+        let out = resize_rgba_buffer(buf, 60, 40, algo, ProcessingBackend::Cpu)
+            .unwrap_or_else(|e| panic!("algo {algo:?} failed: {e}"));
         assert_eq!((out.width, out.height), (60, 40), "algo {algo:?}");
         assert_eq!(out.pixels.len(), (60 * 40 * 4) as usize);
     }
@@ -147,8 +146,14 @@ fn resize_rgba_buffer_auto_backend_matches_dims() {
         return;
     }
     let buf = common::synthetic_rgba(120, 80);
-    let out = resize_rgba_buffer(buf, 30, 20, ResizeAlgorithm::Lanczos3, ProcessingBackend::Auto)
-        .expect("auto resize ok");
+    let out = resize_rgba_buffer(
+        buf,
+        30,
+        20,
+        ResizeAlgorithm::Lanczos3,
+        ProcessingBackend::Auto,
+    )
+    .expect("auto resize ok");
     assert_eq!((out.width, out.height), (30, 20));
 }
 
@@ -159,16 +164,28 @@ fn resize_rgba_buffer_gpu_when_available() {
         return;
     }
     let buf = common::synthetic_rgba(120, 80);
-    let out = resize_rgba_buffer(buf, 30, 20, ResizeAlgorithm::Lanczos3, ProcessingBackend::Gpu)
-        .expect("gpu resize ok");
+    let out = resize_rgba_buffer(
+        buf,
+        30,
+        20,
+        ResizeAlgorithm::Lanczos3,
+        ProcessingBackend::Gpu,
+    )
+    .expect("gpu resize ok");
     assert_eq!((out.width, out.height), (30, 20));
 }
 
 #[test]
 fn resize_rgba_buffer_zero_dim_errors() {
     let buf = common::synthetic_rgba(32, 32);
-    let err = resize_rgba_buffer(buf, 0, 32, ResizeAlgorithm::Lanczos3, ProcessingBackend::Cpu)
-        .expect_err("zero width fails");
+    let err = resize_rgba_buffer(
+        buf,
+        0,
+        32,
+        ResizeAlgorithm::Lanczos3,
+        ProcessingBackend::Cpu,
+    )
+    .expect_err("zero width fails");
     assert!(err.to_lowercase().contains("greater than zero"));
 }
 
@@ -223,10 +240,8 @@ fn filter_execution_path_returns_known_label() {
     );
     assert_eq!(cpu_brightness, "cpu_parallel");
 
-    let cpu_blur = filter_execution_path_name(
-        ImageFilter::Blur { radius: 3 },
-        ProcessingBackend::Cpu,
-    );
+    let cpu_blur =
+        filter_execution_path_name(ImageFilter::Blur { radius: 3 }, ProcessingBackend::Cpu);
     assert_eq!(cpu_blur, "cpu_photon");
 
     let auto_brightness = filter_execution_path_name(
@@ -265,7 +280,10 @@ fn filter_rgba_buffer_every_variant_runs() {
         ImageFilter::Contrast { amount: 20.0 },
         ImageFilter::Saturation { amount: 1.2 },
         ImageFilter::HueRotate { degrees: 45.0 },
-        ImageFilter::Oil { radius: 2, intensity: 30.0 },
+        ImageFilter::Oil {
+            radius: 2,
+            intensity: 30.0,
+        },
         ImageFilter::FrostedGlass,
         ImageFilter::Pixelize { size: 4 },
         ImageFilter::Solarize,
@@ -289,16 +307,14 @@ fn filter_rgba_buffer_every_variant_runs() {
 #[test]
 fn fit_max_edge_noop_when_small() {
     let buf = common::synthetic_rgba(50, 50);
-    let out = fit_max_edge_rgba_buffer(buf.clone(), 100, PreviewQuality::Fast)
-        .expect("fit ok");
+    let out = fit_max_edge_rgba_buffer(buf.clone(), 100, PreviewQuality::Fast).expect("fit ok");
     assert_eq!((out.width, out.height), (50, 50));
 }
 
 #[test]
 fn fit_max_edge_downscales_when_needed() {
     let buf = common::synthetic_rgba(200, 100);
-    let out = fit_max_edge_rgba_buffer(buf, 50, PreviewQuality::Quality)
-        .expect("fit ok");
+    let out = fit_max_edge_rgba_buffer(buf, 50, PreviewQuality::Quality).expect("fit ok");
     assert!(out.width.max(out.height) <= 50);
     assert_eq!(out.width.max(out.height), 50);
 }
@@ -306,8 +322,7 @@ fn fit_max_edge_downscales_when_needed() {
 #[test]
 fn fit_max_edge_zero_returns_unchanged() {
     let buf = common::synthetic_rgba(64, 64);
-    let out = fit_max_edge_rgba_buffer(buf.clone(), 0, PreviewQuality::Fast)
-        .expect("zero edge ok");
+    let out = fit_max_edge_rgba_buffer(buf.clone(), 0, PreviewQuality::Fast).expect("zero edge ok");
     assert_eq!((out.width, out.height), (64, 64));
 }
 
@@ -321,7 +336,10 @@ fn decode_progressive_returns_preview_and_full() {
     let res = decode_progressive_image(src, 100, false).expect("progressive ok");
     assert_eq!((res.info.width, res.info.height), (400, 300));
     let preview_max = res.preview_rgba.width.max(res.preview_rgba.height);
-    assert!(preview_max <= 100, "preview violates max_edge: {preview_max}");
+    assert!(
+        preview_max <= 100,
+        "preview violates max_edge: {preview_max}"
+    );
     assert_eq!((res.buffer.width, res.buffer.height), (400, 300));
 }
 
@@ -422,10 +440,23 @@ fn overlay_on_rgba_offscreen_offsets_dont_panic() {
 fn edit_pipeline_chain_cpu() {
     let buf = common::synthetic_rgba(120, 80);
     let ops = vec![
-        EditOp::Filter { filter: ImageFilter::Brightness { amount: 20 } },
-        EditOp::Resize { width: 60, height: 40, algorithm: ResizeAlgorithm::Lanczos3 },
-        EditOp::Crop { x: 5, y: 5, width: 40, height: 30 },
-        EditOp::Rotate { rotation: Rotation::Rotate90 },
+        EditOp::Filter {
+            filter: ImageFilter::Brightness { amount: 20 },
+        },
+        EditOp::Resize {
+            width: 60,
+            height: 40,
+            algorithm: ResizeAlgorithm::Lanczos3,
+        },
+        EditOp::Crop {
+            x: 5,
+            y: 5,
+            width: 40,
+            height: 30,
+        },
+        EditOp::Rotate {
+            rotation: Rotation::Rotate90,
+        },
     ];
     let out = apply_edit_pipeline(buf, ops, ProcessingBackend::Cpu).expect("pipeline ok");
     // 60×40 → crop 40×30 → rotate90 → 30×40
@@ -436,14 +467,28 @@ fn edit_pipeline_chain_cpu() {
 fn edit_pipeline_auto_matches_cpu_dims() {
     let make_ops = || {
         vec![
-            EditOp::Filter { filter: ImageFilter::Brightness { amount: 10 } },
-            EditOp::Resize { width: 64, height: 32, algorithm: ResizeAlgorithm::Lanczos3 },
+            EditOp::Filter {
+                filter: ImageFilter::Brightness { amount: 10 },
+            },
+            EditOp::Resize {
+                width: 64,
+                height: 32,
+                algorithm: ResizeAlgorithm::Lanczos3,
+            },
         ]
     };
-    let cpu = apply_edit_pipeline(common::synthetic_rgba(120, 80), make_ops(), ProcessingBackend::Cpu)
-        .expect("cpu ok");
-    let auto = apply_edit_pipeline(common::synthetic_rgba(120, 80), make_ops(), ProcessingBackend::Auto)
-        .expect("auto ok");
+    let cpu = apply_edit_pipeline(
+        common::synthetic_rgba(120, 80),
+        make_ops(),
+        ProcessingBackend::Cpu,
+    )
+    .expect("cpu ok");
+    let auto = apply_edit_pipeline(
+        common::synthetic_rgba(120, 80),
+        make_ops(),
+        ProcessingBackend::Auto,
+    )
+    .expect("auto ok");
     assert_eq!((cpu.width, cpu.height), (64, 32));
     assert_eq!((auto.width, auto.height), (64, 32));
     // CPU vs Auto means may differ slightly (GPU vs CPU brightness rounding).

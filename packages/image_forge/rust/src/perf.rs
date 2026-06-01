@@ -5,7 +5,10 @@ use crate::api::image::{ImageFilter, ProcessingBackend};
 use crate::backend::{self, EffectiveBackend};
 
 /// Accurate RGBA filter route (matches `buffer::filter_rgba_with_backend_inner`).
-pub fn resolve_rgba_filter_path(filter: &ImageFilter, requested: ProcessingBackend) -> &'static str {
+pub fn resolve_rgba_filter_path(
+    filter: &ImageFilter,
+    requested: ProcessingBackend,
+) -> &'static str {
     if uses_gpu_filter(filter, requested) {
         return match filter {
             ImageFilter::Blur { .. } => "gpu_blur",
@@ -117,7 +120,10 @@ mod tests {
     #[test]
     fn cpu_brightness_is_parallel_not_photon() {
         assert_eq!(
-            resolve_rgba_filter_path(&ImageFilter::Brightness { amount: 10 }, ProcessingBackend::Cpu),
+            resolve_rgba_filter_path(
+                &ImageFilter::Brightness { amount: 10 },
+                ProcessingBackend::Cpu
+            ),
             "cpu_parallel"
         );
     }
@@ -152,7 +158,10 @@ mod tests {
     #[cfg(feature = "gpu")]
     fn gpu_hue_uses_gpu_adjust() {
         assert_eq!(
-            resolve_rgba_filter_path(&ImageFilter::HueRotate { degrees: 15.0 }, ProcessingBackend::Gpu),
+            resolve_rgba_filter_path(
+                &ImageFilter::HueRotate { degrees: 15.0 },
+                ProcessingBackend::Gpu
+            ),
             "gpu_adjust"
         );
     }
@@ -176,7 +185,10 @@ mod tests {
     #[cfg(feature = "gpu")]
     fn gpu_vignette_uses_gpu_vignette() {
         assert_eq!(
-            resolve_rgba_filter_path(&ImageFilter::Vignette { amount: 0.5 }, ProcessingBackend::Gpu),
+            resolve_rgba_filter_path(
+                &ImageFilter::Vignette { amount: 0.5 },
+                ProcessingBackend::Gpu
+            ),
             "gpu_vignette"
         );
     }

@@ -84,12 +84,7 @@ pub fn fit_max_edge(img: &DynamicImage, max_edge: u32) -> Result<DynamicImage, S
     let scale = max_edge as f32 / longest as f32;
     let tw = (w as f32 * scale).round().max(1.0) as u32;
     let th = (h as f32 * scale).round().max(1.0) as u32;
-    resize_ref(
-        img,
-        tw,
-        th,
-        crate::api::image::ResizeAlgorithm::Lanczos3,
-    )
+    resize_ref(img, tw, th, crate::api::image::ResizeAlgorithm::Lanczos3)
 }
 
 pub fn decode_progressive(

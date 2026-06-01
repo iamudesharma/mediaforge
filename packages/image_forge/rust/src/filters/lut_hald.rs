@@ -13,8 +13,8 @@ pub fn parse_hald_clut(png_bytes: &[u8]) -> Result<(Vec<u8>, u32), String> {
     // 2. Level 4 Hald CLUT: 64x64 pixels -> 16^3 LUT
     // 3. Level 8 horizontal strip Hald CLUT: 4096x64 pixels -> 64^3 LUT
     // 4. Level 4 horizontal strip Hald CLUT: 256x16 pixels -> 16^3 LUT
-    
-    let (lut_size, tiles_x, tiles_y, tile_size) = if width == 512 && height == 512 {
+
+    let (lut_size, tiles_x, _tiles_y, tile_size) = if width == 512 && height == 512 {
         (64, 8, 8, 64)
     } else if width == 64 && height == 64 {
         (16, 4, 4, 16)
@@ -34,11 +34,17 @@ pub fn parse_hald_clut(png_bytes: &[u8]) -> Result<(Vec<u8>, u32), String> {
                 if tiles * tiles == s && width == tiles * s && height == tiles * s {
                     (s, tiles, tiles, s)
                 } else {
-                    return Err(format!("Unsupported Hald CLUT dimensions: {}x{}", width, height));
+                    return Err(format!(
+                        "Unsupported Hald CLUT dimensions: {}x{}",
+                        width, height
+                    ));
                 }
             }
         } else {
-            return Err(format!("Unsupported Hald CLUT dimensions: {}x{}", width, height));
+            return Err(format!(
+                "Unsupported Hald CLUT dimensions: {}x{}",
+                width, height
+            ));
         }
     };
 
@@ -48,7 +54,7 @@ pub fn parse_hald_clut(png_bytes: &[u8]) -> Result<(Vec<u8>, u32), String> {
     for b in 0..size {
         let tile_col = b % tiles_x as usize;
         let tile_row = b / tiles_x as usize;
-        
+
         let start_x = tile_col * tile_size as usize;
         let start_y = tile_row * tile_size as usize;
 
@@ -56,7 +62,7 @@ pub fn parse_hald_clut(png_bytes: &[u8]) -> Result<(Vec<u8>, u32), String> {
             for r in 0..size {
                 let px = start_x + r;
                 let py = start_y + g;
-                
+
                 let pixel = rgba.get_pixel(px as u32, py as u32);
                 let idx = (r + g * size + b * size * size) * 4;
                 lut_data[idx..idx + 4].copy_from_slice(&pixel.0);
@@ -92,7 +98,11 @@ pub fn apply_lut_3d_rgba(buffer: &mut RgbaImageBuffer, lut_data: &[u8], lut_size
 
         let get_color = |ri: usize, gi: usize, bi: usize| -> (f32, f32, f32) {
             let idx = (ri + gi * size + bi * size * size) * 4;
-            (lut_data[idx] as f32, lut_data[idx + 1] as f32, lut_data[idx + 2] as f32)
+            (
+                lut_data[idx] as f32,
+                lut_data[idx + 1] as f32,
+                lut_data[idx + 2] as f32,
+            )
         };
 
         let c000 = get_color(r0, g0, b0);
@@ -156,7 +166,9 @@ pub fn apply_lut_3d_with_strength_rgba(
     let orig = buffer.pixels.clone();
     apply_lut_3d_rgba(buffer, lut_data, lut_size);
     for (o, s) in buffer.pixels.iter_mut().zip(orig.iter()) {
-        *o = (*o as f32 * t + *s as f32 * (1.0 - t)).round().clamp(0.0, 255.0) as u8;
+        *o = (*o as f32 * t + *s as f32 * (1.0 - t))
+            .round()
+            .clamp(0.0, 255.0) as u8;
     }
 }
 
@@ -193,7 +205,11 @@ mod tests {
         // Encode raw pixels to PNG format bytes
         let img = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(64, 64, pixels).unwrap();
         let mut png_bytes = Vec::new();
-        img.write_to(&mut std::io::Cursor::new(&mut png_bytes), image::ImageFormat::Png).unwrap();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut png_bytes),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
 
         // Parse CLUT back
         let (lut_data, lut_size) = parse_hald_clut(&png_bytes).unwrap();
@@ -205,10 +221,7 @@ mod tests {
             width: 2,
             height: 2,
             pixels: vec![
-                50, 100, 150, 255,
-                200, 120, 80, 255,
-                10, 20, 30, 255,
-                255, 255, 255, 255,
+                50, 100, 150, 255, 200, 120, 80, 255, 10, 20, 30, 255, 255, 255, 255, 255,
             ],
         };
         let orig = test_buf.pixels.clone();
@@ -216,7 +229,10 @@ mod tests {
 
         // Check if output pixels closely match input (within trilinear rounding tolerance of 2 units)
         for (o, t) in orig.iter().zip(test_buf.pixels.iter()) {
-            assert!((*o as i16 - *t as i16).abs() <= 2, "original: {o}, processed: {t}");
+            assert!(
+                (*o as i16 - *t as i16).abs() <= 2,
+                "original: {o}, processed: {t}"
+            );
         }
     }
 }

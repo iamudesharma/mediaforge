@@ -20,9 +20,6 @@ type CVPixelBufferRef = *mut std::ffi::c_void;
 type VTPixelTransferSessionRef = *mut std::ffi::c_void;
 type OSStatus = i32;
 
-/// NV12 bi-planar video range — matches FFmpeg VT hw frames default.
-const K_CV_NV12_BIPLANAR_VIDEO: u32 = u32::from_be_bytes(*b"420v");
-
 /// 32-bit BGRA — matches Flutter `FlutterTexture` / `kCVPixelFormatType_32BGRA`.
 const K_CV_32BGRA: u32 = u32::from_be_bytes(*b"BGRA");
 

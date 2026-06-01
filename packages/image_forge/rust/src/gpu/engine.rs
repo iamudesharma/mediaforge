@@ -4,7 +4,9 @@ use std::sync::OnceLock;
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use crate::api::image::{ImageFilter, MoodFilterPreset, ResizeAlgorithm, RgbaImageBuffer, SwipeLookPreset};
+use crate::api::image::{
+    ImageFilter, MoodFilterPreset, ResizeAlgorithm, RgbaImageBuffer, SwipeLookPreset,
+};
 use crate::filters::{recipe_for, swipe_look_recipe_for};
 
 use super::lut_assets::{self, lut_size};
@@ -165,11 +167,22 @@ impl GpuEngine {
         let api_name = backend_label(info.backend).to_string();
         let device_name = info.name.clone();
 
+        let mut required_features = wgpu::Features::empty();
+        // BGRA8Unorm storage textures are needed for the zero-copy beauty
+        // output path (writes go into a bgra8unorm IOSurface-backed wgpu
+        // texture that's shared with the Flutter Texture widget).
+        if adapter
+            .features()
+            .contains(wgpu::Features::BGRA8UNORM_STORAGE)
+        {
+            required_features |= wgpu::Features::BGRA8UNORM_STORAGE;
+        }
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("rust_image_gpu"),
-                    required_features: wgpu::Features::empty(),
+                    required_features,
                     required_limits: wgpu::Limits::default(),
                     memory_hints: wgpu::MemoryHints::Performance,
                 },
@@ -277,7 +290,7 @@ impl GpuEngine {
         })
     }
 
-    pub fn beauty_pipelines(&self) -> &super::beauty_pass::BeautyGpuPipelines {
+    pub(crate) fn beauty_pipelines(&self) -> &super::beauty_pass::BeautyGpuPipelines {
         self.beauty_pipelines
             .get_or_init(|| super::beauty_pass::BeautyGpuPipelines::new(&self.device))
     }
@@ -392,11 +405,11 @@ impl GpuEngine {
             ],
         });
 
-        let mut encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("resize_encoder"),
-                });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("resize_encoder"),
+            });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -457,16 +470,19 @@ impl GpuEngine {
 
         let (buf, readback_buf) = if use_cache {
             let cache = cache_guard.as_ref().unwrap();
-            self.queue.write_buffer(&cache.storage_buf, 0, bytemuck::cast_slice(&packed));
+            self.queue
+                .write_buffer(&cache.storage_buf, 0, bytemuck::cast_slice(&packed));
             (cache.storage_buf.clone(), cache.readback_buf.clone())
         } else {
-            let new_storage_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("color_rgba"),
-                contents: bytemuck::cast_slice(&packed),
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::COPY_SRC,
-            });
+            let new_storage_buf =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("color_rgba"),
+                        contents: bytemuck::cast_slice(&packed),
+                        usage: wgpu::BufferUsages::STORAGE
+                            | wgpu::BufferUsages::COPY_DST
+                            | wgpu::BufferUsages::COPY_SRC,
+                    });
 
             let new_storage_buf2 = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("color_rgba_buf2"),
@@ -525,11 +541,11 @@ impl GpuEngine {
             ],
         });
 
-        let mut encoder =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("color_encoder"),
-                });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("color_encoder"),
+            });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -575,16 +591,23 @@ impl GpuEngine {
 
         let (storage_buf1, storage_buf2, readback_buf) = if use_cache {
             let cache = cache_guard.as_ref().unwrap();
-            self.queue.write_buffer(&cache.storage_buf, 0, bytemuck::cast_slice(&packed));
-            (cache.storage_buf.clone(), cache.storage_buf2.clone(), cache.readback_buf.clone())
+            self.queue
+                .write_buffer(&cache.storage_buf, 0, bytemuck::cast_slice(&packed));
+            (
+                cache.storage_buf.clone(),
+                cache.storage_buf2.clone(),
+                cache.readback_buf.clone(),
+            )
         } else {
-            let new_storage_buf1 = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("blur_storage1"),
-                contents: bytemuck::cast_slice(&packed),
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::COPY_SRC,
-            });
+            let new_storage_buf1 =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("blur_storage1"),
+                        contents: bytemuck::cast_slice(&packed),
+                        usage: wgpu::BufferUsages::STORAGE
+                            | wgpu::BufferUsages::COPY_DST
+                            | wgpu::BufferUsages::COPY_SRC,
+                    });
 
             let new_storage_buf2 = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("blur_storage2"),
@@ -627,11 +650,13 @@ impl GpuEngine {
             dir_x: 1,
             dir_y: 0,
         };
-        let params_buf_h = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("blur_params_h"),
-            contents: bytemuck::bytes_of(&params_h),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf_h = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("blur_params_h"),
+                contents: bytemuck::bytes_of(&params_h),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         let bind_group_h = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("blur_bind_group_h"),
@@ -659,11 +684,13 @@ impl GpuEngine {
             dir_x: 0,
             dir_y: 1,
         };
-        let params_buf_v = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("blur_params_v"),
-            contents: bytemuck::bytes_of(&params_v),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf_v = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("blur_params_v"),
+                contents: bytemuck::bytes_of(&params_v),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         let bind_group_v = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("blur_bind_group_v"),
@@ -684,9 +711,11 @@ impl GpuEngine {
             ],
         });
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("blur_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("blur_encoder"),
+            });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -750,13 +779,15 @@ impl GpuEngine {
                 cache.readback_buf.clone(),
             )
         } else {
-            let new_storage_buf1 = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("sharpen_storage1"),
-                contents: bytemuck::cast_slice(&packed),
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::COPY_SRC,
-            });
+            let new_storage_buf1 =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("sharpen_storage1"),
+                        contents: bytemuck::cast_slice(&packed),
+                        usage: wgpu::BufferUsages::STORAGE
+                            | wgpu::BufferUsages::COPY_DST
+                            | wgpu::BufferUsages::COPY_SRC,
+                    });
 
             let new_storage_buf2 = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("sharpen_storage2"),
@@ -796,11 +827,13 @@ impl GpuEngine {
             height,
             strength,
         };
-        let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("sharpen_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("sharpen_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sharpen_bind_group"),
@@ -821,9 +854,11 @@ impl GpuEngine {
             ],
         });
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("sharpen_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("sharpen_encoder"),
+            });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -870,9 +905,7 @@ impl GpuEngine {
             ImageFilter::HueRotate { degrees } => {
                 self.color_adjust_rgba(buffer, 0.0, 1.0, 1.0, *degrees)
             }
-            ImageFilter::Blur { radius } => {
-                self.blur_rgba(buffer, *radius as u32)
-            }
+            ImageFilter::Blur { radius } => self.blur_rgba(buffer, *radius as u32),
             ImageFilter::Sharpen => self.sharpen_rgba(buffer, 1.0),
             ImageFilter::Vignette { amount } => self.vignette_rgba(buffer, *amount),
             ImageFilter::Mood { preset, strength } => {
@@ -903,9 +936,11 @@ impl GpuEngine {
         let storage_buf = self.upload_storage(&packed, len, "vignette_storage")?;
         let readback_buf = self.create_readback(len, "vignette_readback")?;
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("vignette_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vignette_encoder"),
+            });
         self.dispatch_vignette(&mut encoder, &storage_buf, width, height, amount);
 
         encoder.copy_buffer_to_buffer(
@@ -943,9 +978,11 @@ impl GpuEngine {
         let readback_buf = self.create_readback(len, "mood_readback")?;
         let lut_buf = self.lut_buffer_for(preset)?;
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("mood_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("mood_encoder"),
+            });
 
         self.dispatch_lut(
             &mut encoder,
@@ -959,17 +996,11 @@ impl GpuEngine {
         );
 
         let mut active_is_1 = false;
-        let mut current = &storage_buf2;
-        let mut next = &storage_buf1;
+        let current = &storage_buf2;
+        let next = &storage_buf1;
 
         if recipe.vignette.abs() > 0.001 {
-            self.dispatch_vignette(
-                &mut encoder,
-                current,
-                width,
-                height,
-                recipe.vignette * t,
-            );
+            self.dispatch_vignette(&mut encoder, current, width, height, recipe.vignette * t);
         }
 
         if recipe.structure.abs() > 0.001 {
@@ -1021,9 +1052,11 @@ impl GpuEngine {
         let readback_buf = self.create_readback(len, "swipe_readback")?;
         let lut_buf = self.swipe_lut_buffer_for(preset)?;
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("swipe_look_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("swipe_look_encoder"),
+            });
 
         self.dispatch_lut(
             &mut encoder,
@@ -1037,17 +1070,11 @@ impl GpuEngine {
         );
 
         let mut active_is_1 = false;
-        let mut current = &storage_buf2;
-        let mut next = &storage_buf1;
+        let current = &storage_buf2;
+        let next = &storage_buf1;
 
         if recipe.vignette.abs() > 0.001 {
-            self.dispatch_vignette(
-                &mut encoder,
-                current,
-                width,
-                height,
-                recipe.vignette * t,
-            );
+            self.dispatch_vignette(&mut encoder, current, width, height, recipe.vignette * t);
         }
 
         if recipe.structure.abs() > 0.001 {
@@ -1123,16 +1150,23 @@ impl GpuEngine {
 
         let (mut storage_buf1, mut storage_buf2, mut readback_buf) = if use_cache {
             let cache = cache_guard.as_ref().unwrap();
-            self.queue.write_buffer(&cache.storage_buf, 0, bytemuck::cast_slice(&packed));
-            (cache.storage_buf.clone(), cache.storage_buf2.clone(), cache.readback_buf.clone())
+            self.queue
+                .write_buffer(&cache.storage_buf, 0, bytemuck::cast_slice(&packed));
+            (
+                cache.storage_buf.clone(),
+                cache.storage_buf2.clone(),
+                cache.readback_buf.clone(),
+            )
         } else {
-            let new_storage_buf1 = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("pipeline_storage1"),
-                contents: bytemuck::cast_slice(&packed),
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::COPY_DST
-                    | wgpu::BufferUsages::COPY_SRC,
-            });
+            let new_storage_buf1 =
+                self.device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("pipeline_storage1"),
+                        contents: bytemuck::cast_slice(&packed),
+                        usage: wgpu::BufferUsages::STORAGE
+                            | wgpu::BufferUsages::COPY_DST
+                            | wgpu::BufferUsages::COPY_SRC,
+                    });
 
             let new_storage_buf2 = self.device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some("pipeline_storage2"),
@@ -1169,57 +1203,111 @@ impl GpuEngine {
         drop(cache_guard);
 
         let mut active_is_1 = true;
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("pipeline_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("pipeline_encoder"),
+            });
 
         for op in ops {
             match op {
-                crate::api::image::EditOp::Filter { filter } => {
-                    match filter {
-                        ImageFilter::Brightness { amount } => {
-                            let b = (*amount as f32) / 255.0;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            self.dispatch_color_adjust(
-                                &mut encoder, current_buf, width, height, b, 1.0, 1.0, 0.0,
-                            );
-                        }
-                        ImageFilter::Contrast { amount } => {
-                            let c = *amount as f32;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            self.dispatch_color_adjust(
-                                &mut encoder, current_buf, width, height, 0.0, c, 1.0, 0.0,
-                            );
-                        }
-                        ImageFilter::Saturation { amount } => {
-                            let s = *amount as f32;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            self.dispatch_color_adjust(
-                                &mut encoder, current_buf, width, height, 0.0, 1.0, s, 0.0,
-                            );
-                        }
-                        ImageFilter::HueRotate { degrees } => {
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            self.dispatch_color_adjust(
-                                &mut encoder, current_buf, width, height, 0.0, 1.0, 1.0, *degrees,
-                            );
-                        }
-                        ImageFilter::Sharpen => {
-                            let params = SharpenParams {
-                                width,
-                                height,
-                                strength: 1.0,
-                            };
-                            let params_buf = self.device.create_buffer_init(
-                                &wgpu::util::BufferInitDescriptor {
+                crate::api::image::EditOp::Filter { filter } => match filter {
+                    ImageFilter::Brightness { amount } => {
+                        let b = (*amount as f32) / 255.0;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        self.dispatch_color_adjust(
+                            &mut encoder,
+                            current_buf,
+                            width,
+                            height,
+                            b,
+                            1.0,
+                            1.0,
+                            0.0,
+                        );
+                    }
+                    ImageFilter::Contrast { amount } => {
+                        let c = *amount as f32;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        self.dispatch_color_adjust(
+                            &mut encoder,
+                            current_buf,
+                            width,
+                            height,
+                            0.0,
+                            c,
+                            1.0,
+                            0.0,
+                        );
+                    }
+                    ImageFilter::Saturation { amount } => {
+                        let s = *amount as f32;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        self.dispatch_color_adjust(
+                            &mut encoder,
+                            current_buf,
+                            width,
+                            height,
+                            0.0,
+                            1.0,
+                            s,
+                            0.0,
+                        );
+                    }
+                    ImageFilter::HueRotate { degrees } => {
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        self.dispatch_color_adjust(
+                            &mut encoder,
+                            current_buf,
+                            width,
+                            height,
+                            0.0,
+                            1.0,
+                            1.0,
+                            *degrees,
+                        );
+                    }
+                    ImageFilter::Sharpen => {
+                        let params = SharpenParams {
+                            width,
+                            height,
+                            strength: 1.0,
+                        };
+                        let params_buf =
+                            self.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                     label: Some("pipeline_sharpen_params"),
                                     contents: bytemuck::bytes_of(&params),
                                     usage: wgpu::BufferUsages::UNIFORM,
-                                },
-                            );
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
-                            let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                                });
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        let next_buf = if active_is_1 {
+                            &storage_buf2
+                        } else {
+                            &storage_buf1
+                        };
+                        let bind_group =
+                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: Some("pipeline_sharpen_bg"),
                                 layout: &self.sharpen_pipeline.get_bind_group_layout(0),
                                 entries: &[
@@ -1237,38 +1325,50 @@ impl GpuEngine {
                                     },
                                 ],
                             });
-                            {
-                                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        {
+                            let mut pass =
+                                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                                     label: Some("pipeline_sharpen_pass"),
                                     timestamp_writes: None,
                                 });
-                                pass.set_pipeline(&self.sharpen_pipeline);
-                                pass.set_bind_group(0, &bind_group, &[]);
-                                let groups_x = (width + 15) / 16;
-                                let groups_y = (height + 15) / 16;
-                                pass.dispatch_workgroups(groups_x, groups_y, 1);
-                            }
-                            active_is_1 = !active_is_1;
+                            pass.set_pipeline(&self.sharpen_pipeline);
+                            pass.set_bind_group(0, &bind_group, &[]);
+                            let groups_x = (width + 15) / 16;
+                            let groups_y = (height + 15) / 16;
+                            pass.dispatch_workgroups(groups_x, groups_y, 1);
                         }
-                        ImageFilter::Blur { radius } => {
-                            let r = *radius as u32;
-                            let params_h = BlurParams {
-                                width,
-                                height,
-                                radius: r,
-                                dir_x: 1,
-                                dir_y: 0,
-                            };
-                            let params_buf_h = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("pipeline_blur_params_h"),
-                                contents: bytemuck::bytes_of(&params_h),
-                                usage: wgpu::BufferUsages::UNIFORM,
-                            });
+                        active_is_1 = !active_is_1;
+                    }
+                    ImageFilter::Blur { radius } => {
+                        let r = *radius as u32;
+                        let params_h = BlurParams {
+                            width,
+                            height,
+                            radius: r,
+                            dir_x: 1,
+                            dir_y: 0,
+                        };
+                        let params_buf_h =
+                            self.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("pipeline_blur_params_h"),
+                                    contents: bytemuck::bytes_of(&params_h),
+                                    usage: wgpu::BufferUsages::UNIFORM,
+                                });
 
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        let next_buf = if active_is_1 {
+                            &storage_buf2
+                        } else {
+                            &storage_buf1
+                        };
 
-                            let bind_group_h = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        let bind_group_h =
+                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: Some("pipeline_blur_bg_h"),
                                 layout: &self.blur_pipeline.get_bind_group_layout(0),
                                 entries: &[
@@ -1287,32 +1387,36 @@ impl GpuEngine {
                                 ],
                             });
 
-                            {
-                                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        {
+                            let mut pass =
+                                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                                     label: Some("pipeline_blur_pass_h"),
                                     timestamp_writes: None,
                                 });
-                                pass.set_pipeline(&self.blur_pipeline);
-                                pass.set_bind_group(0, &bind_group_h, &[]);
-                                let groups_x = (width + 15) / 16;
-                                let groups_y = (height + 15) / 16;
-                                pass.dispatch_workgroups(groups_x, groups_y, 1);
-                            }
+                            pass.set_pipeline(&self.blur_pipeline);
+                            pass.set_bind_group(0, &bind_group_h, &[]);
+                            let groups_x = (width + 15) / 16;
+                            let groups_y = (height + 15) / 16;
+                            pass.dispatch_workgroups(groups_x, groups_y, 1);
+                        }
 
-                            let params_v = BlurParams {
-                                width,
-                                height,
-                                radius: r,
-                                dir_x: 0,
-                                dir_y: 1,
-                            };
-                            let params_buf_v = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("pipeline_blur_params_v"),
-                                contents: bytemuck::bytes_of(&params_v),
-                                usage: wgpu::BufferUsages::UNIFORM,
-                            });
+                        let params_v = BlurParams {
+                            width,
+                            height,
+                            radius: r,
+                            dir_x: 0,
+                            dir_y: 1,
+                        };
+                        let params_buf_v =
+                            self.device
+                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                    label: Some("pipeline_blur_params_v"),
+                                    contents: bytemuck::bytes_of(&params_v),
+                                    usage: wgpu::BufferUsages::UNIFORM,
+                                });
 
-                            let bind_group_v = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        let bind_group_v =
+                            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                                 label: Some("pipeline_blur_bg_v"),
                                 layout: &self.blur_pipeline.get_bind_group_layout(0),
                                 entries: &[
@@ -1331,131 +1435,176 @@ impl GpuEngine {
                                 ],
                             });
 
-                            {
-                                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        {
+                            let mut pass =
+                                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                                     label: Some("pipeline_blur_pass_v"),
                                     timestamp_writes: None,
                                 });
-                                pass.set_pipeline(&self.blur_pipeline);
-                                pass.set_bind_group(0, &bind_group_v, &[]);
-                                let groups_x = (width + 15) / 16;
-                                let groups_y = (height + 15) / 16;
-                                pass.dispatch_workgroups(groups_x, groups_y, 1);
-                            }
+                            pass.set_pipeline(&self.blur_pipeline);
+                            pass.set_bind_group(0, &bind_group_v, &[]);
+                            let groups_x = (width + 15) / 16;
+                            let groups_y = (height + 15) / 16;
+                            pass.dispatch_workgroups(groups_x, groups_y, 1);
                         }
-                        ImageFilter::Vignette { amount } => {
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
+                    }
+                    ImageFilter::Vignette { amount } => {
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        self.dispatch_vignette(&mut encoder, current_buf, width, height, *amount);
+                    }
+                    ImageFilter::Mood { preset, strength } => {
+                        let recipe = recipe_for(*preset);
+                        let t = strength.clamp(0.0, 1.0);
+                        let lut_buf = self.lut_buffer_for(*preset)?;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        let next_buf = if active_is_1 {
+                            &storage_buf2
+                        } else {
+                            &storage_buf1
+                        };
+                        self.dispatch_lut(
+                            &mut encoder,
+                            current_buf,
+                            next_buf,
+                            &lut_buf,
+                            width,
+                            height,
+                            t,
+                            lut_size(),
+                        );
+                        active_is_1 = !active_is_1;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        if recipe.vignette.abs() > 0.001 {
                             self.dispatch_vignette(
                                 &mut encoder,
                                 current_buf,
                                 width,
                                 height,
-                                *amount,
+                                recipe.vignette * t,
                             );
                         }
-                        ImageFilter::Mood { preset, strength } => {
-                            let recipe = recipe_for(*preset);
-                            let t = strength.clamp(0.0, 1.0);
-                            let lut_buf = self.lut_buffer_for(*preset)?;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
-                            self.dispatch_lut(
+                        if recipe.structure.abs() > 0.001 {
+                            let sharpen_strength = (recipe.structure / 100.0) * 0.35 * t;
+                            let next_buf = if active_is_1 {
+                                &storage_buf2
+                            } else {
+                                &storage_buf1
+                            };
+                            self.dispatch_sharpen_pass(
                                 &mut encoder,
                                 current_buf,
                                 next_buf,
-                                &lut_buf,
                                 width,
                                 height,
-                                t,
-                                lut_size(),
-                            );
-                            active_is_1 = !active_is_1;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            if recipe.vignette.abs() > 0.001 {
-                                self.dispatch_vignette(
-                                    &mut encoder,
-                                    current_buf,
-                                    width,
-                                    height,
-                                    recipe.vignette * t,
-                                );
-                            }
-                            if recipe.structure.abs() > 0.001 {
-                                let sharpen_strength = (recipe.structure / 100.0) * 0.35 * t;
-                                let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
-                                self.dispatch_sharpen_pass(
-                                    &mut encoder,
-                                    current_buf,
-                                    next_buf,
-                                    width,
-                                    height,
-                                    sharpen_strength,
-                                );
-                                active_is_1 = !active_is_1;
-                            }
-                        }
-                        ImageFilter::SwipeLook { preset, strength } => {
-                            let recipe = swipe_look_recipe_for(*preset).mood;
-                            let t = strength.clamp(0.0, 1.0);
-                            let lut_buf = self.swipe_lut_buffer_for(*preset)?;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
-                            self.dispatch_lut(
-                                &mut encoder,
-                                current_buf,
-                                next_buf,
-                                &lut_buf,
-                                width,
-                                height,
-                                t,
-                                lut_size(),
-                            );
-                            active_is_1 = !active_is_1;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            if recipe.vignette.abs() > 0.001 {
-                                self.dispatch_vignette(
-                                    &mut encoder,
-                                    current_buf,
-                                    width,
-                                    height,
-                                    recipe.vignette * t,
-                                );
-                            }
-                            if recipe.structure.abs() > 0.001 {
-                                let sharpen_strength = (recipe.structure / 100.0) * 0.35 * t;
-                                let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
-                                self.dispatch_sharpen_pass(
-                                    &mut encoder,
-                                    current_buf,
-                                    next_buf,
-                                    width,
-                                    height,
-                                    sharpen_strength,
-                                );
-                                active_is_1 = !active_is_1;
-                            }
-                        }
-                        ImageFilter::LutPng { png_bytes, strength } => {
-                            let t = strength.clamp(0.0, 1.0);
-                            let (lut_buf, lut_size) = self.custom_lut_buffer_for(png_bytes)?;
-                            let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
-                            let next_buf = if active_is_1 { &storage_buf2 } else { &storage_buf1 };
-                            self.dispatch_lut(
-                                &mut encoder,
-                                current_buf,
-                                next_buf,
-                                &lut_buf,
-                                width,
-                                height,
-                                t,
-                                lut_size,
+                                sharpen_strength,
                             );
                             active_is_1 = !active_is_1;
                         }
-                        _ => return Err("Unsupported filter in GPU pipeline".into()),
                     }
-                }
-                crate::api::image::EditOp::Resize { width: w, height: h, algorithm } => {
+                    ImageFilter::SwipeLook { preset, strength } => {
+                        let recipe = swipe_look_recipe_for(*preset).mood;
+                        let t = strength.clamp(0.0, 1.0);
+                        let lut_buf = self.swipe_lut_buffer_for(*preset)?;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        let next_buf = if active_is_1 {
+                            &storage_buf2
+                        } else {
+                            &storage_buf1
+                        };
+                        self.dispatch_lut(
+                            &mut encoder,
+                            current_buf,
+                            next_buf,
+                            &lut_buf,
+                            width,
+                            height,
+                            t,
+                            lut_size(),
+                        );
+                        active_is_1 = !active_is_1;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        if recipe.vignette.abs() > 0.001 {
+                            self.dispatch_vignette(
+                                &mut encoder,
+                                current_buf,
+                                width,
+                                height,
+                                recipe.vignette * t,
+                            );
+                        }
+                        if recipe.structure.abs() > 0.001 {
+                            let sharpen_strength = (recipe.structure / 100.0) * 0.35 * t;
+                            let next_buf = if active_is_1 {
+                                &storage_buf2
+                            } else {
+                                &storage_buf1
+                            };
+                            self.dispatch_sharpen_pass(
+                                &mut encoder,
+                                current_buf,
+                                next_buf,
+                                width,
+                                height,
+                                sharpen_strength,
+                            );
+                            active_is_1 = !active_is_1;
+                        }
+                    }
+                    ImageFilter::LutPng {
+                        png_bytes,
+                        strength,
+                    } => {
+                        let t = strength.clamp(0.0, 1.0);
+                        let (lut_buf, lut_size) = self.custom_lut_buffer_for(png_bytes)?;
+                        let current_buf = if active_is_1 {
+                            &storage_buf1
+                        } else {
+                            &storage_buf2
+                        };
+                        let next_buf = if active_is_1 {
+                            &storage_buf2
+                        } else {
+                            &storage_buf1
+                        };
+                        self.dispatch_lut(
+                            &mut encoder,
+                            current_buf,
+                            next_buf,
+                            &lut_buf,
+                            width,
+                            height,
+                            t,
+                            lut_size,
+                        );
+                        active_is_1 = !active_is_1;
+                    }
+                    _ => return Err("Unsupported filter in GPU pipeline".into()),
+                },
+                crate::api::image::EditOp::Resize {
+                    width: w,
+                    height: h,
+                    algorithm,
+                } => {
                     let (dst_w, dst_h) = (*w, *h);
                     let dst_len = (dst_w as usize) * (dst_h as usize);
 
@@ -1464,22 +1613,34 @@ impl GpuEngine {
                         src_height: height,
                         dst_width: dst_w,
                         dst_height: dst_h,
-                        filter_nearest: if matches!(algorithm, ResizeAlgorithm::Nearest) { 1 } else { 0 },
+                        filter_nearest: if matches!(algorithm, ResizeAlgorithm::Nearest) {
+                            1
+                        } else {
+                            0
+                        },
                     };
-                    let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("pipeline_resize_params"),
-                        contents: bytemuck::bytes_of(&params),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
+                    let params_buf =
+                        self.device
+                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                                label: Some("pipeline_resize_params"),
+                                contents: bytemuck::bytes_of(&params),
+                                usage: wgpu::BufferUsages::UNIFORM,
+                            });
 
                     let dst_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
                         label: Some("pipeline_resize_dst"),
                         size: (dst_len * std::mem::size_of::<u32>()) as u64,
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                        usage: wgpu::BufferUsages::STORAGE
+                            | wgpu::BufferUsages::COPY_SRC
+                            | wgpu::BufferUsages::COPY_DST,
                         mapped_at_creation: false,
                     });
 
-                    let current_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
+                    let current_buf = if active_is_1 {
+                        &storage_buf1
+                    } else {
+                        &storage_buf2
+                    };
                     let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("pipeline_resize_bg"),
                         layout: &self.resize_pipeline.get_bind_group_layout(0),
@@ -1515,7 +1676,9 @@ impl GpuEngine {
                     storage_buf2 = self.device.create_buffer(&wgpu::BufferDescriptor {
                         label: Some("pipeline_storage2_resized"),
                         size: (dst_len * std::mem::size_of::<u32>()) as u64,
-                        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+                        usage: wgpu::BufferUsages::STORAGE
+                            | wgpu::BufferUsages::COPY_SRC
+                            | wgpu::BufferUsages::COPY_DST,
                         mapped_at_creation: false,
                     });
                     readback_buf = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -1533,7 +1696,11 @@ impl GpuEngine {
             }
         }
 
-        let active_buf = if active_is_1 { &storage_buf1 } else { &storage_buf2 };
+        let active_buf = if active_is_1 {
+            &storage_buf1
+        } else {
+            &storage_buf2
+        };
         encoder.copy_buffer_to_buffer(
             active_buf,
             0,
@@ -1571,13 +1738,15 @@ impl GpuEngine {
         let len = (width as usize) * (height as usize);
         let packed = pack_pixels(&buffer.pixels);
 
-        let new_storage_buf1 = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("pipeline_storage1"),
-            contents: bytemuck::cast_slice(&packed),
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC,
-        });
+        let new_storage_buf1 = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("pipeline_storage1"),
+                contents: bytemuck::cast_slice(&packed),
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::COPY_DST
+                    | wgpu::BufferUsages::COPY_SRC,
+            });
         let new_storage_buf2 = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("pipeline_storage2"),
             size: (len * std::mem::size_of::<u32>()) as u64,
@@ -1642,9 +1811,7 @@ impl GpuEngine {
         height: u32,
     ) -> Result<RgbaImageBuffer, String> {
         let cache_guard = self.cached_buffers.lock();
-        let cache = cache_guard
-            .as_ref()
-            .ok_or("GPU pipeline cache empty")?;
+        let cache = cache_guard.as_ref().ok_or("GPU pipeline cache empty")?;
         if cache.width != width || cache.height != height {
             return Err(format!(
                 "cache is {}×{} but readback requested {}×{}",
@@ -1660,9 +1827,11 @@ impl GpuEngine {
         let readback_buf = cache.readback_buf.clone();
         drop(cache_guard);
 
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("pipeline_readback_encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("pipeline_readback_encoder"),
+            });
         encoder.copy_buffer_to_buffer(
             &active_buf,
             0,
@@ -1702,7 +1871,7 @@ impl GpuEngine {
     fn upload_storage(
         &self,
         packed: &[u32],
-        len: usize,
+        _len: usize,
         label: &str,
     ) -> Result<wgpu::Buffer, String> {
         Ok(self
@@ -1808,11 +1977,13 @@ impl GpuEngine {
             strength,
             lut_size,
         };
-        let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("lut_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("lut_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("lut_bind_group"),
             layout: &self.lut_pipeline.get_bind_group_layout(0),
@@ -1862,11 +2033,13 @@ impl GpuEngine {
             height,
             amount,
         };
-        let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vignette_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("vignette_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("vignette_bind_group"),
             layout: &self.vignette_pipeline.get_bind_group_layout(0),
@@ -1906,11 +2079,13 @@ impl GpuEngine {
             height,
             strength,
         };
-        let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("sharpen_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("sharpen_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sharpen_bind_group"),
             layout: &self.sharpen_pipeline.get_bind_group_layout(0),
@@ -1959,11 +2134,13 @@ impl GpuEngine {
             saturation: s,
             hue_degrees,
         };
-        let params_buf = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("color_params"),
-            contents: bytemuck::bytes_of(&params),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buf = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("color_params"),
+                contents: bytemuck::bytes_of(&params),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("color_bind_group"),
@@ -1995,11 +2172,10 @@ impl GpuEngine {
 fn pack_pixels(rgba: &[u8]) -> Vec<u32> {
     match bytemuck::try_cast_slice::<u8, u32>(rgba) {
         Ok(cast) => cast.to_vec(),
-        Err(_) => {
-            rgba.chunks_exact(4)
-                .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-                .collect()
-        }
+        Err(_) => rgba
+            .chunks_exact(4)
+            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .collect(),
     }
 }
 

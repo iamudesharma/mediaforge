@@ -1,5 +1,6 @@
 name: video_forge_cache
 resolution: workspace
+publish_to: 'none'
 description: >
   Optional disk LRU cache for video thumbnails (filmstrip UIs).
   Depends on video_forge for encode-on-miss.
@@ -14,6 +15,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_rust_bridge: 2.12.0
   video_forge:
     path: ../video_forge
   crypto: ^3.0.6

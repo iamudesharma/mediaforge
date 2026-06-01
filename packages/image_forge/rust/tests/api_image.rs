@@ -1,15 +1,13 @@
 mod common;
 
-use common::{
-    decode_dims, mean_r_channel, plain_jpeg, synthetic_jpeg, synthetic_png, tiny_rgba,
-};
+use common::{decode_dims, mean_r_channel, plain_jpeg, synthetic_jpeg, synthetic_png, tiny_rgba};
 use image_forge::api::advanced::{decode_to_rgba_buffer, filter_rgba_buffer};
 use image_forge::api::image::{
     add_watermark, apply_filter, batch_resize_images, compress_image, create_thumbnail, crop_image,
-    draw_circle_on_image, draw_line_on_image, draw_text_on_image, fix_exif_orientation,
-    init_app, overlay_image, read_exif_orientation, resize_image, rotate_image, BatchResizeItem,
-    BlendMode, DrawCircle, DrawLine, FilterPreset, ImageFilter, MoodFilterPreset, OutputFormat,
-    ProcessingBackend, RgbaImageBuffer, ResizeAlgorithm, Rotation, TextOverlay,
+    draw_circle_on_image, draw_line_on_image, draw_text_on_image, fix_exif_orientation, init_app,
+    overlay_image, read_exif_orientation, resize_image, rotate_image, BatchResizeItem, BlendMode,
+    DrawCircle, DrawLine, FilterPreset, ImageFilter, MoodFilterPreset, OutputFormat,
+    ProcessingBackend, ResizeAlgorithm, RgbaImageBuffer, Rotation, TextOverlay,
 };
 
 #[cfg(feature = "blurhash")]
@@ -285,8 +283,7 @@ fn tone_filters_at_zero_are_near_identity() {
         ImageFilter::Shadows { amount: 0.0 },
         ImageFilter::Structure { amount: 0.0 },
     ] {
-        let out = filter_rgba_buffer(buf.clone(), filter, ProcessingBackend::Cpu)
-            .expect("filter");
+        let out = filter_rgba_buffer(buf.clone(), filter, ProcessingBackend::Cpu).expect("filter");
         let mean_after = mean_r_channel(&out);
         assert!(
             (mean_before - mean_after).abs() < 2.0,
@@ -338,7 +335,13 @@ fn apply_filter_all_mood_presets() {
         )
         .expect("mood");
         let mean_after = mean_r_channel(&out);
-        println!("Preset: {:?}, Before: {}, After: {}, Diff: {}", p, mean_before, mean_after, (mean_before - mean_after).abs());
+        println!(
+            "Preset: {:?}, Before: {}, After: {}, Diff: {}",
+            p,
+            mean_before,
+            mean_after,
+            (mean_before - mean_after).abs()
+        );
         assert!(
             (mean_before - mean_after).abs() > 0.2,
             "mood preset {:?} should change pixels",

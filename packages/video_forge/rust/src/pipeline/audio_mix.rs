@@ -82,8 +82,8 @@ impl ChunkedAudioDecoder {
             .ok_or_else(|| VideoProcessorError::InvalidInput(format!("no audio in {path}")))?;
         let stream_index = stream.index();
         let params = stream.parameters();
-        let mut dec_ctx = CodecContext::from_parameters(params).map_err(map_ffmpeg_error)?;
-        let mut decoder = dec_ctx.decoder().audio().map_err(map_ffmpeg_error)?;
+        let dec_ctx = CodecContext::from_parameters(params).map_err(map_ffmpeg_error)?;
+        let decoder = dec_ctx.decoder().audio().map_err(map_ffmpeg_error)?;
         let in_layout = decoder.channel_layout();
         let in_format = decoder.format();
         let resampler = Resampler::get(

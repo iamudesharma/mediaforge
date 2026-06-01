@@ -33,7 +33,7 @@ SPEC CHECKSUMS:
   image_forge: da26087afee3d46a0fa0def1638e0f4aa03504d7
   media_forge: 040fd1b0605fb909fded6c789625287e402811f0
   pixel_surface: 0919a715582214fdf96ac32224bfc17fbc5f317e
-  video_forge: 108d7fa75798deca8dd9729d5b2e968f4aa84ef4
+  video_forge: 6d922efdb9e6dcfc4c6ab230fc602feb453fd4c5
 
 PODFILE CHECKSUM: b8c7280e313b6fb858f9a7520a29ad42f76f5c91
 

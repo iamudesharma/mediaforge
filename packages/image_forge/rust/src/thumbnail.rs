@@ -27,11 +27,7 @@ fn fit_within(width: u32, height: u32, max_edge: u32) -> (u32, u32) {
     let max_edge = max_edge as f64;
     let w = width as f64;
     let h = height as f64;
-    let scale = if w >= h {
-        max_edge / w
-    } else {
-        max_edge / h
-    };
+    let scale = if w >= h { max_edge / w } else { max_edge / h };
     (
         (w * scale).round().max(1.0) as u32,
         (h * scale).round().max(1.0) as u32,

@@ -14,8 +14,8 @@ fn env_is_truthy(key: &str) -> bool {
 
 /// Call from [crate::api::image::init_app] before any image work.
 pub fn configure_runtime() {
-    let pool_on = !env_is_truthy("RUST_IMAGE_NO_POOL")
-        && !env_is_truthy("RUST_IMAGE_BENCH_NO_POOL");
+    let pool_on =
+        !env_is_truthy("RUST_IMAGE_NO_POOL") && !env_is_truthy("RUST_IMAGE_BENCH_NO_POOL");
     let _ = POOL_ENABLED.set(pool_on);
 
     if let Ok(n) = std::env::var("RUST_IMAGE_RAYON_THREADS") {

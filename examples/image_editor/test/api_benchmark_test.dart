@@ -3,7 +3,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rust_image_benchmark_runner/benchmark_runner.dart';
-import 'package:rust_image_benchmark_runner/rust_image_benchmark.dart';
+import 'package:rust_image_benchmark_runner/media_forge_benchmark.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

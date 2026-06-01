@@ -89,3 +89,50 @@ Future<void> applyGpuOverlayBlend({
 /// Returns true if GPU texture preview is available on the current host.
 bool isGpuTexturePreviewAvailable() =>
     RustLib.instance.api.crateApiTextureIsGpuTexturePreviewAvailable();
+
+/// Returns true if the zero-copy beauty path is supported on the current
+/// platform (Apple Metal with `Features::BGRA8UNORM_STORAGE`).
+bool isZeroCopyBeautyAvailable() =>
+    RustLib.instance.api.crateApiTextureIsZeroCopyBeautyAvailable();
+
+/// Attach a zero-copy output texture backed by a Flutter-side
+/// `CVPixelBuffer`'s `MTLTexture`.
+///
+/// - `id`: the surface handle returned by `create_gpu_preview_surface`.
+/// - `mtl_texture_ptr`: the raw Objective-C `MTLTexture*` pointer obtained
+///   from the platform plugin's `getMetalTexturePtr` method (a `u64`
+///   holding the bit pattern of the pointer).
+/// - `pixel_buffer_ptr`: the matching `CVPixelBuffer*` pointer (also `u64`),
+///   kept for parity checks / future use.
+Future<void> attachZeroCopyOutputTexture({
+  required PlatformInt64 id,
+  required BigInt mtlTexturePtr,
+  required BigInt pixelBufferPtr,
+}) => RustLib.instance.api.crateApiTextureAttachZeroCopyOutputTexture(
+  id: id,
+  mtlTexturePtr: mtlTexturePtr,
+  pixelBufferPtr: pixelBufferPtr,
+);
+
+/// Detach the zero-copy output texture (if any). The underlying IOSurface
+/// stays valid for the Flutter `Texture` widget; the next beauty dispatch
+/// falls back to the CPU-readback path.
+Future<void> detachZeroCopyOutputTexture({required PlatformInt64 id}) =>
+    RustLib.instance.api.crateApiTextureDetachZeroCopyOutputTexture(id: id);
+
+/// Runs the full GPU beauty pipeline **with zero-copy output** to the
+/// attached BGRA8Unorm output texture. Apple only. Falls back to the
+/// regular readback path if no output texture is attached.
+Future<void> applyGpuBeautyPipelineZeroCopy({
+  required PlatformInt64 id,
+  required FaceAnalysisResult analysis,
+  required SegmentationMask skinMask,
+  required BeautyParams params,
+  SegmentationMask? excludeMask,
+}) => RustLib.instance.api.crateApiTextureApplyGpuBeautyPipelineZeroCopy(
+  id: id,
+  analysis: analysis,
+  skinMask: skinMask,
+  params: params,
+  excludeMask: excludeMask,
+);

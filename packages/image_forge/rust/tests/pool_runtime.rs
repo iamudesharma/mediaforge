@@ -30,7 +30,10 @@ fn init_pool_disabled() {
         std::env::set_var("RUST_IMAGE_NO_POOL", "1");
         configure_runtime();
         // Force the lock to materialize from `configure_runtime`.
-        assert!(!pool_enabled(), "pool must be disabled in pool_runtime tests");
+        assert!(
+            !pool_enabled(),
+            "pool must be disabled in pool_runtime tests"
+        );
     });
 }
 
@@ -86,7 +89,10 @@ fn runtime_flags_label_reports_pool_off() {
         label.contains("pool=off"),
         "expected 'pool=off' in label, got: {label}"
     );
-    assert!(label.contains("rayon="), "expected rayon= segment, got: {label}");
+    assert!(
+        label.contains("rayon="),
+        "expected rayon= segment, got: {label}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -116,10 +122,7 @@ fn processing_backend_name_gpu_matches_availability() {
         assert_ne!(name, "unavailable", "GPU available but name = unavailable");
         assert!(!name.is_empty());
     } else {
-        assert_eq!(
-            name, "unavailable",
-            "GPU unavailable but name = {name}"
-        );
+        assert_eq!(name, "unavailable", "GPU unavailable but name = {name}");
     }
 }
 
@@ -149,7 +152,6 @@ fn gpu_compute_info_consistent_with_availability_flag() {
 fn decode_encode_works_with_pool_disabled() {
     init_pool_disabled();
     let src = common::synthetic_jpeg(32, 32, 85);
-    let info = image_forge::api::advanced::probe_image(src)
-        .expect("probe ok even with pool off");
+    let info = image_forge::api::advanced::probe_image(src).expect("probe ok even with pool off");
     assert_eq!((info.width, info.height), (32, 32));
 }

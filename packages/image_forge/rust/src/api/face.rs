@@ -1,8 +1,8 @@
 use crate::api::image::RgbaImageBuffer;
 
 use crate::face::{
-    apply_beauty_rgba, build_blush_mask, build_eye_mask, build_lip_mask, build_skin_mask,
-    build_under_eye_mask, apply_skin_smooth_rgba, params_for_look, VISION_MIN_LANDMARKS,
+    apply_beauty_rgba, apply_skin_smooth_rgba, build_blush_mask, build_eye_mask, build_lip_mask,
+    build_skin_mask, build_under_eye_mask, params_for_look, VISION_MIN_LANDMARKS,
 };
 
 /// Normalized 2D landmark (0–1 in image space).

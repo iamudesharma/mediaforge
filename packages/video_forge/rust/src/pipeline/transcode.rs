@@ -5,7 +5,7 @@ use ffmpeg_next::codec::{self, context::Context as CodecContext, Id};
 use ffmpeg_next::format::{self, Pixel};
 use ffmpeg_next::software::scaling::{context::Context as ScalerContext, flag::Flags};
 use ffmpeg_next::util::frame::video::Video;
-use ffmpeg_next::{media, picture, Dictionary, Packet, Rational};
+use ffmpeg_next::{media, picture, Dictionary, Rational};
 
 use crate::error::{Result, VideoProcessorError};
 use crate::ffmpeg::hw::{
@@ -65,7 +65,6 @@ struct VideoTranscoder {
     vt_scaler: Option<VtScaler>,
     max_fps: Option<f32>,
     last_encoded_ms: Option<u64>,
-    clip_start_ms: u64,
     clip_end_ms: Option<u64>,
     stop_encoding: bool,
     burn_in: Option<OverlayCompositor>,
@@ -443,7 +442,6 @@ fn run_compress_inner(
                 max_w,
                 max_h,
                 options.max_fps,
-                clip_start_ms,
                 clip_end_ms,
                 &options.burn_in_overlays,
             )?;
@@ -706,7 +704,6 @@ fn create_video_transcoder(
     max_w: u32,
     max_h: u32,
     max_fps: Option<f32>,
-    clip_start_ms: u64,
     clip_end_ms: Option<u64>,
     burn_in_specs: &[crate::types::BurnInOverlay],
 ) -> Result<VideoTranscoder> {
@@ -860,7 +857,6 @@ fn create_video_transcoder(
         vt_scaler,
         max_fps,
         last_encoded_ms: None,
-        clip_start_ms,
         clip_end_ms,
         stop_encoding: false,
         burn_in,

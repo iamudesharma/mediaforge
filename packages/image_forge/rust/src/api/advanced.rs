@@ -1,7 +1,7 @@
 use crate::api::image::{
     BlendMode, DrawCircle, DrawLine, GpuComputeInfo, ImageFilter, ImageInfo, OutputFormat,
-    ProcessingBackend, ProgressiveDecodeResult, ResizeAlgorithm, RgbaImageBuffer, TextOverlay,
-    PreviewQuality,
+    PreviewQuality, ProcessingBackend, ProgressiveDecodeResult, ResizeAlgorithm, RgbaImageBuffer,
+    TextOverlay,
 };
 use crate::{backend, buffer, decode, overlay, pool};
 
@@ -93,7 +93,10 @@ pub fn crop_rgba_buffer(
 
 /// Performs an arbitrary rotation (in degrees) on a raw RGBA buffer, expanding canvas size.
 #[flutter_rust_bridge::frb(sync)]
-pub fn rotate_rgba_arbitrary(buffer: RgbaImageBuffer, degrees: f32) -> Result<RgbaImageBuffer, String> {
+pub fn rotate_rgba_arbitrary(
+    buffer: RgbaImageBuffer,
+    degrees: f32,
+) -> Result<RgbaImageBuffer, String> {
     crate::rotate::rotate_rgba_arbitrary(buffer, degrees)
 }
 
@@ -119,10 +122,7 @@ pub fn fit_max_edge_rgba_buffer(
 
 /// Returns a string identifier for the filter execution path (e.g. "gpu_adjust" or "cpu_photon").
 #[flutter_rust_bridge::frb(sync)]
-pub fn filter_execution_path_name(
-    filter: ImageFilter,
-    backend: ProcessingBackend,
-) -> String {
+pub fn filter_execution_path_name(filter: ImageFilter, backend: ProcessingBackend) -> String {
     crate::perf::filter_execution_path(&filter, backend).to_string()
 }
 

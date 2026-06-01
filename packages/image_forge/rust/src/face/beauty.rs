@@ -148,12 +148,7 @@ pub fn apply_beauty_rgba(
 
     if params.skin_smooth > 0.001 {
         let skin = apply_exclude_mask(skin_mask, exclude_mask);
-        out = apply_skin_smooth_rgba(
-            &out,
-            &skin,
-            params.skin_smooth,
-            params.skin_preserve_detail,
-        );
+        out = apply_skin_smooth_rgba(&out, &skin, params.skin_smooth, params.skin_preserve_detail);
     }
 
     if params.eye_brighten > 0.001 {
@@ -163,12 +158,7 @@ pub fn apply_beauty_rgba(
 
     if params.lip_tint_strength > 0.001 {
         let lip_mask = apply_exclude_mask(&build_lip_mask(analysis, w, h), exclude_mask);
-        out = apply_lip_tint_rgba(
-            &out,
-            &lip_mask,
-            params.lip_tint,
-            params.lip_tint_strength,
-        );
+        out = apply_lip_tint_rgba(&out, &lip_mask, params.lip_tint, params.lip_tint_strength);
     }
 
     if params.blush > 0.001 {
@@ -177,8 +167,7 @@ pub fn apply_beauty_rgba(
     }
 
     if params.under_eye > 0.001 {
-        let ue_mask =
-            apply_exclude_mask(&build_under_eye_mask(analysis, w, h), exclude_mask);
+        let ue_mask = apply_exclude_mask(&build_under_eye_mask(analysis, w, h), exclude_mask);
         out = apply_under_eye_soften_rgba(&out, &ue_mask, params.under_eye);
     }
 
@@ -308,7 +297,9 @@ mod tests {
         let buffer = RgbaImageBuffer {
             width: 2,
             height: 2,
-            pixels: vec![10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255],
+            pixels: vec![
+                10, 20, 30, 255, 40, 50, 60, 255, 70, 80, 90, 255, 100, 110, 120, 255,
+            ],
         };
         let mask = SegmentationMask {
             width: 2,
