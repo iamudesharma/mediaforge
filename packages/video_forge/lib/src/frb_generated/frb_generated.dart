@@ -1301,14 +1301,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return BatchThumbnailBytesOptions(
       inputPath: dco_decode_String(arr[0]),
       positionsMs: dco_decode_list_prim_u_64_strict(arr[1]),
       width: dco_decode_opt_box_autoadd_u_32(arr[2]),
       height: dco_decode_opt_box_autoadd_u_32(arr[3]),
       format: dco_decode_thumbnail_format(arr[4]),
+      parallelDecoderCount: dco_decode_opt_box_autoadd_u_8(arr[5]),
     );
   }
 
@@ -1318,10 +1319,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 1)
-      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
     return BatchThumbnailBytesResult(
       frames: dco_decode_list_list_prim_u_8_strict(arr[0]),
+      decodedStatus: dco_decode_list_thumbnail_decode_status(arr[1]),
     );
   }
 
@@ -1329,8 +1331,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BatchThumbnailOptions dco_decode_batch_thumbnail_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return BatchThumbnailOptions(
       inputPath: dco_decode_String(arr[0]),
       outputDir: dco_decode_String(arr[1]),
@@ -1339,6 +1341,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       width: dco_decode_opt_box_autoadd_u_32(arr[4]),
       height: dco_decode_opt_box_autoadd_u_32(arr[5]),
       format: dco_decode_thumbnail_format(arr[6]),
+      parallelDecoderCount: dco_decode_opt_box_autoadd_u_8(arr[7]),
     );
   }
 
@@ -1346,9 +1349,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BatchThumbnailResult dco_decode_batch_thumbnail_result(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 1)
-      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
-    return BatchThumbnailResult(paths: dco_decode_list_String(arr[0]));
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return BatchThumbnailResult(
+      paths: dco_decode_list_String(arr[0]),
+      decodedStatus: dco_decode_list_thumbnail_decode_status(arr[1]),
+    );
   }
 
   @protected
@@ -1594,6 +1600,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ThumbnailDecodeStatus> dco_decode_list_thumbnail_decode_status(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_thumbnail_decode_status)
+        .toList();
+  }
+
+  @protected
   MediaInfo dco_decode_media_info(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1755,6 +1771,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       height: dco_decode_opt_box_autoadd_u_32(arr[3]),
       format: dco_decode_thumbnail_format(arr[4]),
     );
+  }
+
+  @protected
+  ThumbnailDecodeStatus dco_decode_thumbnail_decode_status(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ThumbnailDecodeStatus.values[raw as int];
   }
 
   @protected
@@ -1943,12 +1965,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_width = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_height = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_format = sse_decode_thumbnail_format(deserializer);
+    var var_parallelDecoderCount = sse_decode_opt_box_autoadd_u_8(deserializer);
     return BatchThumbnailBytesOptions(
       inputPath: var_inputPath,
       positionsMs: var_positionsMs,
       width: var_width,
       height: var_height,
       format: var_format,
+      parallelDecoderCount: var_parallelDecoderCount,
     );
   }
 
@@ -1958,7 +1982,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_frames = sse_decode_list_list_prim_u_8_strict(deserializer);
-    return BatchThumbnailBytesResult(frames: var_frames);
+    var var_decodedStatus = sse_decode_list_thumbnail_decode_status(
+      deserializer,
+    );
+    return BatchThumbnailBytesResult(
+      frames: var_frames,
+      decodedStatus: var_decodedStatus,
+    );
   }
 
   @protected
@@ -1973,6 +2003,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_width = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_height = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_format = sse_decode_thumbnail_format(deserializer);
+    var var_parallelDecoderCount = sse_decode_opt_box_autoadd_u_8(deserializer);
     return BatchThumbnailOptions(
       inputPath: var_inputPath,
       outputDir: var_outputDir,
@@ -1981,6 +2012,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       width: var_width,
       height: var_height,
       format: var_format,
+      parallelDecoderCount: var_parallelDecoderCount,
     );
   }
 
@@ -1990,7 +2022,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_paths = sse_decode_list_String(deserializer);
-    return BatchThumbnailResult(paths: var_paths);
+    var var_decodedStatus = sse_decode_list_thumbnail_decode_status(
+      deserializer,
+    );
+    return BatchThumbnailResult(
+      paths: var_paths,
+      decodedStatus: var_decodedStatus,
+    );
   }
 
   @protected
@@ -2308,6 +2346,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ThumbnailDecodeStatus> sse_decode_list_thumbnail_decode_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ThumbnailDecodeStatus>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_thumbnail_decode_status(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   MediaInfo sse_decode_media_info(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_durationMs = sse_decode_u_64(deserializer);
@@ -2536,6 +2588,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ThumbnailDecodeStatus sse_decode_thumbnail_decode_status(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ThumbnailDecodeStatus.values[inner];
+  }
+
+  @protected
   ThumbnailFormat sse_decode_thumbnail_format(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
@@ -2753,6 +2814,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.width, serializer);
     sse_encode_opt_box_autoadd_u_32(self.height, serializer);
     sse_encode_thumbnail_format(self.format, serializer);
+    sse_encode_opt_box_autoadd_u_8(self.parallelDecoderCount, serializer);
   }
 
   @protected
@@ -2762,6 +2824,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_list_prim_u_8_strict(self.frames, serializer);
+    sse_encode_list_thumbnail_decode_status(self.decodedStatus, serializer);
   }
 
   @protected
@@ -2777,6 +2840,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.width, serializer);
     sse_encode_opt_box_autoadd_u_32(self.height, serializer);
     sse_encode_thumbnail_format(self.format, serializer);
+    sse_encode_opt_box_autoadd_u_8(self.parallelDecoderCount, serializer);
   }
 
   @protected
@@ -2786,6 +2850,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_String(self.paths, serializer);
+    sse_encode_list_thumbnail_decode_status(self.decodedStatus, serializer);
   }
 
   @protected
@@ -3075,6 +3140,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_thumbnail_decode_status(
+    List<ThumbnailDecodeStatus> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_thumbnail_decode_status(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_media_info(MediaInfo self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_64(self.durationMs, serializer);
@@ -3257,6 +3334,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.width, serializer);
     sse_encode_opt_box_autoadd_u_32(self.height, serializer);
     sse_encode_thumbnail_format(self.format, serializer);
+  }
+
+  @protected
+  void sse_encode_thumbnail_decode_status(
+    ThumbnailDecodeStatus self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
   }
 
   @protected

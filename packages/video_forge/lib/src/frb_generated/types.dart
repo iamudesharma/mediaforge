@@ -56,12 +56,16 @@ class BatchThumbnailBytesOptions {
   final int? height;
   final ThumbnailFormat format;
 
+  /// PR #3 (opt-in): see [BatchThumbnailOptions::parallel_decoder_count].
+  final int? parallelDecoderCount;
+
   const BatchThumbnailBytesOptions({
     required this.inputPath,
     required this.positionsMs,
     this.width,
     this.height,
     required this.format,
+    this.parallelDecoderCount,
   });
 
   @override
@@ -70,7 +74,8 @@ class BatchThumbnailBytesOptions {
       positionsMs.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      format.hashCode;
+      format.hashCode ^
+      parallelDecoderCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -81,23 +86,32 @@ class BatchThumbnailBytesOptions {
           positionsMs == other.positionsMs &&
           width == other.width &&
           height == other.height &&
-          format == other.format;
+          format == other.format &&
+          parallelDecoderCount == other.parallelDecoderCount;
 }
 
 class BatchThumbnailBytesResult {
   final List<Uint8List> frames;
 
-  const BatchThumbnailBytesResult({required this.frames});
+  /// PR #3: per-position decode status. Same length as
+  /// `positions_ms` in the request.
+  final List<ThumbnailDecodeStatus> decodedStatus;
+
+  const BatchThumbnailBytesResult({
+    required this.frames,
+    required this.decodedStatus,
+  });
 
   @override
-  int get hashCode => frames.hashCode;
+  int get hashCode => frames.hashCode ^ decodedStatus.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BatchThumbnailBytesResult &&
           runtimeType == other.runtimeType &&
-          frames == other.frames;
+          frames == other.frames &&
+          decodedStatus == other.decodedStatus;
 }
 
 class BatchThumbnailOptions {
@@ -112,6 +126,14 @@ class BatchThumbnailOptions {
   final int? height;
   final ThumbnailFormat format;
 
+  /// PR #3 (opt-in): when `Some(n) > 0`, the batch opens up to `n`
+  /// parallel demuxer instances and shards the positions across them
+  /// (decode stays single-threaded per demuxer; encode is already
+  /// parallel via rayon). Default 0 = single-demuxer. Useful for
+  /// filmstrip batches on long-GOP iPhone HEVC where the demuxer
+  /// open + first-frame-decode is the bottleneck.
+  final int? parallelDecoderCount;
+
   const BatchThumbnailOptions({
     required this.inputPath,
     required this.outputDir,
@@ -120,6 +142,7 @@ class BatchThumbnailOptions {
     this.width,
     this.height,
     required this.format,
+    this.parallelDecoderCount,
   });
 
   @override
@@ -130,7 +153,8 @@ class BatchThumbnailOptions {
       positionsMs.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      format.hashCode;
+      format.hashCode ^
+      parallelDecoderCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -143,23 +167,33 @@ class BatchThumbnailOptions {
           positionsMs == other.positionsMs &&
           width == other.width &&
           height == other.height &&
-          format == other.format;
+          format == other.format &&
+          parallelDecoderCount == other.parallelDecoderCount;
 }
 
 class BatchThumbnailResult {
   final List<String> paths;
 
-  const BatchThumbnailResult({required this.paths});
+  /// PR #3: per-position decode status. Same length as
+  /// `positions_ms` in the request. Use this to flag approximate
+  /// thumbnails in a UI filmstrip.
+  final List<ThumbnailDecodeStatus> decodedStatus;
+
+  const BatchThumbnailResult({
+    required this.paths,
+    required this.decodedStatus,
+  });
 
   @override
-  int get hashCode => paths.hashCode;
+  int get hashCode => paths.hashCode ^ decodedStatus.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BatchThumbnailResult &&
           runtimeType == other.runtimeType &&
-          paths == other.paths;
+          paths == other.paths &&
+          decodedStatus == other.decodedStatus;
 }
 
 /// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
@@ -576,6 +610,17 @@ class ThumbnailBytesOptions {
           width == other.width &&
           height == other.height &&
           format == other.format;
+}
+
+/// PR #3: per-position status surfaced from the Rust decode pipeline.
+enum ThumbnailDecodeStatus {
+  /// Frame decoded at or after the requested position. Most common.
+  exact,
+
+  /// The demuxer ran out of packets before reaching the requested
+  /// position. The thumbnail is the closest decoded keyframe; the
+  /// UI should flag it as approximate.
+  nearestKeyframe,
 }
 
 enum ThumbnailFormat { jpeg, webp }

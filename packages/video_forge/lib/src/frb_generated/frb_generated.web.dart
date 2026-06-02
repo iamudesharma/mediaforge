@@ -175,6 +175,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<ThumbnailDecodeStatus> dco_decode_list_thumbnail_decode_status(
+    dynamic raw,
+  );
+
+  @protected
   MediaInfo dco_decode_media_info(dynamic raw);
 
   @protected
@@ -222,6 +227,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ThumbnailBytesOptions dco_decode_thumbnail_bytes_options(dynamic raw);
+
+  @protected
+  ThumbnailDecodeStatus dco_decode_thumbnail_decode_status(dynamic raw);
 
   @protected
   ThumbnailFormat dco_decode_thumbnail_format(dynamic raw);
@@ -425,6 +433,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<ThumbnailDecodeStatus> sse_decode_list_thumbnail_decode_status(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MediaInfo sse_decode_media_info(SseDeserializer deserializer);
 
   @protected
@@ -478,6 +491,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ThumbnailBytesOptions sse_decode_thumbnail_bytes_options(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ThumbnailDecodeStatus sse_decode_thumbnail_decode_status(
     SseDeserializer deserializer,
   );
 
@@ -722,6 +740,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_thumbnail_decode_status(
+    List<ThumbnailDecodeStatus> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_media_info(MediaInfo self, SseSerializer serializer);
 
   @protected
@@ -787,6 +811,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_thumbnail_bytes_options(
     ThumbnailBytesOptions self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_thumbnail_decode_status(
+    ThumbnailDecodeStatus self,
     SseSerializer serializer,
   );
 

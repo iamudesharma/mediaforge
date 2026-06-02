@@ -1391,12 +1391,14 @@ impl SseDecode for crate::types::BatchThumbnailBytesOptions {
         let mut var_width = <Option<u32>>::sse_decode(deserializer);
         let mut var_height = <Option<u32>>::sse_decode(deserializer);
         let mut var_format = <crate::types::ThumbnailFormat>::sse_decode(deserializer);
+        let mut var_parallelDecoderCount = <Option<u8>>::sse_decode(deserializer);
         return crate::types::BatchThumbnailBytesOptions {
             input_path: var_inputPath,
             positions_ms: var_positionsMs,
             width: var_width,
             height: var_height,
             format: var_format,
+            parallel_decoder_count: var_parallelDecoderCount,
         };
     }
 }
@@ -1405,7 +1407,12 @@ impl SseDecode for crate::types::BatchThumbnailBytesResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_frames = <Vec<Vec<u8>>>::sse_decode(deserializer);
-        return crate::types::BatchThumbnailBytesResult { frames: var_frames };
+        let mut var_decodedStatus =
+            <Vec<crate::types::ThumbnailDecodeStatus>>::sse_decode(deserializer);
+        return crate::types::BatchThumbnailBytesResult {
+            frames: var_frames,
+            decoded_status: var_decodedStatus,
+        };
     }
 }
 
@@ -1419,6 +1426,7 @@ impl SseDecode for crate::types::BatchThumbnailOptions {
         let mut var_width = <Option<u32>>::sse_decode(deserializer);
         let mut var_height = <Option<u32>>::sse_decode(deserializer);
         let mut var_format = <crate::types::ThumbnailFormat>::sse_decode(deserializer);
+        let mut var_parallelDecoderCount = <Option<u8>>::sse_decode(deserializer);
         return crate::types::BatchThumbnailOptions {
             input_path: var_inputPath,
             output_dir: var_outputDir,
@@ -1427,6 +1435,7 @@ impl SseDecode for crate::types::BatchThumbnailOptions {
             width: var_width,
             height: var_height,
             format: var_format,
+            parallel_decoder_count: var_parallelDecoderCount,
         };
     }
 }
@@ -1435,7 +1444,12 @@ impl SseDecode for crate::types::BatchThumbnailResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_paths = <Vec<String>>::sse_decode(deserializer);
-        return crate::types::BatchThumbnailResult { paths: var_paths };
+        let mut var_decodedStatus =
+            <Vec<crate::types::ThumbnailDecodeStatus>>::sse_decode(deserializer);
+        return crate::types::BatchThumbnailResult {
+            paths: var_paths,
+            decoded_status: var_decodedStatus,
+        };
     }
 }
 
@@ -1657,6 +1671,20 @@ impl SseDecode for Vec<u8> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<u8>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::types::ThumbnailDecodeStatus> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::types::ThumbnailDecodeStatus>::sse_decode(
+                deserializer,
+            ));
         }
         return ans_;
     }
@@ -1896,6 +1924,18 @@ impl SseDecode for crate::types::ThumbnailBytesOptions {
             width: var_width,
             height: var_height,
             format: var_format,
+        };
+    }
+}
+
+impl SseDecode for crate::types::ThumbnailDecodeStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::types::ThumbnailDecodeStatus::Exact,
+            1 => crate::types::ThumbnailDecodeStatus::NearestKeyframe,
+            _ => unreachable!("Invalid variant for ThumbnailDecodeStatus: {}", inner),
         };
     }
 }
@@ -2203,6 +2243,7 @@ impl flutter_rust_bridge::IntoDart for crate::types::BatchThumbnailBytesOptions 
             self.width.into_into_dart().into_dart(),
             self.height.into_into_dart().into_dart(),
             self.format.into_into_dart().into_dart(),
+            self.parallel_decoder_count.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2221,7 +2262,11 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::BatchThumbnailBytesOptions>
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::BatchThumbnailBytesResult {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [self.frames.into_into_dart().into_dart()].into_dart()
+        [
+            self.frames.into_into_dart().into_dart(),
+            self.decoded_status.into_into_dart().into_dart(),
+        ]
+        .into_dart()
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
@@ -2246,6 +2291,7 @@ impl flutter_rust_bridge::IntoDart for crate::types::BatchThumbnailOptions {
             self.width.into_into_dart().into_dart(),
             self.height.into_into_dart().into_dart(),
             self.format.into_into_dart().into_dart(),
+            self.parallel_decoder_count.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2264,7 +2310,11 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::BatchThumbnailOptions>
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::BatchThumbnailResult {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
-        [self.paths.into_into_dart().into_dart()].into_dart()
+        [
+            self.paths.into_into_dart().into_dart(),
+            self.decoded_status.into_into_dart().into_dart(),
+        ]
+        .into_dart()
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
@@ -2567,6 +2617,27 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::ThumbnailBytesOptions>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::ThumbnailDecodeStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Exact => 0.into_dart(),
+            Self::NearestKeyframe => 1.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::types::ThumbnailDecodeStatus
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::ThumbnailDecodeStatus>
+    for crate::types::ThumbnailDecodeStatus
+{
+    fn into_into_dart(self) -> crate::types::ThumbnailDecodeStatus {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::ThumbnailFormat {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -2760,6 +2831,7 @@ impl SseEncode for crate::types::BatchThumbnailBytesOptions {
         <Option<u32>>::sse_encode(self.width, serializer);
         <Option<u32>>::sse_encode(self.height, serializer);
         <crate::types::ThumbnailFormat>::sse_encode(self.format, serializer);
+        <Option<u8>>::sse_encode(self.parallel_decoder_count, serializer);
     }
 }
 
@@ -2767,6 +2839,7 @@ impl SseEncode for crate::types::BatchThumbnailBytesResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<Vec<u8>>>::sse_encode(self.frames, serializer);
+        <Vec<crate::types::ThumbnailDecodeStatus>>::sse_encode(self.decoded_status, serializer);
     }
 }
 
@@ -2780,6 +2853,7 @@ impl SseEncode for crate::types::BatchThumbnailOptions {
         <Option<u32>>::sse_encode(self.width, serializer);
         <Option<u32>>::sse_encode(self.height, serializer);
         <crate::types::ThumbnailFormat>::sse_encode(self.format, serializer);
+        <Option<u8>>::sse_encode(self.parallel_decoder_count, serializer);
     }
 }
 
@@ -2787,6 +2861,7 @@ impl SseEncode for crate::types::BatchThumbnailResult {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <Vec<String>>::sse_encode(self.paths, serializer);
+        <Vec<crate::types::ThumbnailDecodeStatus>>::sse_encode(self.decoded_status, serializer);
     }
 }
 
@@ -2952,6 +3027,16 @@ impl SseEncode for Vec<u8> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <u8>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::types::ThumbnailDecodeStatus> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::types::ThumbnailDecodeStatus>::sse_encode(item, serializer);
         }
     }
 }
@@ -3142,6 +3227,22 @@ impl SseEncode for crate::types::ThumbnailBytesOptions {
         <Option<u32>>::sse_encode(self.width, serializer);
         <Option<u32>>::sse_encode(self.height, serializer);
         <crate::types::ThumbnailFormat>::sse_encode(self.format, serializer);
+    }
+}
+
+impl SseEncode for crate::types::ThumbnailDecodeStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::types::ThumbnailDecodeStatus::Exact => 0,
+                crate::types::ThumbnailDecodeStatus::NearestKeyframe => 1,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
     }
 }
 

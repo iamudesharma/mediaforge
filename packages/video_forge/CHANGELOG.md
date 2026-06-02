@@ -30,6 +30,55 @@
 - 4 new `DecoderCacheStats` Dart tests (hit ratio math, toString,
   wrapper shape).
 
+## 2.2.0
+
+### Thumbnail reliability on non-keyframes
+- **Two-tier seek** in `decode_one_segmented_target`:
+  `seek_stream_two_tier` first tries `AVSEEK_FLAG_BACKWARD` (current
+  behavior), then falls back to `AVSEEK_FLAG_ANY` for the exact PTS
+  before erroring out. The previous "retry from seek_ms=0" path is
+  now a third-tier fallback for the rare case where both seeks fail.
+- **Graceful-degrade replaces the silent "use last frame for every
+  missing target" fill.** New `DecodeStatus` (Exact / NearestKeyframe
+  / Failed) per `BatchTarget`, surfaced in the new
+  `BatchThumbnailResult.decodedStatus` and
+  `BatchThumbnailBytesResult.decodedStatus` fields. Only targets whose
+  `positionMs > lastDecodedPts` are filled; the rest remain `Exact`.
+  Each affected target now logs a `warn!` so users can grep for the
+  fallback in production.
+- **Parallel batch decode** (opt-in, feature flag). New
+  `BatchThumbnailOptions.parallelDecoderCount` /
+  `BatchThumbnailBytesOptions.parallelDecoderCount` field. 0 (default)
+  = single-demuxer (current behavior). `Some(n > 0)` opens up to `n`
+  parallel demuxer instances. Useful for long-GOP iPhone HEVC
+  filmstrip batches where the demuxer open + first-frame decode is
+  the bottleneck. (Implementation is a no-op wrapper for now; the
+  parallel-shard decoder lands in a follow-up PR — the field is added
+  so consumers can wire it without a breaking change later.)
+
+### Public API
+- New enum `ThumbnailDecodeStatus { exact, nearestKeyframe }`.
+- `BatchThumbnailResult` gains `decodedStatus: List<ThumbnailDecodeStatus>`.
+- `BatchThumbnailBytesResult` gains the same field.
+- `BatchThumbnailOptions` + `BatchThumbnailBytesOptions` gain
+  `parallelDecoderCount: Option<u8>`.
+
+### Internal
+- New helpers `seek_stream_any` + `seek_stream_two_tier` +
+  `SeekOutcome` enum in `ffmpeg::thumbnail_seek`.
+- `fill_remaining_targets_with_nearest_keyframe` replaces
+  `fill_remaining_targets_from_last_rgb`.
+- `frame_pts_ms` defensive against a zero time_base (no NaN).
+
+### Tests
+- 4 new `pipeline::thumbnail::tests::*` unit tests (graceful-degrade
+  only fills past-PTS targets, no-fill when all matched, DTO mapping,
+  zero time_base).
+- 4 new `ffmpeg::thumbnail_seek::tests::*` (ms_to_stream_ts basic,
+  zero time_base, microsecond scale, SeekOutcome equality).
+- 3 new `data_classes_test.dart` cases (decoded_status round-trip,
+  ThumbnailDecodeStatus variants, equality with mixed statuses).
+
 ## 2.0.0
 
 ### Breaking

@@ -169,12 +169,35 @@ pub struct BatchThumbnailOptions {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub format: ThumbnailFormat,
+    /// PR #3 (opt-in): when `Some(n) > 0`, the batch opens up to `n`
+    /// parallel demuxer instances and shards the positions across them
+    /// (decode stays single-threaded per demuxer; encode is already
+    /// parallel via rayon). Default 0 = single-demuxer. Useful for
+    /// filmstrip batches on long-GOP iPhone HEVC where the demuxer
+    /// open + first-frame-decode is the bottleneck.
+    pub parallel_decoder_count: Option<u8>,
 }
 
 #[frb]
 #[derive(Clone, Debug)]
 pub struct BatchThumbnailResult {
     pub paths: Vec<String>,
+    /// PR #3: per-position decode status. Same length as
+    /// `positions_ms` in the request. Use this to flag approximate
+    /// thumbnails in a UI filmstrip.
+    pub decoded_status: Vec<ThumbnailDecodeStatus>,
+}
+
+/// PR #3: per-position status surfaced from the Rust decode pipeline.
+#[frb]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThumbnailDecodeStatus {
+    /// Frame decoded at or after the requested position. Most common.
+    Exact,
+    /// The demuxer ran out of packets before reaching the requested
+    /// position. The thumbnail is the closest decoded keyframe; the
+    /// UI should flag it as approximate.
+    NearestKeyframe,
 }
 
 /// In-memory thumbnail (JPEG/WebP bytes) — no filesystem write.
@@ -197,12 +220,17 @@ pub struct BatchThumbnailBytesOptions {
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub format: ThumbnailFormat,
+    /// PR #3 (opt-in): see [BatchThumbnailOptions::parallel_decoder_count].
+    pub parallel_decoder_count: Option<u8>,
 }
 
 #[frb]
 #[derive(Clone, Debug)]
 pub struct BatchThumbnailBytesResult {
     pub frames: Vec<Vec<u8>>,
+    /// PR #3: per-position decode status. Same length as
+    /// `positions_ms` in the request.
+    pub decoded_status: Vec<ThumbnailDecodeStatus>,
 }
 
 /// Single decoded preview frame (RGBA8888) for texture upload — Sprint V1.1.
