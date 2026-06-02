@@ -101,7 +101,7 @@ pub fn decode_preview_pixel_buffer(
         .ok_or_else(|| VideoForgeError::Internal("VT transfer session missing".into()))?;
 
     unsafe {
-        let pb = crate::ffmpeg::vt_pipeline::transfer_vt_frame_to_bgra_pixel_buffer(
+        let pb = crate::engine::vt_pool::transfer_vt_frame_to_bgra_pixel_buffer(
             session,
             &frame,
             out_w as usize,

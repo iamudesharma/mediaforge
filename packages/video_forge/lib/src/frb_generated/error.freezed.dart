@@ -55,7 +55,7 @@ extension VideoForgeErrorPatterns on VideoForgeError {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoForgeError_InvalidInput value)?  invalidInput,TResult Function( VideoForgeError_FileNotFound value)?  fileNotFound,TResult Function( VideoForgeError_UnsupportedCodec value)?  unsupportedCodec,TResult Function( VideoForgeError_JobNotFound value)?  jobNotFound,TResult Function( VideoForgeError_Cancelled value)?  cancelled,TResult Function( VideoForgeError_IoError value)?  ioError,TResult Function( VideoForgeError_FfmpegError value)?  ffmpegError,TResult Function( VideoForgeError_QueueFull value)?  queueFull,TResult Function( VideoForgeError_Internal value)?  internal,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( VideoForgeError_InvalidInput value)?  invalidInput,TResult Function( VideoForgeError_FileNotFound value)?  fileNotFound,TResult Function( VideoForgeError_UnsupportedCodec value)?  unsupportedCodec,TResult Function( VideoForgeError_JobNotFound value)?  jobNotFound,TResult Function( VideoForgeError_Cancelled value)?  cancelled,TResult Function( VideoForgeError_IoError value)?  ioError,TResult Function( VideoForgeError_FfmpegError value)?  ffmpegError,TResult Function( VideoForgeError_QueueFull value)?  queueFull,TResult Function( VideoForgeError_Internal value)?  internal,TResult Function( VideoForgeError_CooldownActive value)?  cooldownActive,TResult Function( VideoForgeError_RecoveryBudgetExhausted value)?  recoveryBudgetExhausted,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case VideoForgeError_InvalidInput() when invalidInput != null:
@@ -67,7 +67,9 @@ return cancelled(_that);case VideoForgeError_IoError() when ioError != null:
 return ioError(_that);case VideoForgeError_FfmpegError() when ffmpegError != null:
 return ffmpegError(_that);case VideoForgeError_QueueFull() when queueFull != null:
 return queueFull(_that);case VideoForgeError_Internal() when internal != null:
-return internal(_that);case _:
+return internal(_that);case VideoForgeError_CooldownActive() when cooldownActive != null:
+return cooldownActive(_that);case VideoForgeError_RecoveryBudgetExhausted() when recoveryBudgetExhausted != null:
+return recoveryBudgetExhausted(_that);case _:
   return orElse();
 
 }
@@ -85,7 +87,7 @@ return internal(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoForgeError_InvalidInput value)  invalidInput,required TResult Function( VideoForgeError_FileNotFound value)  fileNotFound,required TResult Function( VideoForgeError_UnsupportedCodec value)  unsupportedCodec,required TResult Function( VideoForgeError_JobNotFound value)  jobNotFound,required TResult Function( VideoForgeError_Cancelled value)  cancelled,required TResult Function( VideoForgeError_IoError value)  ioError,required TResult Function( VideoForgeError_FfmpegError value)  ffmpegError,required TResult Function( VideoForgeError_QueueFull value)  queueFull,required TResult Function( VideoForgeError_Internal value)  internal,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( VideoForgeError_InvalidInput value)  invalidInput,required TResult Function( VideoForgeError_FileNotFound value)  fileNotFound,required TResult Function( VideoForgeError_UnsupportedCodec value)  unsupportedCodec,required TResult Function( VideoForgeError_JobNotFound value)  jobNotFound,required TResult Function( VideoForgeError_Cancelled value)  cancelled,required TResult Function( VideoForgeError_IoError value)  ioError,required TResult Function( VideoForgeError_FfmpegError value)  ffmpegError,required TResult Function( VideoForgeError_QueueFull value)  queueFull,required TResult Function( VideoForgeError_Internal value)  internal,required TResult Function( VideoForgeError_CooldownActive value)  cooldownActive,required TResult Function( VideoForgeError_RecoveryBudgetExhausted value)  recoveryBudgetExhausted,}){
 final _that = this;
 switch (_that) {
 case VideoForgeError_InvalidInput():
@@ -97,7 +99,9 @@ return cancelled(_that);case VideoForgeError_IoError():
 return ioError(_that);case VideoForgeError_FfmpegError():
 return ffmpegError(_that);case VideoForgeError_QueueFull():
 return queueFull(_that);case VideoForgeError_Internal():
-return internal(_that);}
+return internal(_that);case VideoForgeError_CooldownActive():
+return cooldownActive(_that);case VideoForgeError_RecoveryBudgetExhausted():
+return recoveryBudgetExhausted(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -111,7 +115,7 @@ return internal(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoForgeError_InvalidInput value)?  invalidInput,TResult? Function( VideoForgeError_FileNotFound value)?  fileNotFound,TResult? Function( VideoForgeError_UnsupportedCodec value)?  unsupportedCodec,TResult? Function( VideoForgeError_JobNotFound value)?  jobNotFound,TResult? Function( VideoForgeError_Cancelled value)?  cancelled,TResult? Function( VideoForgeError_IoError value)?  ioError,TResult? Function( VideoForgeError_FfmpegError value)?  ffmpegError,TResult? Function( VideoForgeError_QueueFull value)?  queueFull,TResult? Function( VideoForgeError_Internal value)?  internal,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( VideoForgeError_InvalidInput value)?  invalidInput,TResult? Function( VideoForgeError_FileNotFound value)?  fileNotFound,TResult? Function( VideoForgeError_UnsupportedCodec value)?  unsupportedCodec,TResult? Function( VideoForgeError_JobNotFound value)?  jobNotFound,TResult? Function( VideoForgeError_Cancelled value)?  cancelled,TResult? Function( VideoForgeError_IoError value)?  ioError,TResult? Function( VideoForgeError_FfmpegError value)?  ffmpegError,TResult? Function( VideoForgeError_QueueFull value)?  queueFull,TResult? Function( VideoForgeError_Internal value)?  internal,TResult? Function( VideoForgeError_CooldownActive value)?  cooldownActive,TResult? Function( VideoForgeError_RecoveryBudgetExhausted value)?  recoveryBudgetExhausted,}){
 final _that = this;
 switch (_that) {
 case VideoForgeError_InvalidInput() when invalidInput != null:
@@ -123,7 +127,9 @@ return cancelled(_that);case VideoForgeError_IoError() when ioError != null:
 return ioError(_that);case VideoForgeError_FfmpegError() when ffmpegError != null:
 return ffmpegError(_that);case VideoForgeError_QueueFull() when queueFull != null:
 return queueFull(_that);case VideoForgeError_Internal() when internal != null:
-return internal(_that);case _:
+return internal(_that);case VideoForgeError_CooldownActive() when cooldownActive != null:
+return cooldownActive(_that);case VideoForgeError_RecoveryBudgetExhausted() when recoveryBudgetExhausted != null:
+return recoveryBudgetExhausted(_that);case _:
   return null;
 
 }
@@ -140,7 +146,7 @@ return internal(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  invalidInput,TResult Function( String field0)?  fileNotFound,TResult Function( String field0)?  unsupportedCodec,TResult Function( String field0)?  jobNotFound,TResult Function()?  cancelled,TResult Function( String field0)?  ioError,TResult Function( String field0)?  ffmpegError,TResult Function()?  queueFull,TResult Function( String field0)?  internal,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String field0)?  invalidInput,TResult Function( String field0)?  fileNotFound,TResult Function( String field0)?  unsupportedCodec,TResult Function( String field0)?  jobNotFound,TResult Function()?  cancelled,TResult Function( String field0)?  ioError,TResult Function( String field0)?  ffmpegError,TResult Function()?  queueFull,TResult Function( String field0)?  internal,TResult Function( String field0,  BigInt field1)?  cooldownActive,TResult Function( String field0)?  recoveryBudgetExhausted,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case VideoForgeError_InvalidInput() when invalidInput != null:
 return invalidInput(_that.field0);case VideoForgeError_FileNotFound() when fileNotFound != null:
@@ -151,7 +157,9 @@ return cancelled();case VideoForgeError_IoError() when ioError != null:
 return ioError(_that.field0);case VideoForgeError_FfmpegError() when ffmpegError != null:
 return ffmpegError(_that.field0);case VideoForgeError_QueueFull() when queueFull != null:
 return queueFull();case VideoForgeError_Internal() when internal != null:
-return internal(_that.field0);case _:
+return internal(_that.field0);case VideoForgeError_CooldownActive() when cooldownActive != null:
+return cooldownActive(_that.field0,_that.field1);case VideoForgeError_RecoveryBudgetExhausted() when recoveryBudgetExhausted != null:
+return recoveryBudgetExhausted(_that.field0);case _:
   return orElse();
 
 }
@@ -169,7 +177,7 @@ return internal(_that.field0);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  invalidInput,required TResult Function( String field0)  fileNotFound,required TResult Function( String field0)  unsupportedCodec,required TResult Function( String field0)  jobNotFound,required TResult Function()  cancelled,required TResult Function( String field0)  ioError,required TResult Function( String field0)  ffmpegError,required TResult Function()  queueFull,required TResult Function( String field0)  internal,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String field0)  invalidInput,required TResult Function( String field0)  fileNotFound,required TResult Function( String field0)  unsupportedCodec,required TResult Function( String field0)  jobNotFound,required TResult Function()  cancelled,required TResult Function( String field0)  ioError,required TResult Function( String field0)  ffmpegError,required TResult Function()  queueFull,required TResult Function( String field0)  internal,required TResult Function( String field0,  BigInt field1)  cooldownActive,required TResult Function( String field0)  recoveryBudgetExhausted,}) {final _that = this;
 switch (_that) {
 case VideoForgeError_InvalidInput():
 return invalidInput(_that.field0);case VideoForgeError_FileNotFound():
@@ -180,7 +188,9 @@ return cancelled();case VideoForgeError_IoError():
 return ioError(_that.field0);case VideoForgeError_FfmpegError():
 return ffmpegError(_that.field0);case VideoForgeError_QueueFull():
 return queueFull();case VideoForgeError_Internal():
-return internal(_that.field0);}
+return internal(_that.field0);case VideoForgeError_CooldownActive():
+return cooldownActive(_that.field0,_that.field1);case VideoForgeError_RecoveryBudgetExhausted():
+return recoveryBudgetExhausted(_that.field0);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -194,7 +204,7 @@ return internal(_that.field0);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  invalidInput,TResult? Function( String field0)?  fileNotFound,TResult? Function( String field0)?  unsupportedCodec,TResult? Function( String field0)?  jobNotFound,TResult? Function()?  cancelled,TResult? Function( String field0)?  ioError,TResult? Function( String field0)?  ffmpegError,TResult? Function()?  queueFull,TResult? Function( String field0)?  internal,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String field0)?  invalidInput,TResult? Function( String field0)?  fileNotFound,TResult? Function( String field0)?  unsupportedCodec,TResult? Function( String field0)?  jobNotFound,TResult? Function()?  cancelled,TResult? Function( String field0)?  ioError,TResult? Function( String field0)?  ffmpegError,TResult? Function()?  queueFull,TResult? Function( String field0)?  internal,TResult? Function( String field0,  BigInt field1)?  cooldownActive,TResult? Function( String field0)?  recoveryBudgetExhausted,}) {final _that = this;
 switch (_that) {
 case VideoForgeError_InvalidInput() when invalidInput != null:
 return invalidInput(_that.field0);case VideoForgeError_FileNotFound() when fileNotFound != null:
@@ -205,7 +215,9 @@ return cancelled();case VideoForgeError_IoError() when ioError != null:
 return ioError(_that.field0);case VideoForgeError_FfmpegError() when ffmpegError != null:
 return ffmpegError(_that.field0);case VideoForgeError_QueueFull() when queueFull != null:
 return queueFull();case VideoForgeError_Internal() when internal != null:
-return internal(_that.field0);case _:
+return internal(_that.field0);case VideoForgeError_CooldownActive() when cooldownActive != null:
+return cooldownActive(_that.field0,_that.field1);case VideoForgeError_RecoveryBudgetExhausted() when recoveryBudgetExhausted != null:
+return recoveryBudgetExhausted(_that.field0);case _:
   return null;
 
 }
@@ -731,6 +743,140 @@ class _$VideoForgeError_InternalCopyWithImpl<$Res>
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
   return _then(VideoForgeError_Internal(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class VideoForgeError_CooldownActive extends VideoForgeError {
+  const VideoForgeError_CooldownActive(this.field0, this.field1): super._();
+  
+
+ final  String field0;
+ final  BigInt field1;
+
+/// Create a copy of VideoForgeError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$VideoForgeError_CooldownActiveCopyWith<VideoForgeError_CooldownActive> get copyWith => _$VideoForgeError_CooldownActiveCopyWithImpl<VideoForgeError_CooldownActive>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoForgeError_CooldownActive&&(identical(other.field0, field0) || other.field0 == field0)&&(identical(other.field1, field1) || other.field1 == field1));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0,field1);
+
+@override
+String toString() {
+  return 'VideoForgeError.cooldownActive(field0: $field0, field1: $field1)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $VideoForgeError_CooldownActiveCopyWith<$Res> implements $VideoForgeErrorCopyWith<$Res> {
+  factory $VideoForgeError_CooldownActiveCopyWith(VideoForgeError_CooldownActive value, $Res Function(VideoForgeError_CooldownActive) _then) = _$VideoForgeError_CooldownActiveCopyWithImpl;
+@useResult
+$Res call({
+ String field0, BigInt field1
+});
+
+
+
+
+}
+/// @nodoc
+class _$VideoForgeError_CooldownActiveCopyWithImpl<$Res>
+    implements $VideoForgeError_CooldownActiveCopyWith<$Res> {
+  _$VideoForgeError_CooldownActiveCopyWithImpl(this._self, this._then);
+
+  final VideoForgeError_CooldownActive _self;
+  final $Res Function(VideoForgeError_CooldownActive) _then;
+
+/// Create a copy of VideoForgeError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,Object? field1 = null,}) {
+  return _then(VideoForgeError_CooldownActive(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as String,null == field1 ? _self.field1 : field1 // ignore: cast_nullable_to_non_nullable
+as BigInt,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class VideoForgeError_RecoveryBudgetExhausted extends VideoForgeError {
+  const VideoForgeError_RecoveryBudgetExhausted(this.field0): super._();
+  
+
+ final  String field0;
+
+/// Create a copy of VideoForgeError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$VideoForgeError_RecoveryBudgetExhaustedCopyWith<VideoForgeError_RecoveryBudgetExhausted> get copyWith => _$VideoForgeError_RecoveryBudgetExhaustedCopyWithImpl<VideoForgeError_RecoveryBudgetExhausted>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is VideoForgeError_RecoveryBudgetExhausted&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'VideoForgeError.recoveryBudgetExhausted(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $VideoForgeError_RecoveryBudgetExhaustedCopyWith<$Res> implements $VideoForgeErrorCopyWith<$Res> {
+  factory $VideoForgeError_RecoveryBudgetExhaustedCopyWith(VideoForgeError_RecoveryBudgetExhausted value, $Res Function(VideoForgeError_RecoveryBudgetExhausted) _then) = _$VideoForgeError_RecoveryBudgetExhaustedCopyWithImpl;
+@useResult
+$Res call({
+ String field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$VideoForgeError_RecoveryBudgetExhaustedCopyWithImpl<$Res>
+    implements $VideoForgeError_RecoveryBudgetExhaustedCopyWith<$Res> {
+  _$VideoForgeError_RecoveryBudgetExhaustedCopyWithImpl(this._self, this._then);
+
+  final VideoForgeError_RecoveryBudgetExhausted _self;
+  final $Res Function(VideoForgeError_RecoveryBudgetExhausted) _then;
+
+/// Create a copy of VideoForgeError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(VideoForgeError_RecoveryBudgetExhausted(
 null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
 as String,
   ));

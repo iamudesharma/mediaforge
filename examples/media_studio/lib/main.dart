@@ -9,7 +9,8 @@ import 'home_hub.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Dual initialization of native engines
+  // Initialize all native engines: image editor + the Rust media runtime
+  // (single playback path for both timeline preview and the home status player).
   try {
     await VideoProcessor.initialize();
     await RustImageEditor.ensureInitialized();

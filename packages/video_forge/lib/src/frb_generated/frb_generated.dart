@@ -2107,6 +2107,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return VideoForgeError_QueueFull();
       case 8:
         return VideoForgeError_Internal(dco_decode_String(raw[1]));
+      case 9:
+        return VideoForgeError_CooldownActive(
+          dco_decode_String(raw[1]),
+          dco_decode_u_64(raw[2]),
+        );
+      case 10:
+        return VideoForgeError_RecoveryBudgetExhausted(
+          dco_decode_String(raw[1]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -3019,6 +3028,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 8:
         var var_field0 = sse_decode_String(deserializer);
         return VideoForgeError_Internal(var_field0);
+      case 9:
+        var var_field0 = sse_decode_String(deserializer);
+        var var_field1 = sse_decode_u_64(deserializer);
+        return VideoForgeError_CooldownActive(var_field0, var_field1);
+      case 10:
+        var var_field0 = sse_decode_String(deserializer);
+        return VideoForgeError_RecoveryBudgetExhausted(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -3834,6 +3850,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(7, serializer);
       case VideoForgeError_Internal(field0: final field0):
         sse_encode_i_32(8, serializer);
+        sse_encode_String(field0, serializer);
+      case VideoForgeError_CooldownActive(
+        field0: final field0,
+        field1: final field1,
+      ):
+        sse_encode_i_32(9, serializer);
+        sse_encode_String(field0, serializer);
+        sse_encode_u_64(field1, serializer);
+      case VideoForgeError_RecoveryBudgetExhausted(field0: final field0):
+        sse_encode_i_32(10, serializer);
         sse_encode_String(field0, serializer);
     }
   }

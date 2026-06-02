@@ -59,6 +59,75 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
 
     private val textures = mutableMapOf<Long, Entry>()
 
+    private class BitmapPool {
+        data class Key(val width: Int, val height: Int, val config: Bitmap.Config)
+
+        private val pools = mutableMapOf<Key, MutableList<Bitmap>>()
+        private val lock = Any()
+
+        var createCount = 0
+            private set
+        var reuseCount = 0
+            private set
+
+        fun acquire(width: Int, height: Int, config: Bitmap.Config): Bitmap {
+            synchronized(lock) {
+                val key = Key(width, height, config)
+                val list = pools[key]
+                if (list != null && list.isNotEmpty()) {
+                    val bitmap = list.removeAt(list.size - 1)
+                    if (!bitmap.isRecycled) {
+                        reuseCount++
+                        return bitmap
+                    }
+                }
+                createCount++
+                return Bitmap.createBitmap(width, height, config)
+            }
+        }
+
+        fun release(bitmap: Bitmap) {
+            if (bitmap.isRecycled) return
+            synchronized(lock) {
+                val key = Key(bitmap.width, bitmap.height, bitmap.config)
+                val list = pools.getOrPut(key) { mutableListOf() }
+                if (list.size < 3) {
+                    list.add(bitmap)
+                } else {
+                    bitmap.recycle()
+                }
+            }
+        }
+
+        fun clear() {
+            synchronized(lock) {
+                pools.values.forEach { list ->
+                    list.forEach { bitmap ->
+                        if (!bitmap.isRecycled) {
+                            bitmap.recycle()
+                        }
+                    }
+                }
+                pools.clear()
+            }
+        }
+
+        fun snapshot(): Map<String, Any> {
+            synchronized(lock) {
+                var poolSize = 0
+                pools.values.forEach { poolSize += it.size }
+                return mapOf(
+                    "poolCount" to pools.size,
+                    "poolSize" to poolSize,
+                    "createCount" to createCount,
+                    "reuseCount" to reuseCount
+                )
+            }
+        }
+    }
+
+    private val bitmapPool = BitmapPool()
+
     /// Aggregated stats for [debugStats]. Cheap to read; the map is only
     /// touched on the platform channel thread, so no extra lock is needed.
     private var trimEventCount: Int = 0
@@ -86,6 +155,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
             entry.surfaceProducer.release()
         }
         textures.clear()
+        bitmapPool.clear()
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -195,7 +265,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
             return
         }
         entry.surfaceProducer.setSize(width, height)
-        entry.bitmap?.recycle()
+        entry.bitmap?.let { bitmapPool.release(it) }
         entry.bitmap = null
         textures[handle] = entry.copy(width = width, height = height)
         entry.surfaceProducer.scheduleFrame()
@@ -203,6 +273,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
     }
 
     private fun debugStats(result: MethodChannel.Result) {
+        val poolStats = bitmapPool.snapshot()
         result.success(
             mapOf(
                 "handleCount" to textures.size,
@@ -210,6 +281,11 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
                 "recycledBitmapCount" to recycledBitmapCount,
                 "lastTrimLevel" to lastTrimLevel,
                 "lastTrimMs" to lastTrimMs,
+                // BitmapPool metrics (Android only)
+                "bitmapPool_poolCount" to poolStats["poolCount"]!!,
+                "bitmapPool_poolSize" to poolStats["poolSize"]!!,
+                "bitmapPool_createCount" to poolStats["createCount"]!!,
+                "bitmapPool_reuseCount" to poolStats["reuseCount"]!!,
             ),
         )
     }
@@ -241,32 +317,18 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
     }
 
     private fun uploadFastPath(bitmap: Bitmap, pixels: ByteArray, layout: Layout) {
-        // Wrap the inbound bytes in a direct, native-order ByteBuffer. We
-        // never call `Bitmap.allocateDirect` ourselves; `copyPixelsFromBuffer`
-        // is happy with any direct ByteBuffer as long as it contains at
-        // least w*h*4 bytes.
-        val buf = ByteBuffer.allocateDirect(pixels.size).order(ByteOrder.nativeOrder())
-        buf.put(pixels)
-        buf.position(0)
-        if (layout == Layout.Bgra8888) {
-            // Bitmap is RGBA_8888, so the on-GPU layout is (R, G, B, A) per
-            // pixel. The inbound bytes are (B, G, R, A). Reorder the buffer
-            // 32 bits at a time: keep the middle two bytes, swap the outer.
-            val intCount = pixels.size / 4
-            val view = buf.order(ByteOrder.LITTLE_ENDIAN).asIntBuffer()
-            val tmp = IntArray(intCount)
-            view.get(tmp)
-            for (i in 0 until intCount) {
-                val v = tmp[i]
-                tmp[i] = (v and 0xff00ff00.toInt()) or
-                    ((v and 0xff) shl 16) or
-                    ((v and 0xff0000) ushr 16)
+        if (layout == Layout.Rgba8888) {
+            // Tightly packed RGBA8888 bytes upload directly to the native config.
+            bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
+        } else {
+            // For BGRA8888, swap Red and Blue bytes in-place.
+            for (i in 0 until pixels.size step 4) {
+                val b = pixels[i]
+                pixels[i] = pixels[i + 2]
+                pixels[i + 2] = b
             }
-            view.position(0)
-            view.put(tmp)
+            bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
         }
-        buf.position(0)
-        bitmap.copyPixelsFromBuffer(buf)
     }
 
     /**
@@ -373,7 +435,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
         val handle = handleFromArgs(args)
         if (handle != null) {
             val entry = textures.remove(handle)
-            entry?.bitmap?.recycle()
+            entry?.bitmap?.let { bitmapPool.release(it) }
             entry?.surfaceProducer?.release()
         }
         result.success(null)
@@ -391,7 +453,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
         } else {
             Bitmap.Config.ARGB_8888
         }
-        return Bitmap.createBitmap(width, height, config)
+        return bitmapPool.acquire(width, height, config)
     }
 
     // ----- Memory pressure handling -------------------------------------------
@@ -407,6 +469,7 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
             entry.bitmap = null
         }
         recycledBitmapCount += count
+        bitmapPool.clear()
     }
 
     // ComponentCallbacks2

@@ -11,6 +11,7 @@ use crate::types::*;
 pub fn init_app() {
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).try_init();
     let _ = crate::ffmpeg::ensure_ffmpeg_initialized();
+    crate::engine::log_startup_banner();
 }
 
 /// Initialize the native video processor (call once at app startup).

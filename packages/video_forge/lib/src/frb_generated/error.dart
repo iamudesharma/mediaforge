@@ -29,6 +29,19 @@ sealed class VideoForgeError with _$VideoForgeError {
   const factory VideoForgeError.internal(String field0) =
       VideoForgeError_Internal;
 
+  /// Recovery cooldown active (engine::seek_recovery). The caller
+  /// may escalate to a more aggressive strategy or skip the
+  /// operation. Distinct from `Internal` so callers can pattern-match
+  /// on it.
+  const factory VideoForgeError.cooldownActive(String field0, BigInt field1) =
+      VideoForgeError_CooldownActive;
+
+  /// All attempts of a particular recovery strategy have been
+  /// exhausted. Caller should treat the session as unrecoverable for
+  /// the current failure.
+  const factory VideoForgeError.recoveryBudgetExhausted(String field0) =
+      VideoForgeError_RecoveryBudgetExhausted;
+
   Future<String> errorCode() =>
       RustLib.instance.api.crateErrorVideoForgeErrorErrorCode(that: this);
 

@@ -53,12 +53,10 @@ class _DashboardPageState extends State<DashboardPage> {
     mode: MediaPresentationMode.auto,
   );
   MediaPlaybackDrive? _drive;
-  int _lastPresentedPtsMs = -1;
   bool _isPlaying = false;
   PlaybackState _state = PlaybackState.idle;
   int _mediaTimeMs = 0;
   int _audioClockMs = 0;
-  int _wallClockMs = 0;
   int _latestDecodedPtsMs = 0;
   int _presentedPtsMs = 0;
   int _avDriftMs = 0;
@@ -69,7 +67,6 @@ class _DashboardPageState extends State<DashboardPage> {
   int _videoFramesInQueue = 0;
   int _audioFramesInQueue = 0;
 
-  bool get _useGpuTexture => _videoPresenter.usesGpuTexture;
 
   bool _isCustomVideo = false;
   int _durationMs = 30000;
@@ -182,7 +179,6 @@ class _DashboardPageState extends State<DashboardPage> {
           _videoFramesInQueue = d.videoFramesInQueue;
           _audioFramesInQueue = d.audioFramesInQueue;
           _audioClockMs = d.audioClockMs;
-          _wallClockMs = d.wallClockMs;
           _latestDecodedPtsMs = d.latestDecodedPtsMs;
           _presentedPtsMs = d.presentedPtsMs;
           _avDriftMs = d.avDriftMs;
@@ -252,7 +248,7 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final result = await _drive!.presentationTick();
       if (result.hasFrame) {
-        _lastPresentedPtsMs = result.presentedPtsMs;
+        // Frame presented
       } else if (_isPlaying && _isCustomVideo) {
         final drift = _avDriftMs > 0 ? _avDriftMs : _mediaTimeMs - _presentedPtsMs;
         if (drift > MediaPlaybackAcceptance.catchupSkipNonKeyframeMs &&
@@ -337,7 +333,6 @@ class _DashboardPageState extends State<DashboardPage> {
             _isCustomVideo = true;
             _durationMs = duration > 0 ? duration : 30000;
             _videoFileName = name;
-            _lastPresentedPtsMs = -1;
           });
         await _videoPresenter.reset();
         }

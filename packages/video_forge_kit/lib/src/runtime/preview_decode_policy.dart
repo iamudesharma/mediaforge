@@ -17,12 +17,11 @@ enum PreviewDecodePath {
 
 /// Decides preview decode path from probe + platform (matches Rust `prefer_software_preview`).
 final class PreviewDecodePolicy {
-  PreviewDecodePolicy._({
-    required this.decodePath,
-    required MediaInfo mediaInfo,
-    required bool hwPreviewDisabled,
-  })  : _mediaInfo = mediaInfo,
-        _hwPreviewDisabled = hwPreviewDisabled;
+  PreviewDecodePolicy._(
+    this.decodePath,
+    this._mediaInfo,
+    this._hwPreviewDisabled,
+  );
 
   final MediaInfo _mediaInfo;
   final bool _hwPreviewDisabled;
@@ -34,9 +33,9 @@ final class PreviewDecodePolicy {
     required bool hwPreviewDisabled,
   }) =>
       PreviewDecodePolicy._(
-        decodePath: _initialPath(mediaInfo, hwPreviewDisabled),
-        mediaInfo: mediaInfo,
-        hwPreviewDisabled: hwPreviewDisabled,
+        _initialPath(mediaInfo, hwPreviewDisabled),
+        mediaInfo,
+        hwPreviewDisabled,
       );
 
   static PreviewDecodePath _initialPath(

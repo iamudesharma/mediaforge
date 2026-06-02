@@ -1,6 +1,6 @@
 PODS:
   - FlutterMacOS (1.0.0)
-  - pixel_surface (0.1.0):
+  - pixel_surface (1.1.0):
     - FlutterMacOS
 
 DEPENDENCIES:
@@ -15,8 +15,8 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  pixel_surface: 9f133a42cf51e7e65fc9023be5deb1484f936827
+  pixel_surface: 8db9295d88b142073a9f28bb10931e7fb2ae40a1
 
-PODFILE CHECKSUM: e08e57b58649e8521aa43a39a957c3443a184219
+PODFILE CHECKSUM: 9ca71906c3d04587670b20b78ee37c62d82bc24c
 
 COCOAPODS: 1.16.2

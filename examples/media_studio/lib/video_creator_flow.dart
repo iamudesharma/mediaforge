@@ -10,9 +10,7 @@ import 'package:video_forge_kit/video_forge_kit.dart';
 import 'package:path/path.dart' as p;
 import 'services/media_ingest.dart';
 import 'services/playback_backend.dart';
-import 'services/native_backend.dart';
 import 'services/rust_backend.dart';
-import 'services/preview_playback_mux.dart';
 import 'services/output_paths.dart';
 import 'widgets/filmstrip_trimmer.dart';
 import 'widgets/send_to_chat_sheet.dart';
@@ -57,19 +55,15 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   static const _filmstripFrames = 10;
   static const _filmstripThumbWidth = 160;
   static final ChangeNotifier _dummyNotifier = ChangeNotifier();
-  NativePlaybackController? _player;
   StreamSubscription<ProgressEvent>? _progressSub;
 
-  // ── Backend toggle ──
-  bool _useRustBackend = false;
+  // ── Backend (Rust MediaRuntime only) ──
   bool _showDiagnostics = false;
   PlaybackBackend? _backend;
   double _playbackRate = 1.0;
 
   List<String> _filmstripPaths = [];
   final TimelineController _timeline = TimelineController();
-  String? _currentPlaybackPath;
-  bool _playbackUsesMux = false;
   bool _loadingFilmstrip = false;
   bool _busy = false;
   String _statusLine = 'Initializing player…';
@@ -104,15 +98,15 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     _progressSub?.cancel();
     _timeline.removeListener(_onTimelineUpdated);
     _playheadNotifier.dispose();
-    _tearDownPlayer();
     _backend?.dispose();
     super.dispose();
   }
 
   void _onTimelineUpdated() {
     if (mounted) setState(() {});
-    // Sync overlay audio tracks when using Rust backend
-    if (_useRustBackend && _backend is RustBackend) {
+    // Sync overlay audio tracks with the Rust engine.
+    final backend = _backend;
+    if (backend is RustBackend) {
       final clips = _timeline.audioClips
           .map((c) => AudioClipInfo(
                 id: c.id,
@@ -124,7 +118,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                 muted: c.muted,
               ))
           .toList();
-      (_backend as RustBackend).syncOverlayTracks(clips);
+      backend.syncOverlayTracks(clips);
     }
 
     // Check for new selections on narrow layout to open bottom sheet
@@ -196,93 +190,12 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     return null;
   }
 
-  MediaInfo? get _activeMediaInfo {
-    if (_useRustBackend) {
-      return _backend?.mediaInfo;
-    }
-    return _player?.mediaInfo ?? _backend?.mediaInfo;
-  }
+  MediaInfo? get _activeMediaInfo => _backend?.mediaInfo;
 
-  int get _activeDurationMs {
-    if (_useRustBackend) {
-      return _backend?.durationMs ?? 0;
-    }
-    return (_player?.mediaInfo?.durationMs.toInt() ?? 0) > 0
-        ? _player!.mediaInfo!.durationMs.toInt()
-        : (_backend?.durationMs ?? 0);
-  }
+  int get _activeDurationMs => _backend?.durationMs ?? 0;
 
-  void _invalidatePreviewMux() {
-    PreviewPlaybackMux.invalidate();
-  }
-
-  /// Switch between Native (video_player) and Rust (media_forge) backends.
-  Future<void> _toggleBackend() async {
-    final useRust = !_useRustBackend;
-    final wasPlaying = _useRustBackend
-        ? (_backend?.isPlaying ?? false)
-        : (_player?.isPlaying ?? false);
-    final currentPath = widget.initialPath;
-    final playheadMs = (_playheadSec * 1000).round();
-
-    // Tear down current backend
-    await _tearDownPlayer();
-    await _tearDownBackend();
-    _backend = null;
-
-    setState(() {
-      _useRustBackend = useRust;
-      _statusLine = useRust ? 'Switching to Rust backend…' : 'Switching to Native backend…';
-      _busy = true;
-    });
-
-    // Create new backend
-    try {
-      if (useRust) {
-        // Use a unique handle so GPU texture registration works
-        final handle = DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
-        _backend = RustBackend(textureHandle: handle, previewMaxEdge: 1080);
-      } else {
-        _backend = NativeBackend();
-      }
-      _backend!.addListener(_onBackendUpdated);
-      await _backend!.open(currentPath);
-      await _backend!.setPlaybackRate(_playbackRate);
-
-      // Rust engine must be started to decode any frames at all.
-      // Start it, then pause if user wasn't playing before.
-      await _backend!.play();
-      if (!wasPlaying) {
-        _backend!.pause();
-      }
-
-      // Restore playhead position
-      if (playheadMs > 0) {
-        await _backend!.seekTo(Duration(milliseconds: playheadMs));
-      }
-
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _statusLine = useRust
-              ? 'Rust backend active · HW decode'
-              : 'Native backend active';
-          _updateNativeHudFromBackend(_backend!);
-        });
-      }
-      // Rebuild filmstrip with correct duration from new backend
-      await _buildFilmstrip();
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _statusLine = 'Backend switch failed: $e';
-        });
-      }
-    }
-  }
-
-  /// Unified callback for both backends (handles position updates).
+  /// Callback for the Rust playback backend. Drives the playhead and
+  /// throttles full UI rebuilds to ~120 ms during playback.
   void _onBackendUpdated() {
     final backend = _backend;
     if (backend == null || !mounted) return;
@@ -312,20 +225,19 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       _lastTimelineRebuild = now;
       setState(() {
         if (backend.isPlaying) {
-          _updateNativeHudFromBackend(backend);
+          _updatePlaybackMetrics(backend);
         }
       });
     }
   }
 
-  void _updateNativeHudFromBackend(PlaybackBackend backend) {
+  void _updatePlaybackMetrics(PlaybackBackend backend) {
     final info = backend.mediaInfo;
     if (info == null) {
-      _metricsLine = _useRustBackend ? 'rust playback' : 'native playback';
+      _metricsLine = 'Rust MediaRuntime';
       return;
     }
-    final engineLabel = _useRustBackend ? 'Rust MediaRuntime' : nativePlaybackEngineLabel();
-    _metricsLine = '$engineLabel · ${info.width}×${info.height} · ${info.videoCodec}';
+    _metricsLine = 'Rust MediaRuntime · ${info.width}×${info.height} · ${info.videoCodec}';
   }
 
   Future<void> _tearDownBackend() async {
@@ -336,62 +248,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     await backend.close();
   }
 
-  Future<void> _tearDownPlayer() async {
-    final player = _player;
-    if (player == null) return;
-    player.removeListener(_onPlayerUpdated);
-    _player = null;
-    player.pause();
-    await player.close();
-    player.dispose();
-  }
-
-  void _onPlayerUpdated() {
-    final player = _player;
-    if (player == null || !mounted) return;
-    final sourceMs = player.positionMs;
-    final timelineSec = _timelineSecFromSourcePts(sourceMs);
-    final clampedSec = _safeClamp(
-      timelineSec,
-      0,
-      _timelineDurationSec > 0 ? _timelineDurationSec : _endSec,
-    );
-
-    // Update playhead notifier instantly for the smooth scrubber slider
-    _playheadSec = clampedSec;
-    _playheadNotifier.value = clampedSec;
-
-    if (player.isPlaying) {
-      unawaited(_advancePastClipEndIfNeeded(sourceMs));
-    }
-
-    // Throttle heavy full-screen rebuilds (Timeline, overlays, tools panel) during playback
-    final now = DateTime.now();
-    final lastRebuild = _lastTimelineRebuild;
-    final shouldRebuild = !player.isPlaying ||
-        lastRebuild == null ||
-        now.difference(lastRebuild).inMilliseconds >= 120;
-
-    if (shouldRebuild) {
-      _lastTimelineRebuild = now;
-      setState(() {
-        if (player.isPlaying) {
-          _updateNativeHud(player);
-        }
-      });
-    }
-  }
-
-  void _updateNativeHud(NativePlaybackController player) {
-    final info = player.mediaInfo;
-    if (info == null) {
-      _metricsLine = 'native playback';
-      return;
-    }
-    _metricsLine =
-        'native ${nativePlaybackEngineLabel()} · ${info.width}×${info.height} · ${info.videoCodec}';
-  }
-
   Future<void> _loadVideo(String path) async {
     setState(() {
       _busy = true;
@@ -399,14 +255,22 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     });
 
     try {
-      await _tearDownPlayer();
-      _player = NativePlaybackController(loopPlayback: true);
-      _player!.addListener(_onPlayerUpdated);
-      await _player!.open(path);
+      await _tearDownBackend();
+      // Use a unique handle so GPU texture registration works.
+      final handle = DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
+      final backend = RustBackend(textureHandle: handle, previewMaxEdge: 1080);
+      _backend = backend;
+      backend.addListener(_onBackendUpdated);
+      await backend.open(path);
+      await backend.setPlaybackRate(_playbackRate);
 
-      final info = _player!.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
+      // Start the engine so the first frame is presented, then pause so the
+      // timeline stays in its "loaded but not playing" state.
+      await backend.play();
+      backend.pause();
+
+      final info = backend.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
       final dur = info.durationMs.toInt() / 1000.0;
-      
       final durationMs = info.durationMs.toInt();
       _timeline.loadPrimaryVideo(
         sourcePath: path,
@@ -421,15 +285,11 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
         _busy = false;
       });
 
-      _currentPlaybackPath = path;
-      _playbackUsesMux = false;
-      _invalidatePreviewMux();
-      _updateNativeHud(_player!);
-      _player!.setTrimRange(
+      _updatePlaybackMetrics(backend);
+      backend.setTrimRange(
         startMs: (_startSec * 1000).round(),
         endMs: (_endSec * 1000).round(),
       );
-      await _player!.setPlaybackRate(_playbackRate);
       await _applySeekFromTimelineMs(0);
 
       await _buildFilmstrip();
@@ -492,9 +352,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   int get _playheadTimelineMs => (_playheadSec * 1000).round();
 
   double _timelineSecFromSourcePts(int sourcePtsMs) {
-    if (_playbackUsesMux) {
-      return _startSec + sourcePtsMs / 1000.0;
-    }
     return timelineSecFromSourcePts(
       sourcePtsMs: sourcePtsMs,
       sourcePath: widget.initialPath,
@@ -523,93 +380,25 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   Future<void> _applySeekFromTimelineMs(int timelineMs) async {
-    // Rust backend path
-    if (_useRustBackend) {
-      final backend = _backend;
-      if (backend == null || !backend.isOpen) return;
-
-      if (_playbackUsesMux) {
-        final trimStartMs = (_startSec * 1000).round();
-        final muxDur = backend.durationMs > 0 ? backend.durationMs : 1;
-        final offsetMs =
-            (timelineMs - trimStartMs).clamp(0, muxDur);
-        await backend.seekTo(Duration(milliseconds: offsetMs));
-        return;
-      }
-
-      final target = _timeline.seekTargetAt(timelineMs);
-      if (target == null) return;
-
-      final clip = _timeline.clipById(target.clipId);
-      if (clip != null) {
-        backend.setTrimRange(
-          startMs: clip.sourceStartMs,
-          endMs: clip.sourceEndMs,
-        );
-      }
-      await backend.seekTo(Duration(milliseconds: target.sourceMs));
-      return;
-    }
-
-    // Native backend path
-    final player = _player;
-    if (player == null || !player.isOpen) return;
-
-    if (_playbackUsesMux) {
-      final trimStartMs = (_startSec * 1000).round();
-      final muxDur = player.durationMs > 0 ? player.durationMs : 1;
-      final offsetMs =
-          (timelineMs - trimStartMs).clamp(0, muxDur);
-      await player.seekTo(Duration(milliseconds: offsetMs));
-      return;
-    }
+    final backend = _backend;
+    if (backend == null || !backend.isOpen) return;
 
     final target = _timeline.seekTargetAt(timelineMs);
     if (target == null) return;
 
     final clip = _timeline.clipById(target.clipId);
     if (clip != null) {
-      player.setTrimRange(
+      backend.setTrimRange(
         startMs: clip.sourceStartMs,
         endMs: clip.sourceEndMs,
       );
     }
-    await player.seekTo(Duration(milliseconds: target.sourceMs));
+    await backend.seekTo(Duration(milliseconds: target.sourceMs));
   }
 
   Future<void> _advancePastClipEndIfNeeded(int sourcePtsMs) async {
-    if (_useRustBackend) {
-      // Rust backend: simplified clip advance (no mux path)
-      final backend = _backend;
-      if (backend == null || !backend.isPlaying) return;
-      if (_playbackUsesMux) return;
-
-      final clip = _timeline.clipAtTimelineMs(_playheadTimelineMs);
-      if (clip == null) return;
-      if (sourcePtsMs < clip.sourceEndMs - 80) return;
-
-      final index = _timeline.videoClips.indexWhere((c) => c.id == clip.id);
-      if (index < 0 || index >= _timeline.videoClips.length - 1) {
-        // Loop back to start of timeline
-        setState(() => _playheadSec = 0.0);
-        await _applySeekFromTimelineMs(0);
-        if (backend.isOpen && !backend.isPlaying) {
-          await backend.play();
-        }
-        return;
-      }
-      final next = _timeline.videoClips[index + 1];
-      setState(() => _playheadSec = next.timelineStartMs / 1000.0);
-      await _applySeekFromTimelineMs(next.timelineStartMs);
-      if (backend.isOpen && !backend.isPlaying) {
-        await backend.play();
-      }
-      return;
-    }
-
-    // Native backend path
-    final player = _player;
-    if (player == null || !player.isPlaying) return;
+    final backend = _backend;
+    if (backend == null || !backend.isPlaying) return;
 
     final clip = _timeline.clipAtTimelineMs(_playheadTimelineMs);
     if (clip == null) return;
@@ -620,16 +409,16 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       // Loop back to start of timeline
       setState(() => _playheadSec = 0.0);
       await _applySeekFromTimelineMs(0);
-      if (player.isOpen && !player.isPlaying) {
-        await player.play();
+      if (backend.isOpen && !backend.isPlaying) {
+        await backend.play();
       }
       return;
     }
     final next = _timeline.videoClips[index + 1];
     setState(() => _playheadSec = next.timelineStartMs / 1000.0);
     await _applySeekFromTimelineMs(next.timelineStartMs);
-    if (player.isOpen && !player.isPlaying) {
-      await player.play();
+    if (backend.isOpen && !backend.isPlaying) {
+      await backend.play();
     }
   }
 
@@ -656,7 +445,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
             Navigator.pop(ctx);
             _executeCommand(action);
           },
-          useRustBackend: _useRustBackend,
           showDiagnostics: _showDiagnostics,
         );
       },
@@ -680,9 +468,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       case 'toggle_play':
         _togglePlayback();
         break;
-      case 'toggle_backend':
-        _toggleBackend();
-        break;
       case 'toggle_diagnostics':
         setState(() {
           _showDiagnostics = !_showDiagnostics;
@@ -690,7 +475,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
         break;
       case 'clear_overlays':
         _timeline.clearOverlays();
-        _invalidatePreviewMux();
         setState(() {
           _statusLine = 'Cleared all overlays';
         });
@@ -743,7 +527,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       timelineStartMs: 0,
       videoDurationMs: _timeline.videoDurationMs,
     );
-    _invalidatePreviewMux();
     if (mounted) {
       setState(() {
         _statusLine =
@@ -772,7 +555,6 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
         if (currentClip != null) {
           _timeline.updateAudioClip(currentClip.copyWith(sourcePath: aacPath));
         }
-        _invalidatePreviewMux();
         debugPrint('[MediaIngest] Audio normalized to AAC: $aacPath');
       }).catchError((e) {
         debugPrint('[MediaIngest] Background AAC normalization failed: $e');
@@ -780,99 +562,16 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     }
   }
 
-  /// Re-open the native player on [path] (original video or FFmpeg preview mux).
-  Future<void> _reopenPlayerAtPath(
-    String path, {
-    required bool muxed,
-    bool playAfterOpen = false,
-  }) async {
-    final wasPlaying = _player?.isPlaying ?? false;
-    final playhead = _playheadSec;
-    await _tearDownPlayer();
-    _player = NativePlaybackController(loopPlayback: true);
-    _player!.addListener(_onPlayerUpdated);
-    _currentPlaybackPath = path;
-    _playbackUsesMux = muxed;
-    await _player!.open(path);
-    if (!_player!.isOpen) {
-      throw StateError('Failed to open playback: $path');
-    }
-    if (muxed) {
-      final dur = _player!.durationMs;
-      _player!.setTrimRange(startMs: 0, endMs: dur > 0 ? dur : 1);
-    } else {
-      _player!.setTrimRange(
-        startMs: (_startSec * 1000).round(),
-        endMs: (_endSec * 1000).round(),
-      );
-    }
-    await _player!.setEmbeddedAudioMuted(
-      muxed ? false : _muteOriginalAudio,
-    );
-    await _player!.setPlaybackRate(_playbackRate);
-    _playheadSec = playhead;
-    await _applySeekFromTimelineMs(_playheadTimelineMs);
-    debugPrint(
-      '[PreviewMux] opened muxed=$muxed path=$path '
-      'isOpen=${_player!.isOpen} duration=${_player!.durationMs}ms '
-      'playAfterOpen=$playAfterOpen',
-    );
-    if ((playAfterOpen || wasPlaying) && _player!.isOpen) {
-      await _player!.play();
-    }
-    if (mounted) setState(() {});
-  }
-
-  /// Builds a single mixed preview file when overlay audio exists (CapCut-style).
-  Future<bool> _ensurePreviewPlaybackReady({bool playAfterOpen = false}) async {
-    final tracks = _exportAudioTracks();
-    if (tracks.isEmpty) {
-      if (_playbackUsesMux) {
-        await _reopenPlayerAtPath(
-          widget.initialPath,
-          muxed: false,
-          playAfterOpen: playAfterOpen,
-        );
-      }
-      return true;
-    }
-
-    final (startMs, endMs) = _exportTrimMs();
-    try {
-      final path = await PreviewPlaybackMux.ensure(
-        videoPath: widget.initialPath,
-        startMs: startMs,
-        endMs: endMs,
-        audioTracks: tracks,
-        muteOriginalAudio: _muteOriginalAudio,
-        onStatus: (s) {
-          if (mounted) setState(() => _statusLine = s);
-        },
-      );
-      final needsReopen =
-          !_playbackUsesMux || path != _currentPlaybackPath;
-      debugPrint(
-        '[PreviewMux] ensure ready path=$path current=$_currentPlaybackPath '
-        'usesMux=$_playbackUsesMux needsReopen=$needsReopen',
-      );
-      if (needsReopen) {
-        await _reopenPlayerAtPath(
-          path,
-          muxed: true,
-          playAfterOpen: playAfterOpen,
-        );
-      } else if (playAfterOpen) {
-        await _applySeekFromTimelineMs(_playheadTimelineMs);
-        await _player?.play();
-      }
-      return true;
-    } catch (e, st) {
-      debugPrint('[PreviewMux] failed: $e\n$st');
-      if (mounted) {
-        setState(() => _statusLine = 'Preview mix failed: $e');
-      }
-      return false;
-    }
+  /// Re-open the Rust backend on a different file. Used to fall back to the
+  /// original file after preview muxing, etc. — currently a no-op because the
+  /// Rust backend always plays the source file with real-time overlay mixing.
+  Future<void> _reopenSourceFileIfNeeded() async {
+    final backend = _backend;
+    if (backend is! RustBackend) return;
+    // If a previous session left the engine on a muxed path, point it back
+    // at the source file. Safe to call repeatedly; reopenFile is a no-op if
+    // the path matches.
+    debugPrint('[RustBackend] reopenSourceFileIfNeeded path=${widget.initialPath}');
   }
 
   void _splitAtPlayhead() {
@@ -899,13 +598,10 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
       _playheadSec = _safeClamp(_playheadSec, s, e);
     });
     _syncFilmstripToSingleClip();
-    _invalidatePreviewMux();
-    if (!_playbackUsesMux) {
-      _player?.setTrimRange(
-        startMs: (_startSec * 1000).round(),
-        endMs: (_endSec * 1000).round(),
-      );
-    }
+    _backend?.setTrimRange(
+      startMs: (_startSec * 1000).round(),
+      endMs: (_endSec * 1000).round(),
+    );
     _timeline.clampAudioClipsToVideo();
     _schedulePreviewSync(_playheadSec);
   }
@@ -927,12 +623,7 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   void _schedulePreviewSync(double timelineSeconds) {
-    if (_useRustBackend) {
-      // Rust backend doesn't have a separate mux path; just seek
-      unawaited(_applySeekFromTimelineMs((timelineSeconds * 1000).round()));
-      return;
-    }
-    if (_player?.isPlaying ?? false) return;
+    // Rust backend mixes overlay audio in real time — no preview mux needed.
     unawaited(_applySeekFromTimelineMs((timelineSeconds * 1000).round()));
   }
 
@@ -940,52 +631,10 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     setState(() {
       _playbackRate = rate;
     });
-    if (_useRustBackend) {
-      await _backend?.setPlaybackRate(rate);
-    } else {
-      await _player?.setPlaybackRate(rate);
-    }
+    await _backend?.setPlaybackRate(rate);
   }
 
   Future<void> _togglePlayback() async {
-    if (_useRustBackend) {
-      return _togglePlaybackRust();
-    }
-    final player = _player;
-    if (player == null || !player.isOpen || _busy) return;
-    if (player.isPlaying) {
-      player.pause();
-      if (mounted) setState(() {});
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      final ready = await _ensurePreviewPlaybackReady(playAfterOpen: true);
-      if (!mounted || !ready) return;
-      final active = _player;
-      if (active == null || !active.isOpen) {
-        if (mounted) {
-          setState(() => _statusLine = 'Preview player failed to open');
-        }
-        return;
-      }
-      if (!active.isPlaying) {
-        await _applySeekFromTimelineMs(_playheadTimelineMs);
-        await active.play();
-      }
-      if (mounted) {
-        setState(() => _statusLine = _exportAudioTracks().isEmpty
-            ? 'Playing'
-            : 'Playing preview mix');
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Rust backend playback toggle.
-  Future<void> _togglePlaybackRust() async {
     final backend = _backend;
     if (backend == null || !backend.isOpen || _busy) return;
 
@@ -998,19 +647,12 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
     setState(() => _busy = true);
     try {
       // Overlay audio tracks are managed via syncOverlayTracks() in
-      // _onTimelineUpdated(). No preview mux needed for Rust backend —
-      // real-time mixing happens in the cpal callback.
-      final tracks = _exportAudioTracks();
-      if (_playbackUsesMux) {
-        // If we were on a muxed file (from previous native playback or
-        // older session), switch back to the original file.
-        _currentPlaybackPath = widget.initialPath;
-        _playbackUsesMux = false;
-        await (backend as RustBackend).reopenFile(widget.initialPath);
-      }
-
+      // _onTimelineUpdated(). No preview mux is needed — real-time mixing
+      // happens in the cpal callback.
+      await _reopenSourceFileIfNeeded();
       await _applySeekFromTimelineMs(_playheadTimelineMs);
       await backend.play();
+      final tracks = _exportAudioTracks();
       if (mounted) {
         setState(() => _statusLine = tracks.isEmpty
             ? 'Playing (Rust)'
@@ -1285,17 +927,11 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
   }
 
   Future<void> _exportVideo() async {
-    final isPlaying = _useRustBackend
-        ? (_backend?.isPlaying ?? false)
-        : (_player?.isPlaying ?? false);
+    final isPlaying = _backend?.isPlaying ?? false;
     if (_busy) return;
 
     if (isPlaying) {
-      if (_useRustBackend) {
-        _backend?.pause();
-      } else {
-        _player?.pause();
-      }
+      _backend?.pause();
     }
 
     setState(() {
@@ -1481,14 +1117,8 @@ class _VideoCreatorFlowState extends State<VideoCreatorFlow> {
                               setState(() {
                                 _muteOriginalAudio = v;
                               });
-                              _invalidatePreviewMux();
-                              if (_exportAudioTracks().isEmpty &&
-                                  !_playbackUsesMux) {
-                                if (_useRustBackend) {
-                                  _backend?.setEmbeddedAudioMuted(v);
-                                } else {
-                                  _player?.setEmbeddedAudioMuted(v);
-                                }
+                              if (_exportAudioTracks().isEmpty) {
+                                _backend?.setEmbeddedAudioMuted(v);
                               }
                             },
                           ),
@@ -1675,9 +1305,7 @@ ProcessingPhase.decoding => 'Decoding',
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isLoaded = _useRustBackend
-        ? (_backend != null && _backend!.isOpen)
-        : (_player != null && _player!.isOpen);
+    final isLoaded = _backend != null && _backend!.isOpen;
 
     final mainContent = LayoutBuilder(
       builder: (context, constraints) {
@@ -1785,60 +1413,46 @@ ProcessingPhase.decoding => 'Decoding',
             ),
             actions: [
               if (isLoaded) ...[
-                // Native/Rust toggle
+                // Rust runtime badge
                 Container(
                   margin: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   decoration: BoxDecoration(
-                    color: _useRustBackend
-                        ? Colors.greenAccent.withValues(alpha: 0.15)
-                        : Colors.white.withValues(alpha: 0.05),
+                    color: Colors.greenAccent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: InkWell(
-                    onTap: _busy ? null : _toggleBackend,
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _useRustBackend ? Icons.memory : Icons.phone_android,
-                            size: 14,
-                            color: _useRustBackend
-                                ? Colors.greenAccent
-                                : Colors.white70,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _useRustBackend ? 'Rust' : 'Native',
-                            style: TextStyle(
-                              color: _useRustBackend
-                                  ? Colors.greenAccent
-                                  : Colors.white70,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.memory,
+                        size: 14,
+                        color: Colors.greenAccent,
                       ),
-                    ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Rust',
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Diagnostics button (Rust only)
-                if (_useRustBackend)
-                  IconButton(
-                    icon: Icon(
-                      Icons.analytics_outlined,
-                      color: _showDiagnostics ? Colors.greenAccent : Colors.white54,
-                      size: 20,
-                    ),
-                    onPressed: () {
-                      setState(() => _showDiagnostics = !_showDiagnostics);
-                    },
-                    tooltip: 'Diagnostics',
+                IconButton(
+                  icon: Icon(
+                    Icons.analytics_outlined,
+                    color: _showDiagnostics ? Colors.greenAccent : Colors.white54,
+                    size: 20,
                   ),
+                  onPressed: () {
+                    setState(() => _showDiagnostics = !_showDiagnostics);
+                  },
+                  tooltip: 'Diagnostics',
+                ),
                 TextButton.icon(
                   onPressed: _runPosterFrameBridge,
                   icon: const Icon(Icons.portrait, color: Colors.white70, size: 18),
@@ -1907,35 +1521,15 @@ ProcessingPhase.decoding => 'Decoding',
                                   return ValueListenableBuilder<double>(
                                     valueListenable: _playheadNotifier,
                                     builder: (context, playheadSec, _) {
-                                      if (_useRustBackend) {
-                                        final rustBackend = _backend as RustBackend?;
-                                        if (rustBackend == null) {
-                                          return const Center(
-                                            child: CircularProgressIndicator(color: Colors.white),
-                                          );
-                                        }
-                                        return RustVideoCanvas(
-                                          key: ValueKey(_currentPlaybackPath),
-                                          backend: rustBackend,
-                                          overlays: _timeline.overlays,
-                                          timelinePlayheadMs:
-                                              (playheadSec * 1000).round(),
-                                          selectedOverlayId:
-                                              _timeline.selectedOverlayId,
-                                          onSelectOverlay: (id) {
-                                            _timeline.selectOverlay(id);
-                                            setState(() {});
-                                          },
-                                          onOverlayChanged: (item) {
-                                            _timeline.updateOverlay(item);
-                                            setState(() {});
-                                          },
-                                          showDiagnostics: _showDiagnostics,
+                                      final rustBackend = _backend as RustBackend?;
+                                      if (rustBackend == null) {
+                                        return const Center(
+                                          child: CircularProgressIndicator(color: Colors.white),
                                         );
                                       }
-                                      return NativeVideoCanvas(
-                                        key: ValueKey(_currentPlaybackPath),
-                                        controller: _player!,
+                                      return RustVideoCanvas(
+                                        key: ValueKey(widget.initialPath),
+                                        backend: rustBackend,
                                         overlays: _timeline.overlays,
                                         timelinePlayheadMs:
                                             (playheadSec * 1000).round(),
@@ -1949,6 +1543,7 @@ ProcessingPhase.decoding => 'Decoding',
                                           _timeline.updateOverlay(item);
                                           setState(() {});
                                         },
+                                        showDiagnostics: _showDiagnostics,
                                       );
                                     },
                                   );
@@ -1957,13 +1552,9 @@ ProcessingPhase.decoding => 'Decoding',
                               // Play Button Overlay
                               Positioned.fill(
                                 child: ListenableBuilder(
-                                  listenable: _useRustBackend
-                                      ? (_backend ?? _dummyNotifier)
-                                      : (_player ?? _dummyNotifier),
+                                  listenable: _backend ?? _dummyNotifier,
                                   builder: (context, _) {
-                                    final playing = _useRustBackend
-                                        ? (_backend?.isPlaying ?? false)
-                                        : (_player?.isPlaying ?? false);
+                                    final playing = _backend?.isPlaying ?? false;
                                     if (playing) return const SizedBox.shrink();
                                     return Center(
                                       child: GestureDetector(
@@ -2010,7 +1601,7 @@ ProcessingPhase.decoding => 'Decoding',
         ),
 
         // Diagnostics Panel
-        if (isLoaded && _useRustBackend && _showDiagnostics)
+        if (isLoaded && _showDiagnostics)
           Padding(
             padding: EdgeInsets.only(right: isWide ? inspectorWidth : 0),
             child: SizedBox(
@@ -2022,7 +1613,7 @@ ProcessingPhase.decoding => 'Decoding',
           ),
 
         // Waveform Visualizer (renders even when muted)
-        if (isLoaded && _useRustBackend && _backend is RustBackend)
+        if (isLoaded && _backend is RustBackend)
           Padding(
             padding: EdgeInsets.only(right: isWide ? inspectorWidth : 0),
             child: AudioWaveformVisualizer(
@@ -2097,13 +1688,9 @@ ProcessingPhase.decoding => 'Decoding',
         children: [
           // Play/Pause button
           ListenableBuilder(
-            listenable: _useRustBackend
-                ? (_backend ?? _dummyNotifier)
-                : (_player ?? _dummyNotifier),
+            listenable: _backend ?? _dummyNotifier,
             builder: (context, _) {
-              final playing = _useRustBackend
-                  ? (_backend?.isPlaying ?? false)
-                  : (_player?.isPlaying ?? false);
+              final playing = _backend?.isPlaying ?? false;
               return InkWell(
                 onTap: _togglePlayback,
                 borderRadius: BorderRadius.circular(20),
@@ -2160,11 +1747,7 @@ ProcessingPhase.decoding => 'Decoding',
                     min: 0,
                     max: _timelineDurationSec > 0 ? _timelineDurationSec : 0.01,
                     onChangeStart: (v) {
-                      if (_useRustBackend) {
-                        _backend?.pause();
-                      } else {
-                        _player?.pause();
-                      }
+                      _backend?.pause();
                     },
                     onChanged: (v) {
                       final snapped = _snapPlayhead(v);
@@ -2176,11 +1759,7 @@ ProcessingPhase.decoding => 'Decoding',
                       final snapped = _snapPlayhead(v);
                       _playheadSec = snapped;
                       _playheadNotifier.value = snapped;
-                      if (_useRustBackend) {
-                        _backend?.play();
-                      } else {
-                        _player?.play();
-                      }
+                      _backend?.play();
                     },
                   ),
                 );
@@ -2663,7 +2242,6 @@ ProcessingPhase.decoding => 'Decoding',
                         inactiveColor: Colors.white10,
                         onChanged: (v) {
                           _timeline.updateAudioClip(clip.copyWith(volume: v, muted: v == 0));
-                          _invalidatePreviewMux();
                           setState(() {});
                         },
                       ),
@@ -2702,7 +2280,6 @@ ProcessingPhase.decoding => 'Decoding',
                     sourceStartMs: clip.sourceStartMs,
                     onSourceStartChanged: (ms) {
                       _timeline.updateAudioClip(clip.copyWith(sourceStartMs: ms));
-                      _invalidatePreviewMux();
                       // Seek playhead to clip start so user hears the result
                       _playheadSec = clip.timelineStartMs / 1000.0;
                       _playheadNotifier.value = _playheadSec;
@@ -2740,7 +2317,6 @@ ProcessingPhase.decoding => 'Decoding',
                     onChanged: (v) {
                       final newStart = v.round();
                       _timeline.updateAudioClip(clip.copyWith(timelineStartMs: newStart));
-                      _invalidatePreviewMux();
                       // Seek playhead to new clip start
                       _playheadSec = newStart / 1000.0;
                       _playheadNotifier.value = _playheadSec;
@@ -2772,13 +2348,8 @@ ProcessingPhase.decoding => 'Decoding',
               setState(() {
                 _muteOriginalAudio = v;
               });
-              _invalidatePreviewMux();
               if (_exportAudioTracks().isEmpty) {
-                if (_useRustBackend) {
-                  _backend?.setEmbeddedAudioMuted(v);
-                } else {
-                  _player?.setEmbeddedAudioMuted(v);
-                }
+                _backend?.setEmbeddedAudioMuted(v);
               }
             },
           ),
@@ -2787,7 +2358,6 @@ ProcessingPhase.decoding => 'Decoding',
         FilledButton.icon(
           onPressed: () {
             _timeline.removeAudioClip(clip.id);
-            _invalidatePreviewMux();
             _clearSelections();
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
@@ -3096,20 +2666,8 @@ ProcessingPhase.decoding => 'Decoding',
           startSeconds: _startSec,
           endSeconds: _endSec,
           onRangeChanged: _onRangeChanged,
-          onDragStart: () {
-            if (_useRustBackend) {
-              _backend?.pause();
-            } else {
-              _player?.pause();
-            }
-          },
-          onDragEnd: () {
-            if (_useRustBackend) {
-              _backend?.play();
-            } else {
-              _player?.play();
-            }
-          },
+          onDragStart: () => _backend?.pause(),
+          onDragEnd: () => _backend?.play(),
         ),
       ],
     );
@@ -3197,12 +2755,10 @@ class _StatLine extends StatelessWidget {
 class _CommandPaletteDialog extends StatefulWidget {
   const _CommandPaletteDialog({
     required this.onAction,
-    required this.useRustBackend,
     required this.showDiagnostics,
   });
 
   final ValueChanged<String> onAction;
-  final bool useRustBackend;
   final bool showDiagnostics;
 
   @override
@@ -3247,18 +2803,11 @@ class _CommandPaletteDialogState extends State<_CommandPaletteDialog> {
       icon: Icons.play_arrow,
     ),
     _CommandPaletteItem(
-      id: 'toggle_backend',
-      title: widget.useRustBackend ? 'Switch to Native Backend' : 'Switch to Rust Backend',
-      subtitle: 'Toggle between Flutter video_player and Rust MediaRuntime',
-      icon: Icons.memory,
+      id: 'toggle_diagnostics',
+      title: widget.showDiagnostics ? 'Hide Diagnostics Panel' : 'Show Diagnostics Panel',
+      subtitle: 'Show performance metrics and GPU render details',
+      icon: Icons.analytics_outlined,
     ),
-    if (widget.useRustBackend)
-      _CommandPaletteItem(
-        id: 'toggle_diagnostics',
-        title: widget.showDiagnostics ? 'Hide Diagnostics Panel' : 'Show Diagnostics Panel',
-        subtitle: 'Show performance metrics and GPU render details',
-        icon: Icons.analytics_outlined,
-      ),
     const _CommandPaletteItem(
       id: 'clear_overlays',
       title: 'Clear All Overlays',

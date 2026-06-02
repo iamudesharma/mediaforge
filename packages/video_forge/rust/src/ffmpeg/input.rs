@@ -135,6 +135,10 @@ fn remote_input_dictionary() -> Dictionary<'static> {
     dict.set("recv_buffer_size", "131072");
     dict.set("icy", "0");
     dict.set("listen_timeout", "10000000"); // 10s microseconds
+    dict.set("http_persistent", "1");
+    dict.set("reconnect_on_network_error", "1");
+    dict.set("reconnect_at_eof", "1");
+    dict.set("buffer_size", "2097152"); // 2MB prefetch
     dict
 }
 

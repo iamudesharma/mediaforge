@@ -2419,7 +2419,22 @@ impl MediaPlaybackEngine {
         // Stop any current demuxer session
         self.stop_demuxer_session();
 
-        let mut ictx = ffmpeg_next::format::input(&path)?;
+        // Use elevated probesize/analyzeduration for MP4/MOV/M4V so that
+        // containers with mpeg4/mp4v or unusual codec params (e.g. "unspecified
+        // size") get fully resolved before we try to open the decoder.
+        // Without this, FFmpeg reports "Could not find codec parameters" and
+        // avcodec_open2 fails → SW pipeline returns None → blank video.
+        let probe_dict = {
+            let lower = path.to_ascii_lowercase();
+            let mut dict = ffmpeg_next::Dictionary::new();
+            if lower.ends_with(".mov") || lower.ends_with(".mp4") || lower.ends_with(".m4v") {
+                dict.set("analyzeduration", "5000000"); // 5 seconds
+                dict.set("probesize",       "20000000"); // 20 MB
+            }
+            dict
+        };
+        let mut ictx = ffmpeg_next::format::input_with_dictionary(&path, probe_dict)
+            .map_err(|e| anyhow::anyhow!("Failed to open file '{}': {:?}", path, e))?;
         let duration_ms = if ictx.duration() >= 0 {
             (ictx.duration() / 1000) as u64
         } else {
@@ -2643,6 +2658,15 @@ impl MediaPlaybackEngine {
         runtime_log!("[MediaPlaybackEngine] Pausing clock");
         self.presenter_runtime.stop();
         self.clock.pause();
+        // Flush frame queues so decoder threads stop filling them after the
+        // presenter exits. Without this flush, the queues reach their capacity
+        // (64 video / 32 audio frames), hold ~160 MB of CVPixelBuffer refs, and
+        // trigger an OS memory pressure warning. flush_video() releases all
+        // CVPixelBuffer +1 refs immediately. The decoders will refill from
+        // their current position when play() is called again.
+        self.video_frame_queue.flush_video();
+        self.audio_frame_queue.flush();
+        runtime_log!("[MediaPlaybackEngine] Frame queues flushed on pause (video+audio)");
     }
 
     pub fn set_rate(&self, rate: f64) {

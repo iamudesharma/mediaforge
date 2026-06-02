@@ -2,7 +2,7 @@ PODS:
   - FlutterMacOS (1.0.0)
   - media_forge (0.1.0):
     - FlutterMacOS
-  - pixel_surface (1.0.0):
+  - pixel_surface (1.1.0):
     - FlutterMacOS
 
 DEPENDENCIES:
@@ -21,7 +21,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   media_forge: 040fd1b0605fb909fded6c789625287e402811f0
-  pixel_surface: 0919a715582214fdf96ac32224bfc17fbc5f317e
+  pixel_surface: 8db9295d88b142073a9f28bb10931e7fb2ae40a1
 
 PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
 

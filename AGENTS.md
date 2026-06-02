@@ -170,20 +170,18 @@ Rust:  AudioRuntime.start() → cpal output stream
 
 ## **media_studio: audio preview architecture**
 
-Background audio in `examples/media_studio` is **not** played by a second Flutter audio player during preview.
+The `examples/media_studio` example uses a **single Rust-backed playback path** for both the timeline preview and the home screen status previews — no `video_player`, no Flutter audio session conflict.
 
 | Layer | Role |
 | ----- | ---- |
-| `video_creator_flow.dart` | Timeline UI, play/pause, seeks; calls preview mux when overlay tracks exist |
-| `preview_playback_mux.dart` | Builds a temporary MP4 via `VideoProcessor.compressJob` (same mix path as export) |
-| `video_forge` → `audio_mix.rs` | FFmpeg mix: original video audio + timeline `AudioTrackInput` lanes → one AAC stream |
-| `NativePlaybackController` | Single `video_player` instance plays either the source file or the muxed preview file |
+| `video_creator_flow.dart` | Timeline UI, play/pause, seeks; calls `RustBackend.syncOverlayTracks()` whenever the audio clips change |
+| `RustBackend` (`services/rust_backend.dart`) | Wraps `MediaPlaybackEngine` from `media_forge`. Demuxes the source file, decodes video + audio, uploads frames to a GPU texture |
+| `media_forge` → cpal callback | Real-time mix of source audio + overlay tracks → output device. No temp file, no separate Flutter player |
+| `RustStatusPlayer` (`widgets/rust_status_player.dart`) | Standalone `RustBackend` for full-screen status previews in the home Updates strip |
 
-**Design rule (CapCut / Instagram style):** one playback clock, one mixed soundtrack for preview — not `video_player` + `just_audio` fighting for the macOS audio session.
+**Design rule (CapCut / Instagram style):** one playback clock, one mixed soundtrack, in the Rust runtime — not `video_player` + `just_audio` fighting for the macOS audio session, and no FFmpeg preview-mux round-trip.
 
-When using the **Rust backend** (`_useRustBackend = true`), overlays are mixed in real-time by `media_forge`'s cpal callback — no preview mux is needed. The `syncOverlayTracks()` method on `RustBackend` adds/removes overlay tracks directly.
-
-**After changing Rust in `audio_mix.rs` or transcode:** hot restart is **not** enough. Rebuild native video core and re-run the app (e.g. `./scripts/run-video-macos.sh`). Old `preview_*.mp4` files in cache may have been built with a previous buggy encoder; delete `~/Library/Caches/.../preview_mux/` or add a new track to force a fresh mux.
+The home status player and the timeline player are completely independent `RustBackend` instances (each with its own GPU texture handle) so opening / closing the home dialog does not disturb the timeline.
 
 **After changing Rust in `media_forge/rust/src/api/runtime.rs`:** rebuild the native media core and re-run (e.g. `./scripts/run-rust-media-macos.sh`).
 
@@ -199,34 +197,24 @@ When the user reports "added audio track does not play", work **top to bottom**.
 - `muteOriginalAudio` matches the UI ("Mute original video audio").
 - Playhead is inside the clip window (`timelineStartMs` … `timelineEndMs`); outside range → no audio by design.
 
-### Step 2 — Confirm mux ran (Dart logs) — Native backend only
+### Step 2 — Confirm Rust real-time audio mixing (Rust logs)
 
-Look for these lines in order:
+`media_studio` no longer does a preview-mux round-trip. Overlay audio is mixed in real time by the cpal callback. Look for these in order:
 
 ```
-[PreviewMux] building .../preview_<key>.mp4 (N track(s))
-[PreviewMux] ready <duration>ms → <path>
-[PreviewMux] ensure ready path=... current=... usesMux=... needsReopen=...
-[PreviewMux] opened muxed=true path=... isOpen=true duration=...ms playAfterOpen=...
+[AudioRuntime] cpal audio stream started successfully: rate=... channels=...
+[AudioRuntime] Added overlay id=N path=... vol=... start=...ms dur=...ms source_start=...ms
+[OverlayDemuxer] id=N started
+[OverlayDemuxer] id=N initial seek to ...ms succeeded (master=...ms)
+[OverlayDecoder] id=N started
 ```
 
 | Log | Healthy meaning | If missing / wrong |
 | --- | ----------------- | ------------------ |
-| `building` | FFmpeg job started | No overlay tracks, or `PreviewPlaybackMux.ensure` not called |
-| `ready` | Output file exists and has duration | Compress/mix failed; check `Preview mix failed` |
-| `ensure ready` | Cache hit/miss and reopen decision | Stale cache key; path mismatch |
-| `opened` | Player switched to mux file | Still on `widget.initialPath` → `usesMux=false` or reopen skipped |
-
-### Step 2b — Confirm Rust backend audio mixing (Rust logs) — Rust backend
-
-When using the Rust backend (`_useRustBackend = true`), overlay audio is mixed in real-time by the cpal callback. Look for:
-
-```
-[AudioRuntime] Added overlay id=N path=... vol=... start=...ms dur=...ms source_start=...ms
-[AudioRuntime] cpal audio stream started successfully: rate=... channels=...
-[OverlayDemuxer] id=N initial seek to ...ms succeeded (master=...ms)
-[OverlayDecoder] id=N started
-```
+| `cpal audio stream started` | Output device ready | FFmpeg/cpal init failed → no audio at all |
+| `Added overlay id=N` | Overlay track registered with the engine | `syncOverlayTracks` not called from `_onTimelineUpdated` |
+| `OverlayDemuxer` start + initial seek | Overlay demuxer positioned at master clock | `master=NaN` or seek exception → overlay silent from start |
+| `OverlayDecoder started` | Overlay decoder thread is alive | Decoder thread crashed → overlay silent |
 
 If overlays are present but source audio is silent while overlay audio plays:
 1. Check `[AudioRuntime] Muted=...` — if `true`, source audio is deliberately muted (user toggle or bug).
@@ -234,43 +222,7 @@ If overlays are present but source audio is silent while overlay audio plays:
 3. Check source `FrameQueue` fullness — if always empty, the audio decoder thread may be starved by CPU contention (many overlay threads).
 4. Check the cpal callback mixer — source audio `current_frame` should not be `None` for extended periods during playback.
 
-### Step 3 — Confirm player handoff (Dart logs) — Native backend only
-
-```
-[NativePlayback] open path=... duration=...ms audio=... muted=false
-[NativePlayback] volume path=... muted=false
-[NativePlayback] play path=... pos=...ms trim=... playing=true
-```
-
-| Log | Healthy meaning | Red flag |
-| --- | ----------------- | -------- |
-| `open` | `video_player` initialized on mux path | `open` still shows original Downloads path after play with tracks |
-| `volume muted=false` | Embedded audio not silenced on mux | `muted=true` while muxed (UI or export sheet toggled volume) |
-| `play ... playing=true` | Controller thinks it is playing | `playing=true` but user hears nothing → **suspect file/container**, not Dart |
-
-**Misleading case:** `playing=true` with **no sound** usually means the MP4 is bad for AVPlayer, not that `play()` was never called.
-
-### Step 4 — Verify the mux file outside Flutter (required before more Dart changes) — Native backend only
-
-On the path from `[PreviewMux] ready`:
-
-```bash
-# Streams present?
-ffprobe -v error -show_entries stream=codec_type,codec_name,profile,duration \
-  -of default=noprint_wrappers=1 "/path/to/preview_*.mp4"
-
-# Audible signal? (should NOT be silent)
-ffmpeg -hide_banner -i "/path/to/preview_*.mp4" -map 0:a:0 -af volumedetect -f null - 2>&1
-```
-
-| Observation | Interpretation |
-| ------------- | ---------------- |
-| No audio stream | Rust mix/export bug |
-| Audio stream, `volumedetect` shows mean/max dB | File is fine; bug is player/session/UI mute |
-| AAC `profile=-1` or missing vs source `AAC LC` | Rust AAC mux header/extradata bug (`audio_mix.rs` — encoder must be **opened before** `write_header`) |
-| FFmpeg loud, AVPlayer silent | Classic "decodeable but AVFoundation-hostile" container — fix Rust mux, not Flutter |
-
-### Step 5 — What we fixed once (do not reintroduce)
+### Step 3 — What we fixed once (do not reintroduce)
 
 | Wrong approach | Why it failed |
 | -------------- | ------------- |
@@ -279,6 +231,7 @@ ffmpeg -hide_banner -i "/path/to/preview_*.mp4" -map 0:a:0 -af volumedetect -f n
 | Muting original video whenever overlay exists | User hears nothing if overlay path fails |
 | AAC stream added in `add_aac_output_stream` **before** `avcodec_open2` | MP4 missing proper AAC extradata; FFmpeg plays, AVPlayer often silent |
 | Per-sample per-overlay Mutex locking in cpal callback | Priority inversion with 8+ overlay tracks: real-time audio callback blocked by decoder thread contention → source audio dropouts |
+| Two `RustBackend` instances in the home status player and timeline | Both fighting for the macOS audio session via cpal — one stops. Each player uses its **own** `MediaPlaybackEngine` so the audio devices are independent. |
 
 ## **media_studio preview: log tags (reference)**
 

@@ -173,7 +173,7 @@ class _ThumbTile extends StatelessWidget {
       fit: BoxFit.cover,
       gaplessPlayback: true,
       cacheWidth: cacheWidth,
-      errorBuilder: (_, __, ___) => const ColoredBox(
+      errorBuilder: (context, error, stackTrace) => const ColoredBox(
         color: Color(0xFF303030),
         child: Icon(Icons.broken_image_outlined, color: Colors.white38, size: 18),
       ),

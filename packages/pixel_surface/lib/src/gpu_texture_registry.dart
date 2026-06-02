@@ -279,36 +279,54 @@ class PixelSurfaceStats {
     required this.trimEventCount,
     required this.recycledBitmapCount,
     required this.lastTrimLevel,
+    this.bitmapPoolSize = 0,
+    this.bitmapPoolReuseCount = 0,
   });
 
   /// Live Flutter texture handles.
   final int handleCount;
 
-  /// Number of `CVPixelBufferPool` buckets currently in use (Apple).
+  /// Number of pool buckets currently live.
+  ///
+  /// - Apple: distinct `(width, height, format)` keys active in the
+  ///   `CVPixelBufferPool`.
+  /// - Android: number of distinct `(width, height, config)` key buckets
+  ///   held in the `BitmapPool` (`bitmapPool_poolCount`).
   final int poolCount;
 
-  /// Total `CVPixelBufferPoolCreatePixelBuffer` calls served (Apple).
-  /// Note that the standard `CVPixelBufferPool` may internally reuse
-  /// memory across calls — this is the *call count*, not the
-  /// *fresh allocation count*.
+  /// Cumulative pool-backed allocations served.
+  ///
+  /// - Apple: total `CVPixelBufferPoolCreatePixelBuffer` calls.
+  /// - Android: total fresh `Bitmap.createBitmap` calls (`bitmapPool_createCount`).
   final int createCount;
 
-  /// `CFAbsoluteTimeGetCurrent()` of the last `pool.flushAll()` (Apple).
+  /// Timestamp of the last `pool.flushAll()` call (Apple, seconds since
+  /// CFAbsoluteTime epoch). Always 0 on Android.
   final double lastFlushMs;
 
-  /// `CFAbsoluteTimeGetCurrent()` of the last memory/thermal warning
-  /// handled by the plugin (Apple).
+  /// Timestamp of the last memory/thermal warning handled (Apple). Always
+  /// 0 on Android.
   final double lastMemoryWarningMs;
 
   /// Cumulative `ComponentCallbacks2.onTrimMemory` events received (Android).
+  /// Always 0 on Apple.
   final int trimEventCount;
 
-  /// Cumulative backing-bitmap recycles (Android).
+  /// Cumulative backing-bitmap recycles triggered by memory pressure (Android).
+  /// Always 0 on Apple.
   final int recycledBitmapCount;
 
   /// Level code of the most recent `onTrimMemory` event (Android). -1 if
-  /// the plugin has not seen any trim event yet.
+  /// the plugin has not seen any trim event yet. Always -1 on Apple.
   final int lastTrimLevel;
+
+  /// Total bitmaps currently sitting idle in the `BitmapPool` across all
+  /// `(width, height, config)` buckets (Android only). Always 0 on Apple.
+  final int bitmapPoolSize;
+
+  /// Cumulative bitmap acquisitions that were served from the pool without
+  /// a fresh allocation (Android only). Always 0 on Apple.
+  final int bitmapPoolReuseCount;
 
   static const empty = PixelSurfaceStats(
     handleCount: 0,
@@ -319,6 +337,8 @@ class PixelSurfaceStats {
     trimEventCount: 0,
     recycledBitmapCount: 0,
     lastTrimLevel: -1,
+    bitmapPoolSize: 0,
+    bitmapPoolReuseCount: 0,
   );
 
   factory PixelSurfaceStats.fromMap(Map<Object?, Object?> map) {
@@ -336,15 +356,24 @@ class PixelSurfaceStats {
       return fallback;
     }
 
+    // Android BitmapPool metrics arrive under `bitmapPool_*` keys.
+    // On Apple these keys are absent; intAt() returns the fallback of 0.
+    // poolCount / createCount are mapped from bitmapPool equivalents on
+    // Android so the cross-platform fields stay meaningful.
+    final bool isAndroid = map.containsKey('bitmapPool_createCount');
     return PixelSurfaceStats(
       handleCount: intAt('handleCount'),
-      poolCount: intAt('poolCount'),
-      createCount: intAt('createCount'),
+      poolCount:
+          isAndroid ? intAt('bitmapPool_poolCount') : intAt('poolCount'),
+      createCount:
+          isAndroid ? intAt('bitmapPool_createCount') : intAt('createCount'),
       lastFlushMs: doubleAt('lastFlushMs'),
       lastMemoryWarningMs: doubleAt('lastMemoryWarningMs'),
       trimEventCount: intAt('trimEventCount'),
       recycledBitmapCount: intAt('recycledBitmapCount'),
       lastTrimLevel: intAt('lastTrimLevel', -1),
+      bitmapPoolSize: intAt('bitmapPool_poolSize'),
+      bitmapPoolReuseCount: intAt('bitmapPool_reuseCount'),
     );
   }
 
@@ -357,6 +386,8 @@ class PixelSurfaceStats {
       'lastMemoryWarningMs=$lastMemoryWarningMs, '
       'trimEventCount=$trimEventCount, '
       'recycledBitmapCount=$recycledBitmapCount, '
-      'lastTrimLevel=$lastTrimLevel'
+      'lastTrimLevel=$lastTrimLevel, '
+      'bitmapPoolSize=$bitmapPoolSize, '
+      'bitmapPoolReuseCount=$bitmapPoolReuseCount'
       ')';
 }

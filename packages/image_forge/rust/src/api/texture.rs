@@ -1,7 +1,6 @@
 use crate::api::face::{BeautyParams, SegmentationMask};
 use crate::api::image::{EditOp, ProcessingBackend, RgbaImageBuffer};
 
-#[cfg(feature = "gpu")]
 use crate::api::face::FaceAnalysisResult;
 #[cfg(feature = "gpu")]
 use crate::gpu::{

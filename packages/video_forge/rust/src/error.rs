@@ -20,6 +20,17 @@ pub enum VideoForgeError {
     QueueFull,
     #[error("internal error: {0}")]
     Internal(String),
+    /// Recovery cooldown active (engine::seek_recovery). The caller
+    /// may escalate to a more aggressive strategy or skip the
+    /// operation. Distinct from `Internal` so callers can pattern-match
+    /// on it.
+    #[error("recovery cooldown active for {0:?}, remaining {1}ms")]
+    CooldownActive(String, u64),
+    /// All attempts of a particular recovery strategy have been
+    /// exhausted. Caller should treat the session as unrecoverable for
+    /// the current failure.
+    #[error("recovery budget exhausted for {0:?}")]
+    RecoveryBudgetExhausted(String),
 }
 
 impl VideoForgeError {
@@ -34,6 +45,8 @@ impl VideoForgeError {
             Self::FfmpegError(_) => "ffmpeg_error",
             Self::QueueFull => "queue_full",
             Self::Internal(_) => "internal",
+            Self::CooldownActive(_, _) => "cooldown_active",
+            Self::RecoveryBudgetExhausted(_) => "recovery_budget_exhausted",
         }
     }
 }
@@ -48,3 +61,35 @@ pub type Result<T> = std::result::Result<T, VideoForgeError>;
     note = "renamed to `VideoForgeError`; will be removed in 2.1.0"
 )]
 pub type VideoProcessorError = VideoForgeError;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cooldown_active_error_codes() {
+        let e = VideoForgeError::CooldownActive("Flush".to_string(), 250);
+        assert_eq!(e.code(), "cooldown_active");
+        let s = format!("{e}");
+        assert!(s.contains("Flush"));
+        assert!(s.contains("250"));
+    }
+
+    #[test]
+    fn recovery_budget_exhausted_error_codes() {
+        let e = VideoForgeError::RecoveryBudgetExhausted("DemuxerReopen".to_string());
+        assert_eq!(e.code(), "recovery_budget_exhausted");
+        let s = format!("{e}");
+        assert!(s.contains("DemuxerReopen"));
+    }
+
+    #[test]
+    fn existing_error_codes_unchanged() {
+        assert_eq!(VideoForgeError::QueueFull.code(), "queue_full");
+        assert_eq!(VideoForgeError::Cancelled.code(), "cancelled");
+        assert_eq!(
+            VideoForgeError::InvalidInput("x".into()).code(),
+            "invalid_input"
+        );
+    }
+}

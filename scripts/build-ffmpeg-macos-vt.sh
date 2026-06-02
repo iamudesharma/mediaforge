@@ -56,8 +56,8 @@ fi
   --enable-protocol=file \
   --enable-demuxer=mov,mp4,m4v,matroska,mp3,wav,ogg,flac,aac \
   --enable-muxer=mp4 \
-  --enable-decoder=h264,hevc,aac,mp3,flac,vorbis,opus,pcm_s16le,pcm_s24le,pcm_f32le \
-  --enable-parser=h264,hevc,aac \
+  --enable-decoder=h264,hevc,aac,mp3,flac,vorbis,opus,pcm_s16le,pcm_s24le,pcm_f32le,mpeg4,msmpeg4v2,msmpeg4v3,h263,h263i,h263p \
+  --enable-parser=h264,hevc,aac,mpeg4video,h263 \
   --enable-videotoolbox \
   --enable-hwaccel=h264_videotoolbox,hevc_videotoolbox \
   --enable-small

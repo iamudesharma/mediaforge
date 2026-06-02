@@ -2323,6 +2323,15 @@ impl SseDecode for crate::error::VideoForgeError {
                 let mut var_field0 = <String>::sse_decode(deserializer);
                 return crate::error::VideoForgeError::Internal(var_field0);
             }
+            9 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                let mut var_field1 = <u64>::sse_decode(deserializer);
+                return crate::error::VideoForgeError::CooldownActive(var_field0, var_field1);
+            }
+            10 => {
+                let mut var_field0 = <String>::sse_decode(deserializer);
+                return crate::error::VideoForgeError::RecoveryBudgetExhausted(var_field0);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -3061,6 +3070,15 @@ impl flutter_rust_bridge::IntoDart for crate::error::VideoForgeError {
             crate::error::VideoForgeError::Internal(field0) => {
                 [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
+            crate::error::VideoForgeError::CooldownActive(field0, field1) => [
+                9.into_dart(),
+                field0.into_into_dart().into_dart(),
+                field1.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::error::VideoForgeError::RecoveryBudgetExhausted(field0) => {
+                [10.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -3761,6 +3779,15 @@ impl SseEncode for crate::error::VideoForgeError {
             }
             crate::error::VideoForgeError::Internal(field0) => {
                 <i32>::sse_encode(8, serializer);
+                <String>::sse_encode(field0, serializer);
+            }
+            crate::error::VideoForgeError::CooldownActive(field0, field1) => {
+                <i32>::sse_encode(9, serializer);
+                <String>::sse_encode(field0, serializer);
+                <u64>::sse_encode(field1, serializer);
+            }
+            crate::error::VideoForgeError::RecoveryBudgetExhausted(field0) => {
+                <i32>::sse_encode(10, serializer);
                 <String>::sse_encode(field0, serializer);
             }
             _ => {

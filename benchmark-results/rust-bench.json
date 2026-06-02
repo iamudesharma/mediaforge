@@ -1,8 +1,8 @@
 {
   "platform": "macos",
-  "rust_version": "1.0.0",
-  "timestamp_utc": "1780328202",
-  "compress_preset": "medium · h264 · hardware encoder (prefer_hardware_encoder) · include_audio",
+  "rust_version": "2.4.0",
+  "timestamp_utc": "1780382409",
+  "compress_preset": "medium · h264 · software encoder · include_audio",
   "rows": [
     {
       "scenario_id": "local_small_probe",
@@ -12,7 +12,7 @@
       "operation": "probe",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 30,
+      "duration_ms": 6,
       "success": true,
       "encoder": "h264 640x360"
     },
@@ -24,12 +24,12 @@
       "operation": "compress",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 748,
+      "duration_ms": 653,
       "success": true,
-      "output_bytes": 563214,
-      "encoder": "h264_videotoolbox",
-      "used_hardware": true,
-      "pipeline_mode": "vt_zero_copy"
+      "output_bytes": 861134,
+      "encoder": "libx264",
+      "used_hardware": false,
+      "pipeline_mode": "sw_decode"
     },
     {
       "scenario_id": "local_small_thumbnail",
@@ -39,9 +39,9 @@
       "operation": "thumbnail",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 38,
-      "success": false,
-      "error": "invalid input: could not decode thumbnail at 2000ms"
+      "duration_ms": 54,
+      "success": true,
+      "output_bytes": 58116
     },
     {
       "scenario_id": "local_small_batch_10",
@@ -51,9 +51,9 @@
       "operation": "batch_thumbnails_10",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 52,
+      "duration_ms": 255,
       "success": true,
-      "output_bytes": 195901,
+      "output_bytes": 188947,
       "encoder": "10 frames"
     },
     {
@@ -64,7 +64,7 @@
       "operation": "probe",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 764,
+      "duration_ms": 675,
       "success": true,
       "encoder": "h264 640x360"
     },
@@ -76,12 +76,12 @@
       "operation": "compress",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 1258,
+      "duration_ms": 1561,
       "success": true,
-      "output_bytes": 563214,
-      "encoder": "h264_videotoolbox",
-      "used_hardware": true,
-      "pipeline_mode": "vt_zero_copy"
+      "output_bytes": 864255,
+      "encoder": "libx264",
+      "used_hardware": false,
+      "pipeline_mode": "sw_decode"
     },
     {
       "scenario_id": "network_small_thumbnail",
@@ -91,9 +91,9 @@
       "operation": "thumbnail",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 10272,
-      "success": false,
-      "error": "invalid input: could not decode thumbnail at 2000ms"
+      "duration_ms": 1312,
+      "success": true,
+      "output_bytes": 58116
     },
     {
       "scenario_id": "network_small_batch_10",
@@ -103,9 +103,9 @@
       "operation": "batch_thumbnails_10",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 1375,
+      "duration_ms": 1569,
       "success": true,
-      "output_bytes": 195901,
+      "output_bytes": 188947,
       "encoder": "10 frames"
     },
     {
@@ -116,7 +116,7 @@
       "operation": "probe",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 35,
+      "duration_ms": 26,
       "success": true,
       "encoder": "h264 1280x720"
     },
@@ -128,12 +128,12 @@
       "operation": "compress",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 1045,
+      "duration_ms": 2308,
       "success": true,
-      "output_bytes": 2023656,
-      "encoder": "h264_videotoolbox",
-      "used_hardware": true,
-      "pipeline_mode": "vt_gpu_scale"
+      "output_bytes": 3099888,
+      "encoder": "libx264",
+      "used_hardware": false,
+      "pipeline_mode": "sw_decode+swscale"
     },
     {
       "scenario_id": "local_medium_thumbnail",
@@ -143,9 +143,9 @@
       "operation": "thumbnail",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 161,
-      "success": false,
-      "error": "invalid input: could not decode thumbnail at 2000ms"
+      "duration_ms": 213,
+      "success": true,
+      "output_bytes": 66534
     },
     {
       "scenario_id": "local_medium_batch_10",
@@ -155,9 +155,9 @@
       "operation": "batch_thumbnails_10",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 178,
+      "duration_ms": 917,
       "success": true,
-      "output_bytes": 213837,
+      "output_bytes": 208203,
       "encoder": "10 frames"
     },
     {
@@ -168,7 +168,7 @@
       "operation": "probe",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 1229,
+      "duration_ms": 1054,
       "success": true,
       "encoder": "h264 1280x720"
     },
@@ -180,12 +180,12 @@
       "operation": "compress",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 40264,
+      "duration_ms": 5887,
       "success": true,
-      "output_bytes": 2023656,
-      "encoder": "h264_videotoolbox",
-      "used_hardware": true,
-      "pipeline_mode": "vt_gpu_scale"
+      "output_bytes": 3100590,
+      "encoder": "libx264",
+      "used_hardware": false,
+      "pipeline_mode": "sw_decode+swscale"
     },
     {
       "scenario_id": "network_medium_thumbnail",
@@ -195,9 +195,9 @@
       "operation": "thumbnail",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 18793,
-      "success": false,
-      "error": "invalid input: could not decode thumbnail at 2000ms"
+      "duration_ms": 2439,
+      "success": true,
+      "output_bytes": 66534
     },
     {
       "scenario_id": "network_medium_batch_10",
@@ -207,9 +207,9 @@
       "operation": "batch_thumbnails_10",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 3266,
+      "duration_ms": 5928,
       "success": true,
-      "output_bytes": 213837,
+      "output_bytes": 208203,
       "encoder": "10 frames"
     },
     {
@@ -220,7 +220,7 @@
       "operation": "probe",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 48,
+      "duration_ms": 51,
       "success": true,
       "encoder": "h264 1920x1080"
     },
@@ -232,12 +232,12 @@
       "operation": "compress",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 3023,
+      "duration_ms": 3019,
       "success": true,
-      "output_bytes": 1899439,
-      "encoder": "h264_videotoolbox",
-      "used_hardware": true,
-      "pipeline_mode": "vt_gpu_scale"
+      "output_bytes": 2925875,
+      "encoder": "libx264",
+      "used_hardware": false,
+      "pipeline_mode": "sw_decode+swscale"
     },
     {
       "scenario_id": "local_large_thumbnail",
@@ -247,9 +247,9 @@
       "operation": "thumbnail",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 343,
+      "duration_ms": 612,
       "success": true,
-      "output_bytes": 73107
+      "output_bytes": 71997
     },
     {
       "scenario_id": "local_large_batch_10",
@@ -259,9 +259,9 @@
       "operation": "batch_thumbnails_10",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 377,
+      "duration_ms": 2645,
       "success": true,
-      "output_bytes": 219863,
+      "output_bytes": 216727,
       "encoder": "10 frames"
     },
     {
@@ -272,7 +272,7 @@
       "operation": "probe",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 1401,
+      "duration_ms": 1154,
       "success": true,
       "encoder": "h264 1920x1080"
     },
@@ -284,12 +284,12 @@
       "operation": "compress",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 4678,
+      "duration_ms": 11421,
       "success": true,
-      "output_bytes": 1899439,
-      "encoder": "h264_videotoolbox",
-      "used_hardware": true,
-      "pipeline_mode": "vt_gpu_scale"
+      "output_bytes": 2936927,
+      "encoder": "libx264",
+      "used_hardware": false,
+      "pipeline_mode": "sw_decode+swscale"
     },
     {
       "scenario_id": "network_large_thumbnail",
@@ -299,9 +299,9 @@
       "operation": "thumbnail",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 16461,
+      "duration_ms": 4157,
       "success": true,
-      "output_bytes": 73107
+      "output_bytes": 71997
     },
     {
       "scenario_id": "network_large_batch_10",
@@ -311,9 +311,9 @@
       "operation": "batch_thumbnails_10",
       "input": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 0,
-      "duration_ms": 3348,
+      "duration_ms": 12435,
       "success": true,
-      "output_bytes": 219863,
+      "output_bytes": 216727,
       "encoder": "10 frames"
     }
   ]

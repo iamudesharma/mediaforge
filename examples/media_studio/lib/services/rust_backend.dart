@@ -117,12 +117,19 @@ class RustBackend extends PlaybackBackend {
     } catch (_) {}
   }
 
-  Future<void> _presentationTick() async {
+  Future<bool> _presentationTick() async {
     final drive = _drive;
-    if (drive == null || _disposed) return;
+    if (drive == null || _disposed) return false;
     try {
-      await drive.presentationTick();
+      final result = await drive.presentationTick();
+      // When paused and a frame was just presented (e.g. after a seek),
+      // stop the timer — we only needed one frame.
+      if (result.hasFrame && !_isPlaying) {
+        _stopPresentationTimer();
+      }
+      return result.hasFrame;
     } catch (_) {}
+    return false;
   }
 
   // ── PlaybackBackend ──
@@ -254,13 +261,16 @@ class RustBackend extends PlaybackBackend {
     try {
       await engine.seek(timeMs: BigInt.from(position.inMilliseconds));
       _presenter?.onSeek();
-      // Present one frame immediately to show the seek target.
-      // If paused, stop the presentation timer after (no more frames coming).
-      // If playing, the running timer will keep pulling new frames.
-      await _presentOneFrame();
-      if (!_isPlaying) {
-        _stopPresentationTimer();
+      if (_isPlaying) {
+        // Presentation timer is already running; it will present the next frame.
+        return;
       }
+      // When paused, the presentation timer isn't running. Start it so it can
+      // keep pulling decoded frames until one appears at the seek target.
+      // The timer auto-stops in _presentationTick once a frame is presented.
+      _startPresentationTimer();
+      // Also try immediately in case the decoder already has a frame.
+      await _presentOneFrame();
     } catch (e) {
       debugPrint('[RustBackend] seek failed: $e');
     }

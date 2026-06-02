@@ -387,15 +387,11 @@ mod imp {
                 return Err("CVMetalTextureGetTexture returned NULL".into());
             }
             // CVMetalTextureGetTexture returns an UNRETAINED reference.
-            // We must NOT transfer any external +1 into the wrapper — the
-            // CV ref owns the MTL lifetime. The CvMetalTexture's Drop will
-            // release the CV ref, which decrements the MTL retain to zero.
-            //
-            // SAFETY: `mtl_raw` is non-null (checked above) and is the
-            // unretained MTLTexture pointer backing the CVMetalTextureRef
-            // we still own. The CvMetalTexture we build below will release
-            // the CV ref (and its bridge-decrement of the MTL retain) in
-            // its Drop. We do not add a +1 to the MTL retain here.
+            // Since `metal::Texture::from_ptr` takes ownership and its Drop
+            // implementation will call `release`, we must explicitly retain
+            // it by +1 first to prevent a double release when both the
+            // `metal_texture` and the `CVMetalTextureRef` are dropped.
+            let _: *mut std::ffi::c_void = objc::msg_send![mtl_raw, retain];
             let metal_texture = metal::Texture::from_ptr(mtl_raw);
 
             let cv_metal = CvMetalTexture {
@@ -471,6 +467,7 @@ mod imp {
     /// `CVPixelBuffer` + `MTLTexture` pointer pairs into a wgpu pipeline.
     /// Construct it via [`BeautyOutputTarget::from_adopted`]; never
     /// assemble one by hand.
+    #[cfg(feature = "gpu")]
     pub struct BeautyOutputTarget {
         /// Borrowed wgpu view of the underlying `MTLTexture`. Must be
         /// dropped first.
@@ -491,9 +488,12 @@ mod imp {
     // SAFETY: `CVPixelBufferRef` and `metal::Texture` are CF / Objective-C
     // objects whose retain/release is thread-safe; `wgpu::Texture` is
     // likewise `Send + Sync` on the same device.
+    #[cfg(feature = "gpu")]
     unsafe impl Send for BeautyOutputTarget {}
+    #[cfg(feature = "gpu")]
     unsafe impl Sync for BeautyOutputTarget {}
 
+    #[cfg(feature = "gpu")]
     impl BeautyOutputTarget {
         /// Borrow the inner wgpu `Texture`. The returned reference is
         /// valid for the lifetime of `self`.
@@ -552,38 +552,27 @@ mod imp {
             let pb_w = unsafe { CVPixelBufferGetWidth(pixel_buffer_ptr) } as u32;
             let pb_h = unsafe { CVPixelBufferGetHeight(pixel_buffer_ptr) } as u32;
             if pb_w == 0 || pb_h == 0 {
+                // Since we haven't adopted them yet, release both +1 pointers from the caller.
+                unsafe { CVPixelBufferRelease(pixel_buffer_ptr) };
+                let _: *mut std::ffi::c_void = unsafe { objc::msg_send![metal_texture_ptr, release] };
                 return None;
             }
-            // SAFETY: we validated non-null above; we adopt the +1
-            // immediately so the wrapper's Drop will release it on any
-            // subsequent failure.
+
+            // Adopt the Metal texture (+1 consumed by this wrapper).
             let metal_texture = unsafe { adopt_metal_texture(metal_texture_ptr) };
             let actual_w = metal_texture.width() as u32;
             let actual_h = metal_texture.height() as u32;
             if actual_w != pb_w || actual_h != pb_h {
-                // Drop the just-adopted metal texture; the pixel_buffer
-                // is still owned by the caller (we never took its +1).
-                // Returning None here is safe because the +1 we just
-                // consumed lives on `metal_texture` and will be released
-                // by its Drop at the end of this scope.
+                // Adopt the CVPixelBuffer +1 so that it is released.
+                // The `metal_texture`'s Drop will automatically release the MTLTexture +1.
+                unsafe { CVPixelBufferRelease(pixel_buffer_ptr) };
                 return None;
             }
 
-            // ----- Step 2: take the +1 on the CVPixelBuffer now that we
-            //                know we want to keep the target. The
-            //                `retain_pixel_buffer` call below transfers
-            //                no ownership from the caller; it just bumps
-            //                the retain count by 1, and we own that
-            //                bump.
-            let owned_pb = retain_pixel_buffer(pixel_buffer_ptr);
+            // Adopt the CVPixelBuffer +1 directly (do NOT double-retain it).
+            let pixel_buffer = pixel_buffer_ptr;
 
-            // ----- Step 3: wgpu import. `wrap_metal_texture_as_wgpu_bgra`
-            //                is unsafe; it asserts the format + 2D in
-            //                debug builds. We catch the unsafe with a
-            //                local block so the outer function can
-            //                remain marked unsafe at the call site
-            //                (the caller still has to promise the
-            //                invariants).
+            // ----- Step 3: wgpu import.
             let wgpu_texture = unsafe {
                 crate::wgpu_metal_import::wrap_metal_texture_as_wgpu_bgra(
                     device,
@@ -596,13 +585,14 @@ mod imp {
             Some(BeautyOutputTarget {
                 wgpu_texture,
                 metal_texture,
-                pixel_buffer: owned_pb,
+                pixel_buffer,
                 width: actual_w,
                 height: actual_h,
             })
         }
     }
 
+    #[cfg(feature = "gpu")]
     impl Drop for BeautyOutputTarget {
         fn drop(&mut self) {
             // The fields are dropped in declaration order: wgpu_texture
@@ -613,8 +603,7 @@ mod imp {
             //
             // We must NOT touch `wgpu_texture` or `metal_texture` here;
             // their own Drop impls handle their respective releases. We
-            // only need to release the `CVPixelBuffer` +1 we explicitly
-            // took via `retain_pixel_buffer`.
+            // only release the adopted CVPixelBuffer once.
             if !self.pixel_buffer.is_null() {
                 unsafe { CVPixelBufferRelease(self.pixel_buffer) };
             }

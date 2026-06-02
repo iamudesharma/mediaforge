@@ -77,6 +77,7 @@ fn iosurface_pixel_buffer_is_send_sync() {
 /// thread-safe because Rust callers move it across threads in the
 /// beauty compute path.
 #[test]
+#[cfg(feature = "gpu")]
 fn beauty_output_target_is_send_sync() {
     fn assert_send<T: Send>() {}
     fn assert_sync<T: Sync>() {}

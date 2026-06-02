@@ -3,10 +3,10 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:video_player/video_player.dart';
 
 import 'services/video_picker.dart';
 import 'services/media_ingest.dart';
+import 'widgets/rust_status_player.dart';
 import 'widgets/updates_strip.dart';
 import 'video_creator_flow.dart';
 import 'photo_editor_flow.dart';
@@ -311,7 +311,7 @@ class _HomeHubState extends State<HomeHub> {
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 24),
                   child: status.isVideo
-                      ? _StatusVideoPlayer(path: status.mediaPath!)
+                      ? RustStatusPlayer(path: status.mediaPath!)
                       : Image.file(
                           File(status.mediaPath!),
                           fit: BoxFit.contain,
@@ -571,50 +571,4 @@ class _CreateCard extends StatelessWidget {
   }
 }
 
-class _StatusVideoPlayer extends StatefulWidget {
-  const _StatusVideoPlayer({required this.path});
 
-  final String path;
-
-  @override
-  State<_StatusVideoPlayer> createState() => _StatusVideoPlayerState();
-}
-
-class _StatusVideoPlayerState extends State<_StatusVideoPlayer> {
-  late final VideoPlayerController _controller;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.file(File(widget.path))
-      ..initialize().then((_) {
-        setState(() {
-          _initialized = true;
-        });
-        _controller.setLooping(true);
-        _controller.play();
-      });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_initialized) {
-      return const SizedBox(
-        height: 200,
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return AspectRatio(
-      aspectRatio: _controller.value.aspectRatio,
-      child: VideoPlayer(_controller),
-    );
-  }
-}

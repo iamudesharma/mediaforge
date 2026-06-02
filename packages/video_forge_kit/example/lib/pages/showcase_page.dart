@@ -501,7 +501,7 @@ class _ShowcasePageState extends State<ShowcasePage> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: _filmstripPaths.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 4),
+              separatorBuilder: (context, index) => const SizedBox(width: 4),
               itemBuilder: (_, i) => ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: Image.file(

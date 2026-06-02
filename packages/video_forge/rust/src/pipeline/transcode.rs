@@ -1014,13 +1014,11 @@ fn try_open_video_encoder(
     }
     encoder.set_max_b_frames(0);
 
-    if encoder_name.contains("mediacodec") {
-        let fps = frame_rate
-            .numerator()
-            .max(1) as u32
-            / frame_rate.denominator().max(1) as u32;
-        encoder.set_gop((fps * 2).max(12));
-    }
+    let fps = frame_rate
+        .numerator()
+        .max(1) as u32
+        / frame_rate.denominator().max(1) as u32;
+    encoder.set_gop((fps * 2).max(12));
 
     let mut dict = Dictionary::new();
     if is_hw {
@@ -1036,6 +1034,10 @@ fn try_open_video_encoder(
     } else if encoder_name == "libx264" || encoder_name == "libx265" {
         dict.set("crf", &crf.to_string());
         dict.set("preset", "medium");
+        if target_bitrate > 0 {
+            dict.set("maxrate", &target_bitrate.to_string());
+            dict.set("bufsize", &(target_bitrate * 2).to_string());
+        }
     } else {
         dict.set("b", &target_bitrate.to_string());
     }

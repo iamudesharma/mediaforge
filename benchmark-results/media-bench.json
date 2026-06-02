@@ -1,6 +1,6 @@
 {
   "platform": "macos",
-  "timestamp_utc": "1780329658",
+  "timestamp_utc": "1780382432",
   "decode_capabilities": {
     "ffmpeg_version": "7.1.1",
     "hevc_vt": true,
@@ -29,7 +29,7 @@
       "operation": "open_file",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 20,
+      "duration_ms": 8,
       "success": true,
       "label": "duration=10000ms"
     },
@@ -41,7 +41,7 @@
       "operation": "first_video_frame",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 210,
+      "duration_ms": 186,
       "success": true
     },
     {
@@ -54,9 +54,9 @@
       "input_bytes": 991017,
       "duration_ms": 2992,
       "success": true,
-      "label": "polls=187 missed=84",
-      "frames": 103,
-      "fps": 34.4
+      "label": "polls=187 missed=86",
+      "frames": 101,
+      "fps": 33.8
     },
     {
       "scenario_id": "media_small_audio_fps",
@@ -94,7 +94,7 @@
       "operation": "seek_recovery",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 39,
+      "duration_ms": 37,
       "success": true,
       "label": "target=5000ms"
     },
@@ -106,7 +106,7 @@
       "operation": "seek_recovery",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 57,
+      "duration_ms": 19,
       "success": true,
       "label": "target=7500ms"
     },
@@ -118,7 +118,7 @@
       "operation": "stop",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_360_10s_1MB.mp4",
       "input_bytes": 991017,
-      "duration_ms": 42,
+      "duration_ms": 49,
       "success": true
     },
     {
@@ -129,7 +129,7 @@
       "operation": "open_file",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 39,
+      "duration_ms": 25,
       "success": true,
       "label": "duration=10000ms"
     },
@@ -141,7 +141,7 @@
       "operation": "first_video_frame",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 59,
+      "duration_ms": 51,
       "success": true
     },
     {
@@ -194,7 +194,7 @@
       "operation": "seek_recovery",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 52,
+      "duration_ms": 57,
       "success": true,
       "label": "target=5000ms"
     },
@@ -218,7 +218,7 @@
       "operation": "stop",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_720_10s_5MB.mp4",
       "input_bytes": 4999379,
-      "duration_ms": 72,
+      "duration_ms": 43,
       "success": true
     },
     {
@@ -229,7 +229,7 @@
       "operation": "open_file",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 49,
+      "duration_ms": 52,
       "success": true,
       "label": "duration=10000ms"
     },
@@ -241,7 +241,7 @@
       "operation": "first_video_frame",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 70,
+      "duration_ms": 76,
       "success": true
     },
     {
@@ -254,9 +254,9 @@
       "input_bytes": 10484984,
       "duration_ms": 2992,
       "success": true,
-      "label": "polls=187 missed=12",
-      "frames": 175,
-      "fps": 58.5
+      "label": "polls=187 missed=11",
+      "frames": 176,
+      "fps": 58.8
     },
     {
       "scenario_id": "media_large_audio_fps",
@@ -294,7 +294,7 @@
       "operation": "seek_recovery",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 56,
+      "duration_ms": 53,
       "success": true,
       "label": "target=5000ms"
     },
@@ -306,7 +306,7 @@
       "operation": "seek_recovery",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 54,
+      "duration_ms": 40,
       "success": true,
       "label": "target=7500ms"
     },
@@ -318,7 +318,7 @@
       "operation": "stop",
       "input": "/Volumes/AppleExpanded/Code/Gym app/rust_image/benchmark-results/fixtures/Big_Buck_Bunny_1080_10s_10MB.mp4",
       "input_bytes": 10484984,
-      "duration_ms": 59,
+      "duration_ms": 50,
       "success": true
     }
   ]

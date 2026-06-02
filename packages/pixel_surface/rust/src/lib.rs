@@ -21,6 +21,10 @@
 pub mod buffer;
 
 #[cfg(target_vendor = "apple")]
+#[macro_use]
+extern crate objc;
+
+#[cfg(target_vendor = "apple")]
 pub mod metal_iosurface;
 
 // Both `wgpu_metal_import` and the `wgpu` re-export require the wgpu `metal`

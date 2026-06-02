@@ -759,7 +759,7 @@ fn decode_one_segmented_target(
         return Ok(false);
     }
     flush_video_decoder(decoder);
-    decoder.skip_frame(Discard::NonKey);
+    decoder.skip_frame(Discard::None);
 
     let mut frame = Video::empty();
     let mut captured = false;
@@ -767,7 +767,6 @@ fn decode_one_segmented_target(
 
     for (s, packet) in ictx.packets() {
         if token.is_cancelled() {
-            decoder.skip_frame(Discard::None);
             return Err(VideoForgeError::Cancelled);
         }
         if s.index() != stream_idx {
@@ -777,7 +776,6 @@ fn decode_one_segmented_target(
 
         while decoder.receive_frame(&mut frame).is_ok() {
             let pts_ms = frame_pts_ms(&frame, tb);
-            apply_skip_until_target(decoder, pts_ms, target_ms, gop_approach_ms);
             last_pts_ms = pts_ms;
 
             if pts_ms >= target_ms {
@@ -815,7 +813,6 @@ fn decode_one_segmented_target(
             );
         }
     }
-
     Ok(captured)
 }
 
@@ -823,10 +820,13 @@ fn apply_skip_until_target(
     decoder: &mut DecoderVideo,
     pts_ms: u64,
     target_ms: u64,
-    gop_approach_ms: u64,
+    _gop_approach_ms: u64,
 ) {
-    let approach = target_ms.saturating_sub(gop_approach_ms);
-    if pts_ms < approach {
+    // To prevent the GOP skip seek discard bug where we might skip the GOP containing target_ms,
+    // we only discard non-keyframes if the next target is far away (e.g., > 3000 ms).
+    // Within 3000 ms, we switch to Discard::None to ensure we decode all reference frames in the target GOP.
+    let distance = target_ms.saturating_sub(pts_ms);
+    if distance > 3000 {
         decoder.skip_frame(Discard::NonKey);
     } else {
         decoder.skip_frame(Discard::None);

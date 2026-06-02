@@ -964,7 +964,7 @@ fn seek_and_decode_playback_rgba(
     color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
 ) -> Result<Option<PreviewFrameRgba>> {
     do_seek(ictx, decoder, stream_idx, tb, target_pts_ms)?;
-    decoder.skip_frame(Discard::NonKey);
+    decoder.skip_frame(Discard::None);
     let min_pts = target_pts_ms.saturating_sub(PLAYBACK_CATCHUP_MARGIN_MS);
 
     let mut frame = VideoFrame::empty();
@@ -977,10 +977,8 @@ fn seek_and_decode_playback_rgba(
         while decoder.receive_frame(&mut frame).is_ok() {
             let frame_pts = frame_pts_ms(&frame, tb);
             if frame_pts < min_pts {
-                decoder.skip_frame(Discard::NonKey);
                 continue;
             }
-            decoder.skip_frame(Discard::None);
             let rgb = video_to_rgb(&frame, max_edge, None, color_scaler, color_src_key)?;
             let rgba = rgb24_to_rgba8888(&rgb.data, rgb.width, rgb.height)?;
             return Ok(Some(PreviewFrameRgba {
@@ -1123,7 +1121,7 @@ fn do_next_frame_pixel_buffer(
 
                 unsafe {
                     let pb =
-                        crate::ffmpeg::vt_pipeline::transfer_vt_frame_to_bgra_pixel_buffer(
+                        crate::engine::vt_pool::transfer_vt_frame_to_bgra_pixel_buffer(
                             session,
                             &frame,
                             out_w as usize,
@@ -1160,7 +1158,7 @@ fn do_next_frame_pixel_buffer(
 
             unsafe {
                 let pb =
-                    crate::ffmpeg::vt_pipeline::transfer_vt_frame_to_bgra_pixel_buffer(
+                    crate::engine::vt_pool::transfer_vt_frame_to_bgra_pixel_buffer(
                         session,
                         &frame,
                         out_w as usize,
@@ -1242,7 +1240,7 @@ fn seek_and_decode_playback_pixel_buffer(
     })?;
 
     do_seek(ictx, decoder, stream_idx, tb, target_pts_ms)?;
-    decoder.skip_frame(Discard::NonKey);
+    decoder.skip_frame(Discard::None);
     let min_pts = target_pts_ms.saturating_sub(PLAYBACK_CATCHUP_MARGIN_MS);
 
     let mut frame = VideoFrame::empty();
@@ -1255,10 +1253,8 @@ fn seek_and_decode_playback_pixel_buffer(
         while decoder.receive_frame(&mut frame).is_ok() {
             let frame_pts = frame_pts_ms(&frame, tb);
             if frame_pts < min_pts {
-                decoder.skip_frame(Discard::NonKey);
                 continue;
             }
-            decoder.skip_frame(Discard::None);
             return Ok(Some(vt_frame_to_pixel_buffer(
                 &frame,
                 tb,
@@ -1377,9 +1373,7 @@ fn do_seek_and_decode_rgba(
     } else {
         do_seek(ictx, decoder, stream_idx, tb, position_ms)?;
     }
-    decoder.skip_frame(Discard::NonKey);
-
-    let gop_approach = PREVIEW_GOP_APPROACH_MS;
+    decoder.skip_frame(Discard::None);
 
     let mut frame = VideoFrame::empty();
     let mut captured = false;
@@ -1394,13 +1388,6 @@ fn do_seek_and_decode_rgba(
 
         while decoder.receive_frame(&mut frame).is_ok() {
             let frame_pts = frame_pts_ms(&frame, tb);
-
-            let approach = position_ms.saturating_sub(gop_approach);
-            if frame_pts < approach {
-                decoder.skip_frame(Discard::NonKey);
-            } else {
-                decoder.skip_frame(Discard::None);
-            }
 
             if frame_pts >= position_ms {
                 pts_ms = frame_pts;
@@ -1477,7 +1464,7 @@ fn do_seek_and_decode_pixel_buffer(
         }
 
         do_seek(ictx, decoder, stream_idx, tb, position_ms)?;
-        decoder.skip_frame(Discard::NonKey);
+        decoder.skip_frame(Discard::None);
 
         let mut frame = VideoFrame::empty();
         let mut captured = false;
@@ -1495,13 +1482,6 @@ fn do_seek_and_decode_pixel_buffer(
 
             while decoder.receive_frame(&mut frame).is_ok() {
                 let frame_pts = frame_pts_ms(&frame, tb);
-
-                let approach = position_ms.saturating_sub(PREVIEW_GOP_APPROACH_MS);
-                if frame_pts < approach {
-                    decoder.skip_frame(Discard::NonKey);
-                } else {
-                    decoder.skip_frame(Discard::None);
-                }
 
                 if frame_pts >= position_ms {
                     pts_ms = frame_pts;
@@ -1541,7 +1521,7 @@ fn do_seek_and_decode_pixel_buffer(
 
         unsafe {
             let pb =
-                crate::ffmpeg::vt_pipeline::transfer_vt_frame_to_bgra_pixel_buffer(
+                crate::engine::vt_pool::transfer_vt_frame_to_bgra_pixel_buffer(
                     session,
                     &frame,
                     out_w as usize,

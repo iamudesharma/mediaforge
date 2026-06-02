@@ -231,16 +231,17 @@ function main() {
   let rustCompressPreset = "n/a";
   if (!skipVideo) {
     console.log("==> Building vp_bench (release)");
+    const videoManifest = join(repoRoot, "packages/video_forge/Cargo.toml");
     if (
       !run("cargo", [
-        "build", "--release", "-p", "video_processor_core", "--bin", "vp_bench",
+        "build", "--release", "--manifest-path", videoManifest, "--bin", "vp_bench",
       ])
     ) {
       process.exit(1);
     }
 
     const benchArgs = [
-      "run", "--release", "-p", "video_processor_core", "--bin", "vp_bench", "--",
+      "run", "--release", "--manifest-path", videoManifest, "--bin", "vp_bench", "--",
       "--fixtures-dir", fixturesDir,
       "--output", join(outDir, "rust-bench.json"),
       "--config", configPath,
@@ -268,7 +269,7 @@ function main() {
   let mediaCaps: MediaReport["decode_capabilities"] | null = null;
   if (!skipMediaRuntime) {
     console.log("==> Building media_bench (release)");
-    const mediaManifest = join(repoRoot, "packages/rust_media_runtime/rust/Cargo.toml");
+    const mediaManifest = join(repoRoot, "packages/media_forge/rust/Cargo.toml");
     if (
       !run("cargo", [
         "build", "--release",
@@ -299,16 +300,16 @@ function main() {
     }
   }
 
-  // ── 3. Image benchmarks (rust_image_benchmark) ──
+  // ── 3. Image benchmarks (image_forge_benchmark) ──
   let imageReport: ImageReport | null = null;
   if (!skipImage) {
-    const imageManifest = join(repoRoot, "packages/rust_image_core/rust/Cargo.toml");
+    const imageManifest = join(repoRoot, "packages/image_forge/rust/Cargo.toml");
     const imageCsv = join(outDir, "image-bench.csv");
     console.log("==> Running image benchmarks");
     runCapture("cargo", [
       "run", "--manifest-path", imageManifest,
       "--release", "--features", "gpu",
-      "--bin", "rust_image_benchmark",
+      "--bin", "image_forge_benchmark",
       "--", "--synthetic", "--iterations", "5", "--csv", imageCsv,
     ]);
 
@@ -489,7 +490,7 @@ function renderUnifiedMarkdown(
       `| ${r.operation} | ${r.mean_ms.toFixed(1)} ms | ${r.min_ms.toFixed(1)} ms | ${r.max_ms.toFixed(1)} ms |`,
     ).join("\n");
 
-    return `## Image processing (rust_image_core)
+    return `## Image processing (image_forge)
 
 > ${width}×${height} · ${iterations} iterations · GPU: ${gpu ? "available" : "unavailable"} · \`cargo run --release --features gpu\`
 
@@ -551,7 +552,7 @@ ${naTable}`;
       const pct = ((1 - ours.duration_ms / fr.compress_ms) * 100).toFixed(0);
       const faster = ours.duration_ms < fr.compress_ms;
       speedupLines.push(
-        `- **${fr.tier}** (${fr.tier_label}): flutter_video_processor **${fmtMs(ours.duration_ms, true)}** vs FFmpeg CLI **${fr.compress_ms.toLocaleString()} ms** — ${faster ? `${pct}% faster` : `${Math.abs(Number(pct))}% slower`} (×${ratio.toFixed(2)})`,
+        `- **${fr.tier}** (${fr.tier_label}): flutter_video_forge **${fmtMs(ours.duration_ms, true)}** vs FFmpeg CLI **${fr.compress_ms.toLocaleString()} ms** — ${faster ? `${pct}% faster` : `${Math.abs(Number(pct))}% slower`} (×${ratio.toFixed(2)})`,
       );
     }
 
@@ -562,10 +563,10 @@ ${naTable}`;
       if (!ours || !fr.success) continue;
       const faster = ours.duration_ms < fr.thumbnail_ms;
       const pct = ((1 - ours.duration_ms / fr.thumbnail_ms) * 100).toFixed(0);
-      thumbVsFF.push(`- **${fr.tier}**: flutter_video_processor **${fmtMs(ours.duration_ms, true)}** vs FFmpeg CLI **${fr.thumbnail_ms.toLocaleString()} ms** — ${faster ? `${pct}% faster` : `${Math.abs(Number(pct))}% slower`}`);
+      thumbVsFF.push(`- **${fr.tier}**: flutter_video_forge **${fmtMs(ours.duration_ms, true)}** vs FFmpeg CLI **${fr.thumbnail_ms.toLocaleString()} ms** — ${faster ? `${pct}% faster` : `${Math.abs(Number(pct))}% slower`}`);
     }
 
-    return `## Video compression & thumbnails (video_processor_core)
+    return `## Video compression & thumbnails (video_forge)
 
 > Compress: medium preset, H.264 ${hwMode ? "hardware preferred" : "software"} · \`cargo run --release --bin vp_bench\`
 
@@ -647,7 +648,7 @@ ${tiers.map((tier) => {
       seekLines.push(`| **${tier}** | ${label} | ${parts} |`);
     }
 
-    return `## Media runtime (rust_media_runtime)
+    return `## Media runtime (media_forge)
 
 > Real-time decode/mix engine · \`cargo run --release --bin media_bench\`
 
@@ -720,9 +721,9 @@ ${seekLines.length ? seekLines.join("\n") : "| — | — | — |"}`;
 
 | Package | Role | Approach |
 |---------|------|----------|
-| **rust_image_core** | Image processing | Rust native, CPU vs GPU (Metal/Vulkan wgpu) |
-| **video_processor_core** | Video compress/thumbnails | Rust + FFmpeg, HW & SW encode, vs FFmpeg CLI |
-| **rust_media_runtime** | Media playback runtime | Real-time decode/mix, cpal audio, VideoToolbox HW decode |
+| **image_forge** | Image processing | Rust native, CPU vs GPU (Metal/Vulkan wgpu) |
+| **video_forge** | Video compress/thumbnails | Rust + FFmpeg, HW & SW encode, vs FFmpeg CLI |
+| **media_forge** | Media playback runtime | Real-time decode/mix, cpal audio, VideoToolbox HW decode |
 `,
     imageSection(),
     videoSection(),
@@ -730,7 +731,7 @@ ${seekLines.length ? seekLines.join("\n") : "| — | — | — |"}`;
     audioFfmpegSection(),
     `## Methodology
 
-1. **Image** — 1280×720 synthetic JPEG, 5 iterations, \`cargo run --release --features gpu --bin rust_image_benchmark\`
+1. **Image** — 1280×720 synthetic JPEG, 5 iterations, \`cargo run --release --features gpu --bin image_forge_benchmark\`
 2. **Video** — Big Buck Bunny 360p/720p/1080p ~10s, \`vp_bench\` binary → \`run_compress\`, \`extract_thumbnail\`, \`probe_media_info\`
 3. **Media runtime** — Same fixtures, \`media_bench\` binary → open, decode FPS, seek recovery
 4. **FFmpeg CLI** — \`ffmpeg -crf 23 -preset medium\` compress; \`-ss 2 -frames:v 1\` thumbnail; \`pcm_f32le\` audio decode; \`amix\` overlay mix
@@ -755,9 +756,9 @@ Raw JSON: \`benchmark-results/rust-bench.json\`, \`benchmark-results/media-bench
 
 | Package | Backend | Notes |
 |---------|---------|-------|
-| **rust_image_core** | Rust + wgpu | GPU filters (blur, sharpen, presets) on Metal/Vulkan; CPU fallback via rayon |
+| **image_forge** | Rust + wgpu | GPU filters (blur, sharpen, presets) on Metal/Vulkan; CPU fallback via rayon |
 | **flutter_video_processor** | Rust + FFmpeg | Background jobs, progress, cancel, network URLs, batch thumbnails |
-| **rust_media_runtime** | Rust + FFmpeg + cpal | Real-time decode + audio mixing, VT HW decode on Apple, paused-seek display |
+| **media_forge** | Rust + FFmpeg + cpal | Real-time decode + audio mixing, VT HW decode on Apple, paused-seek display |
 | **FFmpeg CLI** | FFmpeg | Public baseline for FFmpeg-based plugins |
 | **video_compress** | OS media APIs | Fast on mobile when HW path fits; fewer codec knobs |
 | **ffmpeg_kit** | FFmpeg CLI wrapped | Similar encode quality; heavier bundle; command-string API |

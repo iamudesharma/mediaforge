@@ -5,9 +5,10 @@ import 'package:video_forge_kit/video_forge_kit.dart';
 
 /// Common interface for video playback backends.
 ///
-/// Both [NativeBackend] (video_player) and [RustBackend] (media_forge)
-/// implement this so [VideoCreatorFlow] can switch between them without
-/// conditional logic scattered throughout the UI.
+/// The media_studio example uses a single backend — [RustBackend] backed by
+/// `media_forge` (FFmpeg demux + HW decode + cpal real-time audio mixing).
+/// The interface is kept abstract so the same call sites can be exercised
+/// from tests with a fake backend if needed.
 abstract class PlaybackBackend extends ChangeNotifier {
   /// Open a video file for playback.
   Future<void> open(String path);

@@ -22,6 +22,8 @@ pub const CATCHUP_SKIP_NON_KEYFRAME_MS: u64 = 500;
 pub const CATCHUP_KEYFRAME_ONLY_MS: u64 = 1500;
 
 /// Recreates swscale when resolution or pixel format changes (common after seek / HW transfer).
+/// When `dst_w`/`dst_h` are zero (unresolved at open time), they are derived lazily from the
+/// first real frame's source dimensions clamped to `max_edge`.
 pub struct RgbaScaler {
     scaler: Option<ScalerContext>,
     src_fmt: Option<Pixel>,
@@ -29,6 +31,8 @@ pub struct RgbaScaler {
     src_h: u32,
     dst_w: u32,
     dst_h: u32,
+    /// Kept for lazy dst computation when the container reports zero-dim at open time.
+    max_edge: u32,
 }
 
 impl RgbaScaler {
@@ -40,6 +44,36 @@ impl RgbaScaler {
             src_h: 0,
             dst_w,
             dst_h,
+            max_edge: 0,
+        }
+    }
+
+    /// Create a scaler whose output dimensions are derived lazily from the first frame.
+    pub fn new_lazy(max_edge: u32) -> Self {
+        Self {
+            scaler: None,
+            src_fmt: None,
+            src_w: 0,
+            src_h: 0,
+            dst_w: 0,
+            dst_h: 0,
+            max_edge,
+        }
+    }
+
+    fn resolve_dst(&mut self, src_w: u32, src_h: u32) {
+        if self.dst_w == 0 || self.dst_h == 0 {
+            let (w, h) = if self.max_edge > 0 {
+                output_dims(src_w, src_h, self.max_edge)
+            } else {
+                (src_w, src_h)
+            };
+            self.dst_w = w.max(1);
+            self.dst_h = h.max(1);
+            decode_log!(
+                "[VideoDecoder] Lazy dst resolved from {}x{} -> {}x{} (max_edge={})",
+                src_w, src_h, self.dst_w, self.dst_h, self.max_edge
+            );
         }
     }
 
@@ -51,6 +85,8 @@ impl RgbaScaler {
     }
 
     pub fn ensure(&mut self, fmt: Pixel, w: u32, h: u32) -> bool {
+        // Resolve output dimensions lazily when the container didn't provide them.
+        self.resolve_dst(w, h);
         if !self.needs_reinit(fmt, w, h) {
             return true;
         }
@@ -100,6 +136,11 @@ impl RgbaScaler {
             }
         }
     }
+
+    /// Current output width (may be 0 before first frame if lazy).
+    pub fn out_w(&self) -> u32 { self.dst_w }
+    /// Current output height (may be 0 before first frame if lazy).
+    pub fn out_h(&self) -> u32 { self.dst_h }
 }
 
 pub type SwPipeline = (Video, RgbaScaler, Rational, u32, u32);
@@ -177,12 +218,82 @@ pub fn open_hw_pipeline(
     })
 }
 
+/// Open a SW video decoder without ffmpeg_next's post-open codec_type validation.
+///
+/// `decoder().video()` in ffmpeg_next validates `codec_type == AVMEDIA_TYPE_VIDEO`
+/// and `medium() == Video` after calling `avcodec_open2`. For mpeg4/mp4v streams
+/// where the container carries zero dimensions, `avcodec_open2` itself succeeds but
+/// ffmpeg_next's wrapper may reject the context because `codec_type` is not set
+/// correctly before open. This function calls `avcodec_open2` directly and wraps
+/// the result back into a `Video` using only the public newtype chain.
+fn open_sw_decoder_permissive(dec_ctx: CodecContext) -> Option<Video> {
+    use ffmpeg_next::codec::decoder::{Decoder, Opened};
+    // AV_CODEC_FLAG_TRUNCATED (0x8000) was removed in FFmpeg 5+ from public headers
+    // but the bit is still honoured internally — set it directly.
+    const AV_CODEC_FLAG_TRUNCATED: i32 = 0x8000;
+
+    unsafe {
+        let avctx = dec_ctx.as_ptr() as *mut ffmpeg_next::ffi::AVCodecContext;
+        if avctx.is_null() {
+            decode_log!("[VideoDecoder] open_sw_decoder_permissive: null avctx");
+            return None;
+        }
+
+        // Find the decoder for the codec_id already set in the context.
+        let codec = ffmpeg_next::ffi::avcodec_find_decoder((*avctx).codec_id);
+        if codec.is_null() {
+            decode_log!(
+                "[VideoDecoder] open_sw_decoder_permissive: no decoder for codec_id={:?}",
+                (*avctx).codec_id
+            );
+            return None;
+        }
+
+        // Allow the codec to handle truncated/incomplete bitstreams and resolve
+        // dimensions from the first GOP header rather than container metadata.
+        (*avctx).flags |= AV_CODEC_FLAG_TRUNCATED;
+
+        let ret = ffmpeg_next::ffi::avcodec_open2(avctx, codec, std::ptr::null_mut());
+        if ret < 0 {
+            decode_log!(
+                "[VideoDecoder] open_sw_decoder_permissive: avcodec_open2 returned {} for codec_id={:?}",
+                ret,
+                (*avctx).codec_id
+            );
+            return None;
+        }
+
+        // Force codec_type to AVMEDIA_TYPE_VIDEO so ffmpeg_next's medium() check passes.
+        (*avctx).codec_type = ffmpeg_next::ffi::AVMediaType::AVMEDIA_TYPE_VIDEO;
+
+        // Now the codec is open and codec_type is correct. Build the newtype chain:
+        // CodecContext → Decoder → Opened → Video.
+        // We hold the raw pointer separately so `dec_ctx` can be moved into Decoder.
+        let decoder = Decoder(dec_ctx);
+        let opened = Opened(decoder);
+        if opened.medium() == ffmpeg_next::media::Type::Video {
+            Some(Video(opened))
+        } else {
+            decode_log!("[VideoDecoder] open_sw_decoder_permissive: medium() still not Video after forced type");
+            None
+        }
+    }
+}
+
 pub fn open_sw_pipeline(
     params: &ffmpeg_next::codec::Parameters,
     tb: Rational,
     max_edge: u32,
 ) -> Option<SwPipeline> {
-    let mut dec_ctx = CodecContext::from_parameters(params.clone()).ok()?;
+    // Step 1: build a codec context from the stream parameters.
+    let mut dec_ctx = match CodecContext::from_parameters(params.clone()) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            decode_log!("[VideoDecoder] SW open failed: from_parameters error: {:?}", e);
+            return None;
+        }
+    };
+
     dec_ctx.set_threading(ffmpeg_next::codec::threading::Config {
         kind: ffmpeg_next::codec::threading::Type::Frame,
         count: 0,
@@ -197,23 +308,77 @@ pub fn open_sw_pipeline(
             }
         }
     }
-    let dec = dec_ctx.decoder().video().ok()?;
+
+    // Step 2: open the video decoder.
+    // ffmpeg_next's decoder().video() may reject codecs whose dimensions are
+    // 0x0 at open time (e.g. mpeg4/mp4v with "unspecified size" in the container).
+    // Fall back to a direct unsafe avcodec_open2 call that allows zero-dim params
+    // so the codec can resolve dimensions from the first bitstream packet.
+    //
+    // NOTE: dec_ctx.decoder() MOVES dec_ctx, so capture the codec id first.
+    let codec_id = dec_ctx.id();
+    let dec = match dec_ctx.decoder().video() {
+        Ok(d) => d,
+        Err(e) => {
+            decode_log!(
+                "[VideoDecoder] SW decoder().video() failed ({:?}) for codec={:?} — trying permissive open",
+                e,
+                codec_id
+            );
+            // For codecs like mpeg4/mp4v that carry dimensions in the bitstream
+            // (not the container header), re-open from params and bypass validation.
+            let ctx2 = match CodecContext::from_parameters(params.clone()) {
+                Ok(c) => c,
+                Err(e2) => {
+                    decode_log!("[VideoDecoder] SW permissive re-open: from_parameters failed: {:?}", e2);
+                    return None;
+                }
+            };
+            match open_sw_decoder_permissive(ctx2) {
+                Some(d) => {
+                    decode_log!("[VideoDecoder] SW permissive open succeeded for codec={:?}", d.id());
+                    d
+                }
+                None => {
+                    decode_log!("[VideoDecoder] SW permissive open also failed — giving up");
+                    return None;
+                }
+            }
+        }
+    };
+
+
     let in_w = dec.width();
     let in_h = dec.height();
     let (out_w, out_h) = output_dims(in_w, in_h, max_edge);
-    let mut scaler = RgbaScaler::new(out_w, out_h);
-    if in_w > 0 && !scaler.ensure(dec.format(), in_w, in_h) {
-        return None;
-    }
+
+    // When the container reports zero dimensions (e.g. mpeg4/mp4v with
+    // "unspecified size"), create a lazy scaler — it will compute the real
+    // dst dimensions from the first decoded frame's actual w/h.
+    let (scaler, resolved_w, resolved_h) = if out_w > 0 && out_h > 0 {
+        let mut s = RgbaScaler::new(out_w, out_h);
+        // Pre-warm scaler if we have a format; ignore failure (will retry on first frame).
+        if in_w > 0 && dec.format() != ffmpeg_next::format::Pixel::None {
+            let _ = s.ensure(dec.format(), in_w, in_h);
+        }
+        (s, out_w, out_h)
+    } else {
+        decode_log!(
+            "[VideoDecoder] Zero dimensions from codec params — using lazy scaler (max_edge={})",
+            max_edge
+        );
+        (RgbaScaler::new_lazy(max_edge), 0, 0)
+    };
+
     decode_log!(
         "[VideoDecoder] Software decoder: {}x{} -> {}x{} (fmt={:?})",
         in_w,
         in_h,
-        out_w,
-        out_h,
+        resolved_w,
+        resolved_h,
         dec.format()
     );
-    Some((dec, scaler, tb, out_w, out_h))
+    Some((dec, scaler, tb, resolved_w, resolved_h))
 }
 
 pub fn open_video_pipelines(
@@ -343,10 +508,15 @@ pub fn push_rgba_frame(
         return;
     }
     let pixels = rgba_frame.data(0).to_vec();
+    // Use the scaler's resolved dimensions — they may differ from the out_w/out_h
+    // passed in when the SW pipeline used lazy dimension resolution (e.g. mpeg4/mp4v
+    // with \"unspecified size\" at open time).
+    let frame_w = if scaler.out_w() > 0 { scaler.out_w() } else { out_w };
+    let frame_h = if scaler.out_h() > 0 { scaler.out_h() } else { out_h };
     let vf = MediaVideoFrame {
         pts_ms: frame_pts_ms,
-        width: out_w,
-        height: out_h,
+        width: frame_w,
+        height: frame_h,
         pixels,
         pixel_buffer_ptr: 0,
         seek_generation,

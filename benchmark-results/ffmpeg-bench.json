@@ -1,0 +1,35 @@
+[
+  {
+    "tier": "small",
+    "tier_label": "360p · ~10s · ~1 MB",
+    "input": "Big_Buck_Bunny_360_10s_1MB.mp4",
+    "input_bytes": 991017,
+    "compress_ms": 3860,
+    "thumbnail_ms": 156,
+    "decode_audio_ms": 565,
+    "mix_audio_ms": 735,
+    "success": true
+  },
+  {
+    "tier": "medium",
+    "tier_label": "720p · ~10s · ~5 MB",
+    "input": "Big_Buck_Bunny_720_10s_5MB.mp4",
+    "input_bytes": 4999379,
+    "compress_ms": 4667,
+    "thumbnail_ms": 290,
+    "decode_audio_ms": 565,
+    "mix_audio_ms": 735,
+    "success": true
+  },
+  {
+    "tier": "large",
+    "tier_label": "1080p · ~10s · ~10 MB",
+    "input": "Big_Buck_Bunny_1080_10s_10MB.mp4",
+    "input_bytes": 10484984,
+    "compress_ms": 9352,
+    "thumbnail_ms": 507,
+    "decode_audio_ms": 565,
+    "mix_audio_ms": 735,
+    "success": true
+  }
+]

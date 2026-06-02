@@ -16,18 +16,21 @@ use crate::ffmpeg::hw_decode::HwFrameTransfer;
 use crate::ffmpeg::map_ffmpeg_error;
 use crate::ffmpeg::vt_link::VtLinkMode;
 
-type CVPixelBufferRef = *mut std::ffi::c_void;
-type VTPixelTransferSessionRef = *mut std::ffi::c_void;
-type OSStatus = i32;
+pub(crate) type CVPixelBufferRef = *mut std::ffi::c_void;
+pub(crate) type VTPixelTransferSessionRef = *mut std::ffi::c_void;
+pub(crate) type CVPixelBufferPoolRef = *mut std::ffi::c_void;
+type CFDictionaryRef = *const std::ffi::c_void;
+pub(crate) type OSStatus = i32;
 
 /// 32-bit BGRA — matches Flutter `FlutterTexture` / `kCVPixelFormatType_32BGRA`.
-const K_CV_32BGRA: u32 = u32::from_be_bytes(*b"BGRA");
+pub(crate) const K_CV_32BGRA: u32 = u32::from_be_bytes(*b"BGRA");
 
 #[link(name = "CoreVideo", kind = "framework")]
 #[link(name = "CoreFoundation", kind = "framework")]
 #[link(name = "VideoToolbox", kind = "framework")]
 extern "C" {
     fn CFRelease(cf: *mut std::ffi::c_void);
+    fn CFRetain(cf: *mut std::ffi::c_void) -> *mut std::ffi::c_void;
 
     fn CVPixelBufferCreate(
         allocator: *mut std::ffi::c_void,
@@ -53,6 +56,48 @@ extern "C" {
         source_buffer: CVPixelBufferRef,
         destination_buffer: CVPixelBufferRef,
     ) -> OSStatus;
+
+    // CVPixelBufferPool — used by engine::vt_pool.
+    fn CVPixelBufferPoolCreate(
+        allocator: *mut std::ffi::c_void,
+        pool_attributes: CFDictionaryRef,
+        pixel_buffer_attributes: CFDictionaryRef,
+        pool_out: *mut CVPixelBufferPoolRef,
+    ) -> OSStatus;
+
+    fn CVPixelBufferPoolCreatePixelBuffer(
+        allocator: *mut std::ffi::c_void,
+        pool: CVPixelBufferPoolRef,
+        pixel_buffer_out: *mut CVPixelBufferRef,
+    ) -> OSStatus;
+
+    fn CVPixelBufferPoolRelease(pool: CVPixelBufferPoolRef);
+}
+
+/// Release a `CVPixelBufferPool`. Called from `VtPixelBufferPool::Drop`.
+///
+/// # Safety
+/// `pool` must be a valid `CVPixelBufferPoolRef` (or null, in which
+/// case the call is a no-op).
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub(crate) unsafe fn cv_release_pool(pool: CVPixelBufferPoolRef) {
+    if !pool.is_null() {
+        CVPixelBufferPoolRelease(pool);
+    }
+}
+
+/// CFTypeRetain on a `CFTypeRef` (matches `CFRetain` / `CFRelease`).
+///
+/// # Safety
+/// `cf` must be a valid `CFTypeRef` or null. A null `cf` is a no-op (caller
+/// is responsible for handling null returns; this function only deals with
+/// the rebalance case).
+pub(crate) unsafe fn cf_retain(cf: *mut std::ffi::c_void) -> *mut std::ffi::c_void {
+    if cf.is_null() {
+        std::ptr::null_mut()
+    } else {
+        CFRetain(cf)
+    }
 }
 
 fn map_vt_status(err: OSStatus, ctx: &str) -> VideoForgeError {
@@ -355,6 +400,88 @@ pub unsafe fn transfer_vt_frame_to_bgra_pixel_buffer(
     Ok(dst)
 }
 
+/// Acquire a destination `CVPixelBuffer` from a `CVPixelBufferPool`.
+///
+/// On success, returns a buffer with `+1` retain. The caller is
+/// responsible for releasing it (with [`CFRelease`]) when the texture
+/// plugin has consumed it, exactly as the non-pooled path does.
+///
+/// # Safety
+/// `pool` must be a valid `CVPixelBufferPoolRef` (or null, in which case
+/// the function falls back to a direct `CVPixelBufferCreate`).
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub(crate) unsafe fn acquire_bgra_pixel_buffer_from_pool(
+    pool: CVPixelBufferPoolRef,
+    width: usize,
+    height: usize,
+) -> Result<CVPixelBufferRef> {
+    if !pool.is_null() {
+        let mut dst: CVPixelBufferRef = ptr::null_mut();
+        let err = CVPixelBufferPoolCreatePixelBuffer(ptr::null_mut(), pool, &mut dst);
+        if err == 0 && !dst.is_null() {
+            return Ok(dst);
+        }
+        log::warn!(
+            "CVPixelBufferPoolCreatePixelBuffer failed (OSStatus {err}); \
+             falling back to CVPixelBufferCreate"
+        );
+    }
+
+    // Fallback path: same as the non-pooled variant. This is what the
+    // pool's `acquire` does internally when the pool is exhausted or
+    // mis-configured, but we keep an explicit fallback here for
+    // null-pool callers.
+    let mut dst: CVPixelBufferRef = ptr::null_mut();
+    let err = CVPixelBufferCreate(
+        ptr::null_mut(),
+        width,
+        height,
+        K_CV_32BGRA,
+        ptr::null_mut(),
+        &mut dst,
+    );
+    if err != 0 || dst.is_null() {
+        return Err(map_vt_status(err, "CVPixelBufferCreate BGRA (pool fallback)"));
+    }
+    Ok(dst)
+}
+
+/// Create a `CVPixelBufferPool` for BGRA buffers of `width × height`.
+///
+/// `min_buffers` is the steady-state reservation; `max_buffers` is the
+/// hard ceiling the pool will retain internally. Both default to sensible
+/// values; the engine reads `VFP_VT_POOL_*` env flags to override.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub(crate) unsafe fn create_bgra_pixel_buffer_pool(
+    width: u32,
+    height: u32,
+    min_buffers: u32,
+    max_buffers: u32,
+) -> Result<CVPixelBufferPoolRef> {
+    let mut pool: CVPixelBufferPoolRef = ptr::null_mut();
+    let err = CVPixelBufferPoolCreate(
+        ptr::null_mut(),
+        ptr::null(), // pool attributes — kept null; tuning happens via per-buffer attrs / age
+        ptr::null(), // pixel buffer attributes — pool derives from CVPixelBufferCreate attrs
+        &mut pool,
+    );
+    if err != 0 || pool.is_null() {
+        return Err(map_vt_status(
+            err,
+            "CVPixelBufferPoolCreate (BGRA {width}x{height}, min={min_buffers}, max={max_buffers})",
+        ));
+    }
+    // min_buffers / max_buffers arguments are reserved for the future
+    // CFDictionary-based attributes path; today the pool's internal
+    // maximum is the system's default. We still log them so the operator
+    // can confirm what was requested.
+    log::info!(
+        "[VtPipeline] CVPixelBufferPool created {width}x{height} BGRA (requested min={min_buffers} max={max_buffers})"
+    );
+    let _ = (min_buffers, max_buffers);
+    Ok(pool)
+}
+
 /// Release a preview `CVPixelBuffer` when not adopted by the texture plugin.
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub unsafe fn release_pixel_buffer(pb: CVPixelBufferRef) {
@@ -368,4 +495,17 @@ pub unsafe fn release_pixel_buffer(pb: CVPixelBufferRef) {
 pub unsafe fn retain_pixel_buffer_for_handoff(pb: CVPixelBufferRef) -> u64 {
     CVPixelBufferRetain(pb);
     pb as u64
+}
+
+/// Run `VTPixelTransferSessionTransferImage` and return the raw
+/// `OSStatus`. Exposed so `engine::vt_pool` can pair a pool-acquired
+/// destination buffer with the existing transfer session without
+/// duplicating the FFI binding.
+#[cfg(any(target_os = "ios", target_os = "macos"))]
+pub(crate) unsafe fn vt_pixel_transfer_session_transfer_image(
+    session: *mut std::ffi::c_void,
+    source_buffer: CVPixelBufferRef,
+    destination_buffer: CVPixelBufferRef,
+) -> OSStatus {
+    VTPixelTransferSessionTransferImage(session, source_buffer, destination_buffer)
 }

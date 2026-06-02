@@ -14,8 +14,11 @@ pub fn movflags(fast_start: bool, fragmented: bool) -> String {
         flags.push("+frag_keyframe");
         flags.push("+empty_moov");
         flags.push("+default_base_moof");
+        flags.push("+omit_tfhd_offset");
+        flags.push("+disable_chpl");
+        flags.push("+negative_cts_offsets");
     }
-    flags.join("")
+    flags.join(" ")
 }
 
 /// MP4 movflags for a given [OutputProfile]. Returns the empty string
@@ -26,7 +29,7 @@ pub fn movflags(fast_start: bool, fragmented: bool) -> String {
 /// - `ProgressiveMp4 { fast_start: true }` -> `+faststart`
 /// - `ProgressiveMp4 { fast_start: false }` -> ``
 /// - `FragmentedMp4 { fragment_duration_ms: 2000 }` ->
-///   `+frag_keyframe+frag_duration_ms=2000`
+///   `+frag_keyframe +empty_moov +default_base_moof +omit_tfhd_offset +disable_chpl +negative_cts_offsets +frag_duration_ms=2000`
 pub fn movflags_for_profile(profile: &OutputProfile) -> String {
     match profile {
         OutputProfile::ProgressiveMp4 { fast_start } => {
@@ -45,7 +48,10 @@ pub fn movflags_for_profile(profile: &OutputProfile) -> String {
             // header before the first fragment (CMAF / DASH friendly).
             // `+frag_duration_ms` is the lower bound for fragment
             // length; FFmpeg rounds up to the next keyframe.
-            format!("+frag_keyframe+empty_moov+frag_duration_ms={fragment_duration_ms}")
+            format!(
+                "+frag_keyframe +empty_moov +default_base_moof +omit_tfhd_offset +disable_chpl +negative_cts_offsets +frag_duration_ms={}",
+                fragment_duration_ms
+            )
         }
         // HLS uses its own option set (see [hls_options]).
         OutputProfile::Hls { .. } => String::new(),

@@ -132,44 +132,22 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
           }
         case .rgba8888:
           // RGBA8888 upload: vectorized channel swap (R/B) via vImage
-          // Accelerate. ~1 GB/s on Apple Silicon, also vectorized on iOS
-          // (see Phase 2.2 — the iOS copy of this plugin previously used a
-          // scalar loop, which is the case Phase 2.2 unifies).
-          if rowBytes == width * 4 {
-            var srcBuf = vImage_Buffer(
-              data: UnsafeMutableRawPointer(mutating: srcPtr),
-              height: vImagePixelCount(height),
-              width: vImagePixelCount(width),
-              rowBytes: width * 4
-            )
-            var dstBuf = vImage_Buffer(
-              data: dst,
-              height: vImagePixelCount(height),
-              width: vImagePixelCount(width),
-              rowBytes: rowBytes
-            )
-            let permute: [UInt8] = [2, 1, 0, 3]
-            vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
-          } else {
-            // Non-contiguous stride: per-row vImage call. vImage is still
-            // ~10× faster than the previous scalar Swift loop.
-            for y in 0..<height {
-              var srcBuf = vImage_Buffer(
-                data: UnsafeMutableRawPointer(mutating: srcPtr.advanced(by: y * width * 4)),
-                height: vImagePixelCount(1),
-                width: vImagePixelCount(width),
-                rowBytes: width * 4
-              )
-              var dstBuf = vImage_Buffer(
-                data: dst.advanced(by: y * rowBytes),
-                height: vImagePixelCount(1),
-                width: vImagePixelCount(width),
-                rowBytes: rowBytes
-              )
-              let permute: [UInt8] = [2, 1, 0, 3]
-              vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
-            }
-          }
+          // Accelerate. ~1 GB/s on Apple Silicon. vImage natively supports
+          // different row strides in a single call, avoiding any loop.
+          var srcBuf = vImage_Buffer(
+            data: UnsafeMutableRawPointer(mutating: srcPtr),
+            height: vImagePixelCount(height),
+            width: vImagePixelCount(width),
+            rowBytes: width * 4
+          )
+          var dstBuf = vImage_Buffer(
+            data: dst,
+            height: vImagePixelCount(height),
+            width: vImagePixelCount(width),
+            rowBytes: rowBytes
+          )
+          let permute: [UInt8] = [2, 1, 0, 3]
+          vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
         }
       }
       registry.textureFrameAvailable(texId)
@@ -413,9 +391,12 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
 
   private static func canAdoptPixelBufferDirectly(_ pb: CVPixelBuffer) -> Bool {
     guard CVPixelBufferGetPixelFormatType(pb) == kCVPixelFormatType_32BGRA else {
+      let fmt = CVPixelBufferGetPixelFormatType(pb)
+      NSLog("[PixelSurface] adopt rejected: bad format 0x%08X (expected BGRA=0x42475241)", fmt)
       return false
     }
     guard CVPixelBufferGetIOSurface(pb) != nil else {
+      NSLog("[PixelSurface] adopt rejected: no IOSurface backing — buffer was created without kCVPixelBufferIOSurfacePropertiesKey")
       return false
     }
     if let attrs = CVPixelBufferCopyCreationAttributes(pb) as? [String: Any],
@@ -468,15 +449,21 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     let height = CVPixelBufferGetHeight(src)
     let srcRow = CVPixelBufferGetBytesPerRow(src)
     let dstRow = CVPixelBufferGetBytesPerRow(dst)
-    let rowBytes = width * 4
-    for y in 0..<height {
-      memcpy(
-        dstBase.advanced(by: y * dstRow),
-        srcBase.advanced(by: y * srcRow),
-        rowBytes
-      )
-    }
-    return true
+    
+    var srcBuf = vImage_Buffer(
+      data: srcBase,
+      height: vImagePixelCount(height),
+      width: vImagePixelCount(width),
+      rowBytes: srcRow
+    )
+    var dstBuf = vImage_Buffer(
+      data: dstBase,
+      height: vImagePixelCount(height),
+      width: vImagePixelCount(width),
+      rowBytes: dstRow
+    )
+    let err = vImageCopyBuffer(&srcBuf, &dstBuf, 4, vImage_Flags(kvImageNoFlags))
+    return err == kvImageNoError
   }
 
   /// Lazily-create the plugin's `CVMetalTextureCache`. Thread-safe via lock.
