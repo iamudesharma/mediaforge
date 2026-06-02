@@ -127,7 +127,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_box_autoadd_u_8(dynamic raw);
 
   @protected
-  VideoProcessorError dco_decode_box_autoadd_video_processor_error(dynamic raw);
+  VideoForgeError dco_decode_box_autoadd_video_forge_error(dynamic raw);
 
   @protected
   BurnInOverlay dco_decode_burn_in_overlay(dynamic raw);
@@ -245,7 +245,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoCodec dco_decode_video_codec(dynamic raw);
 
   @protected
-  VideoProcessorError dco_decode_video_processor_error(dynamic raw);
+  VideoForgeError dco_decode_video_forge_error(dynamic raw);
 
   @protected
   VideoQuality dco_decode_video_quality(dynamic raw);
@@ -364,7 +364,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_box_autoadd_u_8(SseDeserializer deserializer);
 
   @protected
-  VideoProcessorError sse_decode_box_autoadd_video_processor_error(
+  VideoForgeError sse_decode_box_autoadd_video_forge_error(
     SseDeserializer deserializer,
   );
 
@@ -498,9 +498,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VideoCodec sse_decode_video_codec(SseDeserializer deserializer);
 
   @protected
-  VideoProcessorError sse_decode_video_processor_error(
-    SseDeserializer deserializer,
-  );
+  VideoForgeError sse_decode_video_forge_error(SseDeserializer deserializer);
 
   @protected
   VideoQuality sse_decode_video_quality(SseDeserializer deserializer);
@@ -641,8 +639,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_u_8(int self, SseSerializer serializer);
 
   @protected
-  void sse_encode_box_autoadd_video_processor_error(
-    VideoProcessorError self,
+  void sse_encode_box_autoadd_video_forge_error(
+    VideoForgeError self,
     SseSerializer serializer,
   );
 
@@ -809,8 +807,8 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_video_codec(VideoCodec self, SseSerializer serializer);
 
   @protected
-  void sse_encode_video_processor_error(
-    VideoProcessorError self,
+  void sse_encode_video_forge_error(
+    VideoForgeError self,
     SseSerializer serializer,
   );
 

@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -26396576;
+  int get rustContentHash => 194317783;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -182,12 +182,12 @@ abstract class RustLibApi extends BaseApi {
     required ThumbnailBytesOptions options,
   });
 
-  Future<String> crateErrorVideoProcessorErrorErrorCode({
-    required VideoProcessorError that,
+  Future<String> crateErrorVideoForgeErrorErrorCode({
+    required VideoForgeError that,
   });
 
-  Future<String> crateErrorVideoProcessorErrorErrorMessage({
-    required VideoProcessorError that,
+  Future<String> crateErrorVideoForgeErrorErrorMessage({
+    required VideoForgeError that,
   });
 
   Future<JobResult> crateApiWaitForJob({required String jobId});
@@ -1075,14 +1075,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "thumbnail_bytes", argNames: ["options"]);
 
   @override
-  Future<String> crateErrorVideoProcessorErrorErrorCode({
-    required VideoProcessorError that,
+  Future<String> crateErrorVideoForgeErrorErrorCode({
+    required VideoForgeError that,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_box_autoadd_video_processor_error(that, serializer);
+          sse_encode_box_autoadd_video_forge_error(that, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1094,28 +1094,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
         ),
-        constMeta: kCrateErrorVideoProcessorErrorErrorCodeConstMeta,
+        constMeta: kCrateErrorVideoForgeErrorErrorCodeConstMeta,
         argValues: [that],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateErrorVideoProcessorErrorErrorCodeConstMeta =>
+  TaskConstMeta get kCrateErrorVideoForgeErrorErrorCodeConstMeta =>
       const TaskConstMeta(
-        debugName: "video_processor_error_error_code",
+        debugName: "video_forge_error_error_code",
         argNames: ["that"],
       );
 
   @override
-  Future<String> crateErrorVideoProcessorErrorErrorMessage({
-    required VideoProcessorError that,
+  Future<String> crateErrorVideoForgeErrorErrorMessage({
+    required VideoForgeError that,
   }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_box_autoadd_video_processor_error(that, serializer);
+          sse_encode_box_autoadd_video_forge_error(that, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -1127,16 +1127,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
         ),
-        constMeta: kCrateErrorVideoProcessorErrorErrorMessageConstMeta,
+        constMeta: kCrateErrorVideoForgeErrorErrorMessageConstMeta,
         argValues: [that],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateErrorVideoProcessorErrorErrorMessageConstMeta =>
+  TaskConstMeta get kCrateErrorVideoForgeErrorErrorMessageConstMeta =>
       const TaskConstMeta(
-        debugName: "video_processor_error_error_message",
+        debugName: "video_forge_error_error_message",
         argNames: ["that"],
       );
 
@@ -1389,11 +1389,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  VideoProcessorError dco_decode_box_autoadd_video_processor_error(
-    dynamic raw,
-  ) {
+  VideoForgeError dco_decode_box_autoadd_video_forge_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return dco_decode_video_processor_error(raw);
+    return dco_decode_video_forge_error(raw);
   }
 
   @protected
@@ -1755,27 +1753,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  VideoProcessorError dco_decode_video_processor_error(dynamic raw) {
+  VideoForgeError dco_decode_video_forge_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
       case 0:
-        return VideoProcessorError_InvalidInput(dco_decode_String(raw[1]));
+        return VideoForgeError_InvalidInput(dco_decode_String(raw[1]));
       case 1:
-        return VideoProcessorError_FileNotFound(dco_decode_String(raw[1]));
+        return VideoForgeError_FileNotFound(dco_decode_String(raw[1]));
       case 2:
-        return VideoProcessorError_UnsupportedCodec(dco_decode_String(raw[1]));
+        return VideoForgeError_UnsupportedCodec(dco_decode_String(raw[1]));
       case 3:
-        return VideoProcessorError_JobNotFound(dco_decode_String(raw[1]));
+        return VideoForgeError_JobNotFound(dco_decode_String(raw[1]));
       case 4:
-        return VideoProcessorError_Cancelled();
+        return VideoForgeError_Cancelled();
       case 5:
-        return VideoProcessorError_IoError(dco_decode_String(raw[1]));
+        return VideoForgeError_IoError(dco_decode_String(raw[1]));
       case 6:
-        return VideoProcessorError_FfmpegError(dco_decode_String(raw[1]));
+        return VideoForgeError_FfmpegError(dco_decode_String(raw[1]));
       case 7:
-        return VideoProcessorError_QueueFull();
+        return VideoForgeError_QueueFull();
       case 8:
-        return VideoProcessorError_Internal(dco_decode_String(raw[1]));
+        return VideoForgeError_Internal(dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -2028,11 +2026,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  VideoProcessorError sse_decode_box_autoadd_video_processor_error(
+  VideoForgeError sse_decode_box_autoadd_video_forge_error(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_video_processor_error(deserializer));
+    return (sse_decode_video_forge_error(deserializer));
   }
 
   @protected
@@ -2518,38 +2516,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  VideoProcessorError sse_decode_video_processor_error(
-    SseDeserializer deserializer,
-  ) {
+  VideoForgeError sse_decode_video_forge_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     var tag_ = sse_decode_i_32(deserializer);
     switch (tag_) {
       case 0:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_InvalidInput(var_field0);
+        return VideoForgeError_InvalidInput(var_field0);
       case 1:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_FileNotFound(var_field0);
+        return VideoForgeError_FileNotFound(var_field0);
       case 2:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_UnsupportedCodec(var_field0);
+        return VideoForgeError_UnsupportedCodec(var_field0);
       case 3:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_JobNotFound(var_field0);
+        return VideoForgeError_JobNotFound(var_field0);
       case 4:
-        return VideoProcessorError_Cancelled();
+        return VideoForgeError_Cancelled();
       case 5:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_IoError(var_field0);
+        return VideoForgeError_IoError(var_field0);
       case 6:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_FfmpegError(var_field0);
+        return VideoForgeError_FfmpegError(var_field0);
       case 7:
-        return VideoProcessorError_QueueFull();
+        return VideoForgeError_QueueFull();
       case 8:
         var var_field0 = sse_decode_String(deserializer);
-        return VideoProcessorError_Internal(var_field0);
+        return VideoForgeError_Internal(var_field0);
       default:
         throw UnimplementedError('');
     }
@@ -2813,12 +2809,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_video_processor_error(
-    VideoProcessorError self,
+  void sse_encode_box_autoadd_video_forge_error(
+    VideoForgeError self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_video_processor_error(self, serializer);
+    sse_encode_video_forge_error(self, serializer);
   }
 
   @protected
@@ -3227,35 +3223,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_video_processor_error(
-    VideoProcessorError self,
+  void sse_encode_video_forge_error(
+    VideoForgeError self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
-      case VideoProcessorError_InvalidInput(field0: final field0):
+      case VideoForgeError_InvalidInput(field0: final field0):
         sse_encode_i_32(0, serializer);
         sse_encode_String(field0, serializer);
-      case VideoProcessorError_FileNotFound(field0: final field0):
+      case VideoForgeError_FileNotFound(field0: final field0):
         sse_encode_i_32(1, serializer);
         sse_encode_String(field0, serializer);
-      case VideoProcessorError_UnsupportedCodec(field0: final field0):
+      case VideoForgeError_UnsupportedCodec(field0: final field0):
         sse_encode_i_32(2, serializer);
         sse_encode_String(field0, serializer);
-      case VideoProcessorError_JobNotFound(field0: final field0):
+      case VideoForgeError_JobNotFound(field0: final field0):
         sse_encode_i_32(3, serializer);
         sse_encode_String(field0, serializer);
-      case VideoProcessorError_Cancelled():
+      case VideoForgeError_Cancelled():
         sse_encode_i_32(4, serializer);
-      case VideoProcessorError_IoError(field0: final field0):
+      case VideoForgeError_IoError(field0: final field0):
         sse_encode_i_32(5, serializer);
         sse_encode_String(field0, serializer);
-      case VideoProcessorError_FfmpegError(field0: final field0):
+      case VideoForgeError_FfmpegError(field0: final field0):
         sse_encode_i_32(6, serializer);
         sse_encode_String(field0, serializer);
-      case VideoProcessorError_QueueFull():
+      case VideoForgeError_QueueFull():
         sse_encode_i_32(7, serializer);
-      case VideoProcessorError_Internal(field0: final field0):
+      case VideoForgeError_Internal(field0: final field0):
         sse_encode_i_32(8, serializer);
         sse_encode_String(field0, serializer);
     }

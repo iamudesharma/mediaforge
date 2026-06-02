@@ -7,7 +7,7 @@
   <key>CFBundleExecutable</key>
   <string>video_forge</string>
   <key>CFBundleIdentifier</key>
-  <string>dev.video_forge</string>
+  <string>dev.iamudesharma.video_forge</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>

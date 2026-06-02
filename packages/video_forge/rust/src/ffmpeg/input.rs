@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use ffmpeg_next::format::{self, context::Input};
 use ffmpeg_next::Dictionary;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 
 const USER_AGENT: &str =
     "Mozilla/5.0 (compatible; video_forge/1.0; +https://github.com)";
@@ -39,7 +39,7 @@ pub fn normalize_remote_input(input: &str) -> String {
 pub fn ensure_input_accessible(input: &str) -> Result<()> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
-        return Err(VideoProcessorError::InvalidInput("empty input path".into()));
+        return Err(VideoForgeError::InvalidInput("empty input path".into()));
     }
     if is_remote_input(trimmed) {
         return Ok(());
@@ -48,7 +48,7 @@ pub fn ensure_input_accessible(input: &str) -> Result<()> {
     if path.exists() {
         Ok(())
     } else {
-        Err(VideoProcessorError::FileNotFound(trimmed.to_string()))
+        Err(VideoForgeError::FileNotFound(trimmed.to_string()))
     }
 }
 

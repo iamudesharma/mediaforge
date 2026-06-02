@@ -7,7 +7,7 @@ use ffmpeg_next::software::scaling::{context::Context as ScalerContext, flag::Fl
 use ffmpeg_next::util::frame::video::Video;
 use ffmpeg_next::{media, picture, Dictionary, Rational};
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::hw::{
     encoder_candidates_burn_in, encoder_candidates_with_hw, is_hardware_encoder,
 };
@@ -183,7 +183,7 @@ impl VideoTranscoder {
         let vt = self
             .vt_scaler
             .as_mut()
-            .ok_or_else(|| VideoProcessorError::Internal("VT scaler missing".into()))?;
+            .ok_or_else(|| VideoForgeError::Internal("VT scaler missing".into()))?;
         vt.transfer_from(src)?;
         let out = vt.output_frame();
         let pts = out.timestamp();
@@ -319,7 +319,7 @@ pub fn run_compress(
     let output_path = resolve_output_path(input, options.output_path.as_deref())?;
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| VideoProcessorError::IoError(e.to_string()))?;
+            .map_err(|e| VideoForgeError::IoError(e.to_string()))?;
     }
 
     // Remove stale partial output from a previous failed run.
@@ -461,7 +461,7 @@ fn run_compress_inner(
     }
 
     if transcoders.is_empty() && best_audio_index.is_none() && options.audio_tracks.is_empty() {
-        return Err(VideoProcessorError::InvalidInput("no video or audio streams".into()));
+        return Err(VideoForgeError::InvalidInput("no video or audio streams".into()));
     }
 
     if use_mixed_audio {
@@ -491,7 +491,7 @@ fn run_compress_inner(
     for (idx, _) in octx.streams().enumerate() {
         ost_time_bases[idx] = octx
             .stream(idx)
-            .ok_or_else(|| VideoProcessorError::FfmpegError(format!("missing output stream {idx}")))?
+            .ok_or_else(|| VideoForgeError::FfmpegError(format!("missing output stream {idx}")))?
             .time_base();
     }
 
@@ -510,7 +510,7 @@ fn run_compress_inner(
 
     for (stream, packet) in ictx.packets() {
         if interrupt.check() {
-            return Err(VideoProcessorError::Cancelled);
+            return Err(VideoForgeError::Cancelled);
         }
 
         let ist_index = stream.index();
@@ -541,7 +541,7 @@ fn run_compress_inner(
 
             while transcoder.decoder.receive_frame(&mut decoded).is_ok() {
                 if interrupt.check() {
-                    return Err(VideoProcessorError::Cancelled);
+                    return Err(VideoForgeError::Cancelled);
                 }
 
                 let frame_ms =
@@ -659,11 +659,11 @@ fn run_compress_inner(
     octx.write_trailer().map_err(map_ffmpeg_error)?;
 
     let file_size = std::fs::metadata(output_path)
-        .map_err(|e| VideoProcessorError::IoError(e.to_string()))?
+        .map_err(|e| VideoForgeError::IoError(e.to_string()))?
         .len();
 
     if file_size < 1024 {
-        return Err(VideoProcessorError::FfmpegError(
+        return Err(VideoForgeError::FfmpegError(
             "output file too small — encode likely failed".into(),
         ));
     }
@@ -728,7 +728,7 @@ fn create_video_transcoder(
     let candidates = if burn_in_active {
         let list = encoder_candidates_burn_in(codec);
         if list.is_empty() {
-            return Err(VideoProcessorError::UnsupportedCodec(format!(
+            return Err(VideoForgeError::UnsupportedCodec(format!(
                 "burn-in export needs libx264/libx265 or a mobile hardware encoder (MediaCodec / VideoToolbox) for {codec:?}"
             )));
         }
@@ -736,7 +736,7 @@ fn create_video_transcoder(
     } else {
         encoder_candidates_with_hw(codec, prefer_hw)
     };
-    let mut last_err: Option<VideoProcessorError> = None;
+    let mut last_err: Option<VideoForgeError> = None;
     let mut opened_pair: Option<(ffmpeg_next::encoder::Video, usize, String, VtLinkMode)> =
         None;
 
@@ -776,11 +776,11 @@ fn create_video_transcoder(
                 return Err(e);
             }
             if !prefer_hw && matches!(std::env::consts::OS, "android" | "ios") {
-                return Err(VideoProcessorError::UnsupportedCodec(format!(
+                return Err(VideoForgeError::UnsupportedCodec(format!(
                     "no encoder for {codec:?} (this mobile build has hardware encoders only; use preferHardwareEncoder: true)"
                 )));
             }
-            return Err(VideoProcessorError::UnsupportedCodec(format!(
+            return Err(VideoForgeError::UnsupportedCodec(format!(
                 "no encoder for {codec:?}"
             )));
         }
@@ -923,7 +923,7 @@ fn try_open_video_encoder(
     disable_vt_pipeline: bool,
 ) -> Result<(ffmpeg_next::encoder::Video, usize, VtLinkMode)> {
     let codec = ffmpeg_next::encoder::find_by_name(encoder_name)
-        .ok_or_else(|| VideoProcessorError::UnsupportedCodec(encoder_name.into()))?;
+        .ok_or_else(|| VideoForgeError::UnsupportedCodec(encoder_name.into()))?;
 
     let mut enc_ctx = CodecContext::new_with_codec(codec);
 
@@ -1037,7 +1037,7 @@ pub fn resolve_output_path(input: &str, explicit: Option<&str>) -> Result<PathBu
         return Ok(PathBuf::from(out));
     }
     if is_remote_input(input) {
-        return Err(VideoProcessorError::InvalidInput(
+        return Err(VideoForgeError::InvalidInput(
             "remote input requires an explicit output path".into(),
         ));
     }

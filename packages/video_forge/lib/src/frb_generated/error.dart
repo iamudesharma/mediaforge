@@ -9,29 +9,29 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'error.freezed.dart';
 
 @freezed
-sealed class VideoProcessorError with _$VideoProcessorError {
-  const VideoProcessorError._();
+sealed class VideoForgeError with _$VideoForgeError {
+  const VideoForgeError._();
 
-  const factory VideoProcessorError.invalidInput(String field0) =
-      VideoProcessorError_InvalidInput;
-  const factory VideoProcessorError.fileNotFound(String field0) =
-      VideoProcessorError_FileNotFound;
-  const factory VideoProcessorError.unsupportedCodec(String field0) =
-      VideoProcessorError_UnsupportedCodec;
-  const factory VideoProcessorError.jobNotFound(String field0) =
-      VideoProcessorError_JobNotFound;
-  const factory VideoProcessorError.cancelled() = VideoProcessorError_Cancelled;
-  const factory VideoProcessorError.ioError(String field0) =
-      VideoProcessorError_IoError;
-  const factory VideoProcessorError.ffmpegError(String field0) =
-      VideoProcessorError_FfmpegError;
-  const factory VideoProcessorError.queueFull() = VideoProcessorError_QueueFull;
-  const factory VideoProcessorError.internal(String field0) =
-      VideoProcessorError_Internal;
+  const factory VideoForgeError.invalidInput(String field0) =
+      VideoForgeError_InvalidInput;
+  const factory VideoForgeError.fileNotFound(String field0) =
+      VideoForgeError_FileNotFound;
+  const factory VideoForgeError.unsupportedCodec(String field0) =
+      VideoForgeError_UnsupportedCodec;
+  const factory VideoForgeError.jobNotFound(String field0) =
+      VideoForgeError_JobNotFound;
+  const factory VideoForgeError.cancelled() = VideoForgeError_Cancelled;
+  const factory VideoForgeError.ioError(String field0) =
+      VideoForgeError_IoError;
+  const factory VideoForgeError.ffmpegError(String field0) =
+      VideoForgeError_FfmpegError;
+  const factory VideoForgeError.queueFull() = VideoForgeError_QueueFull;
+  const factory VideoForgeError.internal(String field0) =
+      VideoForgeError_Internal;
 
   Future<String> errorCode() =>
-      RustLib.instance.api.crateErrorVideoProcessorErrorErrorCode(that: this);
+      RustLib.instance.api.crateErrorVideoForgeErrorErrorCode(that: this);
 
-  Future<String> errorMessage() => RustLib.instance.api
-      .crateErrorVideoProcessorErrorErrorMessage(that: this);
+  Future<String> errorMessage() =>
+      RustLib.instance.api.crateErrorVideoForgeErrorErrorMessage(that: this);
 }

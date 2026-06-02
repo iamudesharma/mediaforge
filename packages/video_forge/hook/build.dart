@@ -61,11 +61,25 @@ void main(List<String> args) async {
         );
 
     if (libPath == null) {
-      stderr.writeln(
-        'video_forge: no $libFileName for $triple — skipped.\n'
-        'Android: scripts/package-video-android.sh (or run-android.sh)\n'
-        'iOS: ./scripts/run-ios.sh',
-      );
+      // Fail loud: on macOS, a missing cdylib at this stage used to mean the
+      // app would build but crash at runtime with a generic
+      // "library not found" error. Surface the failure as a build error so
+      // devs and CI see it immediately. Android still tolerates a missing
+      // asset because the recommended path is to prebuild jniLibs with
+      // scripts/package-video-android.sh, then the hook only runs on hosts
+      // with the NDK toolchain.
+      final message =
+          'video_forge: failed to produce $libFileName for $triple.\n'
+          'Either install the matching Rust target with `rustup target add $triple`,\n'
+          'point FFMPEG_DIR at a compatible FFmpeg build (see tools/ffmpeg/),\n'
+          'or run the platform prebuild script:\n'
+          '  macOS: ./scripts/run-video-macos.sh\n'
+          '  iOS:   ./scripts/run-ios.sh\n'
+          '  Android: ./scripts/package-video-android.sh (or run-android.sh)';
+      stderr.writeln(message);
+      if (os == OS.macOS || os == OS.iOS) {
+        throw StateError(message);
+      }
       return;
     }
 

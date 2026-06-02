@@ -1,7 +1,7 @@
 use flutter_rust_bridge::frb;
 use crate::frb_generated::StreamSink;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::jobs::progress::ProgressReporter;
 use crate::jobs::registry::{registry, CancellationToken};
 use crate::pipeline;
@@ -61,9 +61,9 @@ pub async fn start_compress(
                 &jid,
                 Ok(JobResult::Compress(r.clone())),
             ),
-            Err(VideoProcessorError::Cancelled) => {
+            Err(VideoForgeError::Cancelled) => {
                 reporter.cancelled();
-                reg.complete(&jid, Err(VideoProcessorError::Cancelled));
+                reg.complete(&jid, Err(VideoForgeError::Cancelled));
             }
             Err(e) => {
                 reporter.failed();
@@ -91,7 +91,7 @@ pub async fn wait_for_job(job_id: String) -> Result<JobResult> {
         reg.wait_result(&id, std::time::Duration::from_secs(86_400))
     })
     .await
-    .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+    .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Cancel a running job by id.
@@ -101,7 +101,7 @@ pub fn cancel_job(job_id: String) -> Result<bool> {
     if reg.cancel(&job_id) {
         Ok(true)
     } else {
-        Err(VideoProcessorError::JobNotFound(job_id))
+        Err(VideoForgeError::JobNotFound(job_id))
     }
 }
 
@@ -111,7 +111,7 @@ pub async fn thumbnail(options: ThumbnailOptions) -> Result<String> {
     let token = CancellationToken::new();
     tokio::task::spawn_blocking(move || pipeline::extract_thumbnail(options, token))
         .await
-        .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+        .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Extract multiple thumbnails in one pass.
@@ -120,7 +120,7 @@ pub async fn batch_thumbnails(options: BatchThumbnailOptions) -> Result<BatchThu
     let token = CancellationToken::new();
     tokio::task::spawn_blocking(move || pipeline::extract_batch_thumbnails(options, token))
         .await
-        .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+        .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Thumbnail as encoded image bytes (JPEG/WebP) — no filesystem write (UI previews).
@@ -129,7 +129,7 @@ pub async fn thumbnail_bytes(options: ThumbnailBytesOptions) -> Result<Vec<u8>> 
     let token = CancellationToken::new();
     tokio::task::spawn_blocking(move || pipeline::extract_thumbnail_bytes(options, token))
         .await
-        .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+        .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Batch thumbnails as in-memory frames for filmstrip / scrub previews.
@@ -140,7 +140,7 @@ pub async fn batch_thumbnail_bytes(
     let token = CancellationToken::new();
     tokio::task::spawn_blocking(move || pipeline::extract_batch_thumbnail_bytes(options, token))
         .await
-        .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+        .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Decode one preview frame as RGBA8888 (texture / in-memory scrub — no JPEG write).
@@ -154,7 +154,7 @@ pub async fn decode_preview_frame_rgba(
         pipeline::decode_preview_frame_rgba(&input_path, position_ms, max_edge)
     })
     .await
-    .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+    .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
@@ -168,7 +168,7 @@ pub async fn decode_preview_frame_pixel_buffer(
         pipeline::decode_preview_frame_pixel_buffer(&input_path, position_ms, max_edge)
     })
     .await
-    .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+    .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
 /// Release a native preview pixel buffer not adopted by [pixel_surface].
@@ -191,7 +191,7 @@ pub fn cleanup_job(job_id: String) -> Result<()> {
 }
 
 // Re-export error mapping for FRB
-impl VideoProcessorError {
+impl VideoForgeError {
     #[frb]
     pub fn error_code(&self) -> String {
         self.code().to_string()

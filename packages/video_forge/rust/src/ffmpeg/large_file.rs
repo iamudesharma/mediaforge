@@ -5,7 +5,7 @@ use std::path::Path;
 use memmap2::Mmap;
 use mp4parse::{MediaTimeScale, Track, TrackType};
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::types::MediaInfo;
 
 /// Fast metadata extraction using memory-mapped MP4 parsing.
@@ -20,13 +20,13 @@ pub fn probe_mp4_fast(path: &Path) -> Result<Option<MediaInfo>> {
         return Ok(None);
     }
 
-    let file = File::open(path).map_err(|e| VideoProcessorError::IoError(e.to_string()))?;
+    let file = File::open(path).map_err(|e| VideoForgeError::IoError(e.to_string()))?;
     let file_size = file
         .metadata()
-        .map_err(|e| VideoProcessorError::IoError(e.to_string()))?
+        .map_err(|e| VideoForgeError::IoError(e.to_string()))?
         .len();
 
-    let mmap = unsafe { Mmap::map(&file).map_err(|e| VideoProcessorError::IoError(e.to_string()))? };
+    let mmap = unsafe { Mmap::map(&file).map_err(|e| VideoForgeError::IoError(e.to_string()))? };
 
     let mut cursor = Cursor::new(&mmap[..]);
     let context = match mp4parse::read_mp4(&mut cursor) {
@@ -128,8 +128,8 @@ fn pick_video_track<'a>(
 
 /// Opens large files via mmap for zero-copy sample access (reserved for future demux/IO paths).
 pub fn open_mmap(path: &Path) -> Result<Mmap> {
-    let file = File::open(path).map_err(|e| VideoProcessorError::IoError(e.to_string()))?;
-    unsafe { Mmap::map(&file).map_err(|e| VideoProcessorError::IoError(e.to_string())) }
+    let file = File::open(path).map_err(|e| VideoForgeError::IoError(e.to_string()))?;
+    unsafe { Mmap::map(&file).map_err(|e| VideoForgeError::IoError(e.to_string())) }
 }
 
 #[cfg(test)]

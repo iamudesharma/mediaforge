@@ -2,17 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:video_forge/video_forge.dart';
 
 void main() {
-  group('VideoProcessorError', () {
+  group('VideoForgeError', () {
     group('invalidInput', () {
       test('construction', () {
-        final err = VideoProcessorError.invalidInput('empty path');
-        expect(err, isA<VideoProcessorError_InvalidInput>());
-        expect((err as VideoProcessorError_InvalidInput).field0, 'empty path');
+        final err = VideoForgeError.invalidInput('empty path');
+        expect(err, isA<VideoForgeError_InvalidInput>());
+        expect((err as VideoForgeError_InvalidInput).field0, 'empty path');
       });
 
       test('equality', () {
-        final a = VideoProcessorError.invalidInput('bad');
-        final b = VideoProcessorError.invalidInput('bad');
+        final a = VideoForgeError.invalidInput('bad');
+        final b = VideoForgeError.invalidInput('bad');
         expect(a, equals(b));
         expect(a.hashCode, equals(b.hashCode));
       });
@@ -20,8 +20,8 @@ void main() {
 
     group('fileNotFound', () {
       test('construction and equality', () {
-        final a = VideoProcessorError.fileNotFound('/missing.mp4');
-        final b = VideoProcessorError.fileNotFound('/missing.mp4');
+        final a = VideoForgeError.fileNotFound('/missing.mp4');
+        final b = VideoForgeError.fileNotFound('/missing.mp4');
         expect(a, equals(b));
         expect(a.hashCode, equals(b.hashCode));
       });
@@ -29,24 +29,24 @@ void main() {
 
     group('unsupportedCodec', () {
       test('construction', () {
-        final err = VideoProcessorError.unsupportedCodec('vp9');
-        expect(err, isA<VideoProcessorError_UnsupportedCodec>());
-        expect((err as VideoProcessorError_UnsupportedCodec).field0, 'vp9');
+        final err = VideoForgeError.unsupportedCodec('vp9');
+        expect(err, isA<VideoForgeError_UnsupportedCodec>());
+        expect((err as VideoForgeError_UnsupportedCodec).field0, 'vp9');
       });
     });
 
     group('jobNotFound', () {
       test('construction', () {
-        final err = VideoProcessorError.jobNotFound('job-xyz');
-        expect(err, isA<VideoProcessorError_JobNotFound>());
-        expect((err as VideoProcessorError_JobNotFound).field0, 'job-xyz');
+        final err = VideoForgeError.jobNotFound('job-xyz');
+        expect(err, isA<VideoForgeError_JobNotFound>());
+        expect((err as VideoForgeError_JobNotFound).field0, 'job-xyz');
       });
     });
 
     group('cancelled', () {
       test('construction and equality', () {
-        final a = VideoProcessorError.cancelled();
-        final b = VideoProcessorError.cancelled();
+        final a = VideoForgeError.cancelled();
+        final b = VideoForgeError.cancelled();
         expect(a, equals(b));
         expect(a.hashCode, equals(b.hashCode));
       });
@@ -54,24 +54,24 @@ void main() {
 
     group('ioError', () {
       test('construction', () {
-        final err = VideoProcessorError.ioError('disk full');
-        expect(err, isA<VideoProcessorError_IoError>());
-        expect((err as VideoProcessorError_IoError).field0, 'disk full');
+        final err = VideoForgeError.ioError('disk full');
+        expect(err, isA<VideoForgeError_IoError>());
+        expect((err as VideoForgeError_IoError).field0, 'disk full');
       });
     });
 
     group('ffmpegError', () {
       test('construction', () {
-        final err = VideoProcessorError.ffmpegError('encoder not found');
-        expect(err, isA<VideoProcessorError_FfmpegError>());
-        expect((err as VideoProcessorError_FfmpegError).field0, 'encoder not found');
+        final err = VideoForgeError.ffmpegError('encoder not found');
+        expect(err, isA<VideoForgeError_FfmpegError>());
+        expect((err as VideoForgeError_FfmpegError).field0, 'encoder not found');
       });
     });
 
     group('queueFull', () {
       test('construction and equality', () {
-        final a = VideoProcessorError.queueFull();
-        final b = VideoProcessorError.queueFull();
+        final a = VideoForgeError.queueFull();
+        final b = VideoForgeError.queueFull();
         expect(a, equals(b));
         expect(a.hashCode, equals(b.hashCode));
       });
@@ -79,33 +79,33 @@ void main() {
 
     group('internal', () {
       test('construction', () {
-        final err = VideoProcessorError.internal('panic');
-        expect(err, isA<VideoProcessorError_Internal>());
-        expect((err as VideoProcessorError_Internal).field0, 'panic');
+        final err = VideoForgeError.internal('panic');
+        expect(err, isA<VideoForgeError_Internal>());
+        expect((err as VideoForgeError_Internal).field0, 'panic');
       });
     });
 
     test('all 9 variants exist', () {
-      expect(VideoProcessorError_InvalidInput, isA<Type>());
-      expect(VideoProcessorError_FileNotFound, isA<Type>());
-      expect(VideoProcessorError_UnsupportedCodec, isA<Type>());
-      expect(VideoProcessorError_JobNotFound, isA<Type>());
-      expect(VideoProcessorError_Cancelled, isA<Type>());
-      expect(VideoProcessorError_IoError, isA<Type>());
-      expect(VideoProcessorError_FfmpegError, isA<Type>());
-      expect(VideoProcessorError_QueueFull, isA<Type>());
-      expect(VideoProcessorError_Internal, isA<Type>());
+      expect(VideoForgeError_InvalidInput, isA<Type>());
+      expect(VideoForgeError_FileNotFound, isA<Type>());
+      expect(VideoForgeError_UnsupportedCodec, isA<Type>());
+      expect(VideoForgeError_JobNotFound, isA<Type>());
+      expect(VideoForgeError_Cancelled, isA<Type>());
+      expect(VideoForgeError_IoError, isA<Type>());
+      expect(VideoForgeError_FfmpegError, isA<Type>());
+      expect(VideoForgeError_QueueFull, isA<Type>());
+      expect(VideoForgeError_Internal, isA<Type>());
     });
 
     test('different variants not equal', () {
-      final a = VideoProcessorError.cancelled();
-      final b = VideoProcessorError.queueFull();
+      final a = VideoForgeError.cancelled();
+      final b = VideoForgeError.queueFull();
       expect(a, isNot(equals(b)));
     });
 
     group('when pattern matching', () {
       test('matches correct variant', () {
-        final err = VideoProcessorError.cancelled();
+        final err = VideoForgeError.cancelled();
         final result = err.when(
           invalidInput: (_) => 'invalidInput',
           fileNotFound: (_) => 'fileNotFound',
@@ -121,7 +121,7 @@ void main() {
       });
 
       test('all branches exhaustive', () {
-        final err = VideoProcessorError.fileNotFound('/x.mp4');
+        final err = VideoForgeError.fileNotFound('/x.mp4');
         final result = err.when(
           invalidInput: (_) => 'ii',
           fileNotFound: (_) => 'fn',
@@ -138,7 +138,7 @@ void main() {
     });
 
     test('map pattern matching', () {
-      final err = VideoProcessorError.ffmpegError('broken pipe');
+      final err = VideoForgeError.ffmpegError('broken pipe');
       final result = err.map(
         invalidInput: (_) => 'II',
         fileNotFound: (_) => 'FN',
@@ -154,7 +154,7 @@ void main() {
     });
 
     test('maybeWhen with specific variant', () {
-      final err = VideoProcessorError.internal('oops');
+      final err = VideoForgeError.internal('oops');
       final result = err.maybeWhen(
         internal: (msg) => 'internal: $msg',
         orElse: () => 'not internal',
@@ -163,7 +163,7 @@ void main() {
     });
 
     test('maybeWhen with orElse fallback', () {
-      final err = VideoProcessorError.queueFull();
+      final err = VideoForgeError.queueFull();
       final result = err.maybeWhen(
         internal: (_) => 'internal',
         orElse: () => 'other',
@@ -172,7 +172,7 @@ void main() {
     });
 
     test('maybeMap with orElse', () {
-      final err = VideoProcessorError.internal('oh no');
+      final err = VideoForgeError.internal('oh no');
       final result = err.maybeMap(
         internal: (e) => 'in-${e.field0}',
         orElse: () => 'not-internal',

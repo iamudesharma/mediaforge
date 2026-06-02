@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
-pub enum VideoProcessorError {
+pub enum VideoForgeError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
     #[error("file not found: {0}")]
@@ -22,7 +22,7 @@ pub enum VideoProcessorError {
     Internal(String),
 }
 
-impl VideoProcessorError {
+impl VideoForgeError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::InvalidInput(_) => "invalid_input",
@@ -38,4 +38,13 @@ impl VideoProcessorError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, VideoProcessorError>;
+pub type Result<T> = std::result::Result<T, VideoForgeError>;
+
+/// Deprecated alias for [`VideoForgeError`] kept for one release to avoid breaking
+/// downstream callers (e.g. `video_forge_kit`, `media_studio`) that still match
+/// on the old name. New code should use [`VideoForgeError`].
+#[deprecated(
+    since = "2.0.0",
+    note = "renamed to `VideoForgeError`; will be removed in 2.1.0"
+)]
+pub type VideoProcessorError = VideoForgeError;

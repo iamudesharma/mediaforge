@@ -2,7 +2,7 @@ use std::sync::Once;
 
 use ffmpeg_next::util::error::Error as FfmpegError;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 
 static INIT: Once = Once::new();
 
@@ -21,12 +21,12 @@ pub fn ensure_ffmpeg_initialized() -> Result<()> {
     Ok(())
 }
 
-pub fn map_ffmpeg_error(err: FfmpegError) -> VideoProcessorError {
+pub fn map_ffmpeg_error(err: FfmpegError) -> VideoForgeError {
     let mut msg = ffmpeg_error_message(&err);
     if let Some(hint) = remote_error_hint(&err) {
         msg = format!("{msg} — {hint}");
     }
-    VideoProcessorError::FfmpegError(msg)
+    VideoForgeError::FfmpegError(msg)
 }
 
 fn ffmpeg_error_message(err: &FfmpegError) -> String {

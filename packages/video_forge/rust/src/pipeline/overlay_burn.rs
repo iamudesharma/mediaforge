@@ -5,7 +5,7 @@ use std::path::Path;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::software::scaling::{context::Context as ScalerContext, flag::Flags};
 use ffmpeg_next::util::frame::video::Video;
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::map_ffmpeg_error;
 use crate::types::BurnInOverlay;
 
@@ -25,21 +25,21 @@ impl LoadedOverlay {
     fn from_spec(spec: &BurnInOverlay) -> Result<Self> {
         let path = spec.image_path.trim();
         if path.is_empty() {
-            return Err(VideoProcessorError::InvalidInput(
+            return Err(VideoForgeError::InvalidInput(
                 "burn-in overlay image_path is empty".into(),
             ));
         }
         if !Path::new(path).exists() {
-            return Err(VideoProcessorError::InvalidInput(format!(
+            return Err(VideoForgeError::InvalidInput(format!(
                 "burn-in overlay not found: {path}"
             )));
         }
         let img = image::open(path)
-            .map_err(|e| VideoProcessorError::IoError(format!("overlay {path}: {e}")))?;
+            .map_err(|e| VideoForgeError::IoError(format!("overlay {path}: {e}")))?;
         let rgba = img.to_rgba8();
         let (width, height) = rgba.dimensions();
         if width == 0 || height == 0 {
-            return Err(VideoProcessorError::InvalidInput(format!(
+            return Err(VideoForgeError::InvalidInput(format!(
                 "overlay has zero size: {path}"
             )));
         }
@@ -140,7 +140,7 @@ impl OverlayCompositor {
 
     pub fn apply_on_yuv420(&mut self, frame: &mut Video, frame_ms: u64) -> Result<()> {
         if frame.width() != self.out_w || frame.height() != self.out_h {
-            return Err(VideoProcessorError::Internal(format!(
+            return Err(VideoForgeError::Internal(format!(
                 "overlay burn: expected {}x{}, got {}x{}",
                 self.out_w,
                 self.out_h,
@@ -149,7 +149,7 @@ impl OverlayCompositor {
             )));
         }
         if frame.format() != Pixel::YUV420P {
-            return Err(VideoProcessorError::Internal(format!(
+            return Err(VideoForgeError::Internal(format!(
                 "overlay burn: expected YUV420P, got {:?}",
                 frame.format()
             )));

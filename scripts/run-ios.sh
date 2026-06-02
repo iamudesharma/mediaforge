@@ -33,6 +33,17 @@ echo "==> Packaging iOS framework..."
 chmod +x "${TOOLS}/release/package-ios-framework.sh"
 "${TOOLS}/release/package-ios-framework.sh"
 
+# Make the packaged framework binary's install name match the loader
+# expectations (@rpath/video_forge.framework/video_forge). Without this,
+# prebuilt framework binaries that were built on a different host can
+# carry an absolute / wrong @rpath and the iOS loader will fail with
+# "image not found" at app launch.
+FRAMEWORK_BIN="${ROOT}/packages/video_forge/ios/Frameworks/video_forge.framework/video_forge"
+if [[ -f "${FRAMEWORK_BIN}" ]]; then
+  echo "==> Setting framework install name to @rpath/video_forge.framework/video_forge"
+  install_name_tool -id "@rpath/video_forge.framework/video_forge" "${FRAMEWORK_BIN}"
+fi
+
 echo "==> Flutter pub get (workspace)..."
 (cd "${ROOT}" && dart pub get && dart run melos bootstrap)
 

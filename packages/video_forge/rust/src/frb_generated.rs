@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -26396576;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 194317783;
 
 // Section: executor
 
@@ -1135,7 +1135,7 @@ fn wire__crate__api__thumbnail_bytes_impl(
         },
     )
 }
-fn wire__crate__error__video_processor_error_error_code_impl(
+fn wire__crate__error__video_forge_error_error_code_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1143,7 +1143,7 @@ fn wire__crate__error__video_processor_error_error_code_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "video_processor_error_error_code",
+            debug_name: "video_forge_error_error_code",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -1157,20 +1157,19 @@ fn wire__crate__error__video_processor_error_error_code_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_that = <crate::error::VideoProcessorError>::sse_decode(&mut deserializer);
+            let api_that = <crate::error::VideoForgeError>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
-                    let output_ok = Result::<_, ()>::Ok(
-                        crate::error::VideoProcessorError::error_code(&api_that),
-                    )?;
+                    let output_ok =
+                        Result::<_, ()>::Ok(crate::error::VideoForgeError::error_code(&api_that))?;
                     Ok(output_ok)
                 })())
             }
         },
     )
 }
-fn wire__crate__error__video_processor_error_error_message_impl(
+fn wire__crate__error__video_forge_error_error_message_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1178,7 +1177,7 @@ fn wire__crate__error__video_processor_error_error_message_impl(
 ) {
     FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
         flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "video_processor_error_error_message",
+            debug_name: "video_forge_error_error_message",
             port: Some(port_),
             mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
         },
@@ -1192,12 +1191,12 @@ fn wire__crate__error__video_processor_error_error_message_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_that = <crate::error::VideoProcessorError>::sse_decode(&mut deserializer);
+            let api_that = <crate::error::VideoForgeError>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, ()>((move || {
                     let output_ok = Result::<_, ()>::Ok(
-                        crate::error::VideoProcessorError::error_message(&api_that),
+                        crate::error::VideoForgeError::error_message(&api_that),
                     )?;
                     Ok(output_ok)
                 })())
@@ -1902,44 +1901,44 @@ impl SseDecode for crate::types::VideoCodec {
     }
 }
 
-impl SseDecode for crate::error::VideoProcessorError {
+impl SseDecode for crate::error::VideoForgeError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::InvalidInput(var_field0);
+                return crate::error::VideoForgeError::InvalidInput(var_field0);
             }
             1 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::FileNotFound(var_field0);
+                return crate::error::VideoForgeError::FileNotFound(var_field0);
             }
             2 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::UnsupportedCodec(var_field0);
+                return crate::error::VideoForgeError::UnsupportedCodec(var_field0);
             }
             3 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::JobNotFound(var_field0);
+                return crate::error::VideoForgeError::JobNotFound(var_field0);
             }
             4 => {
-                return crate::error::VideoProcessorError::Cancelled;
+                return crate::error::VideoForgeError::Cancelled;
             }
             5 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::IoError(var_field0);
+                return crate::error::VideoForgeError::IoError(var_field0);
             }
             6 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::FfmpegError(var_field0);
+                return crate::error::VideoForgeError::FfmpegError(var_field0);
             }
             7 => {
-                return crate::error::VideoProcessorError::QueueFull;
+                return crate::error::VideoForgeError::QueueFull;
             }
             8 => {
                 let mut var_field0 = <String>::sse_decode(deserializer);
-                return crate::error::VideoProcessorError::Internal(var_field0);
+                return crate::error::VideoForgeError::Internal(var_field0);
             }
             _ => {
                 unimplemented!("");
@@ -2024,13 +2023,10 @@ fn pde_ffi_dispatcher_primary_impl(
         25 => wire__crate__api__start_compress_impl(port, ptr, rust_vec_len, data_len),
         26 => wire__crate__api__thumbnail_impl(port, ptr, rust_vec_len, data_len),
         27 => wire__crate__api__thumbnail_bytes_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__error__video_processor_error_error_code_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        29 => wire__crate__error__video_processor_error_error_message_impl(
+        28 => {
+            wire__crate__error__video_forge_error_error_code_impl(port, ptr, rust_vec_len, data_len)
+        }
+        29 => wire__crate__error__video_forge_error_error_message_impl(
             port,
             ptr,
             rust_vec_len,
@@ -2528,30 +2524,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::VideoCodec> for crate::type
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::error::VideoProcessorError {
+impl flutter_rust_bridge::IntoDart for crate::error::VideoForgeError {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
-            crate::error::VideoProcessorError::InvalidInput(field0) => {
+            crate::error::VideoForgeError::InvalidInput(field0) => {
                 [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::VideoProcessorError::FileNotFound(field0) => {
+            crate::error::VideoForgeError::FileNotFound(field0) => {
                 [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::VideoProcessorError::UnsupportedCodec(field0) => {
+            crate::error::VideoForgeError::UnsupportedCodec(field0) => {
                 [2.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::VideoProcessorError::JobNotFound(field0) => {
+            crate::error::VideoForgeError::JobNotFound(field0) => {
                 [3.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::VideoProcessorError::Cancelled => [4.into_dart()].into_dart(),
-            crate::error::VideoProcessorError::IoError(field0) => {
+            crate::error::VideoForgeError::Cancelled => [4.into_dart()].into_dart(),
+            crate::error::VideoForgeError::IoError(field0) => {
                 [5.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::VideoProcessorError::FfmpegError(field0) => {
+            crate::error::VideoForgeError::FfmpegError(field0) => {
                 [6.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
-            crate::error::VideoProcessorError::QueueFull => [7.into_dart()].into_dart(),
-            crate::error::VideoProcessorError::Internal(field0) => {
+            crate::error::VideoForgeError::QueueFull => [7.into_dart()].into_dart(),
+            crate::error::VideoForgeError::Internal(field0) => {
                 [8.into_dart(), field0.into_into_dart().into_dart()].into_dart()
             }
             _ => {
@@ -2560,14 +2556,11 @@ impl flutter_rust_bridge::IntoDart for crate::error::VideoProcessorError {
         }
     }
 }
-impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::error::VideoProcessorError
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::error::VideoForgeError {}
+impl flutter_rust_bridge::IntoIntoDart<crate::error::VideoForgeError>
+    for crate::error::VideoForgeError
 {
-}
-impl flutter_rust_bridge::IntoIntoDart<crate::error::VideoProcessorError>
-    for crate::error::VideoProcessorError
-{
-    fn into_into_dart(self) -> crate::error::VideoProcessorError {
+    fn into_into_dart(self) -> crate::error::VideoForgeError {
         self
     }
 }
@@ -3119,41 +3112,41 @@ impl SseEncode for crate::types::VideoCodec {
     }
 }
 
-impl SseEncode for crate::error::VideoProcessorError {
+impl SseEncode for crate::error::VideoForgeError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::error::VideoProcessorError::InvalidInput(field0) => {
+            crate::error::VideoForgeError::InvalidInput(field0) => {
                 <i32>::sse_encode(0, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::VideoProcessorError::FileNotFound(field0) => {
+            crate::error::VideoForgeError::FileNotFound(field0) => {
                 <i32>::sse_encode(1, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::VideoProcessorError::UnsupportedCodec(field0) => {
+            crate::error::VideoForgeError::UnsupportedCodec(field0) => {
                 <i32>::sse_encode(2, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::VideoProcessorError::JobNotFound(field0) => {
+            crate::error::VideoForgeError::JobNotFound(field0) => {
                 <i32>::sse_encode(3, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::VideoProcessorError::Cancelled => {
+            crate::error::VideoForgeError::Cancelled => {
                 <i32>::sse_encode(4, serializer);
             }
-            crate::error::VideoProcessorError::IoError(field0) => {
+            crate::error::VideoForgeError::IoError(field0) => {
                 <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::VideoProcessorError::FfmpegError(field0) => {
+            crate::error::VideoForgeError::FfmpegError(field0) => {
                 <i32>::sse_encode(6, serializer);
                 <String>::sse_encode(field0, serializer);
             }
-            crate::error::VideoProcessorError::QueueFull => {
+            crate::error::VideoForgeError::QueueFull => {
                 <i32>::sse_encode(7, serializer);
             }
-            crate::error::VideoProcessorError::Internal(field0) => {
+            crate::error::VideoForgeError::Internal(field0) => {
                 <i32>::sse_encode(8, serializer);
                 <String>::sse_encode(field0, serializer);
             }

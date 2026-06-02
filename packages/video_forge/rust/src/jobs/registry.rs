@@ -8,7 +8,7 @@ use parking_lot::Mutex;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::types::{JobResult, ProgressEvent, ProcessingPhase};
 
 #[derive(Clone)]
@@ -34,7 +34,7 @@ impl CancellationToken {
 
 struct JobRecord {
     token: CancellationToken,
-    result: Mutex<Option<std::result::Result<JobResult, VideoProcessorError>>>,
+    result: Mutex<Option<std::result::Result<JobResult, VideoForgeError>>>,
 }
 
 pub struct JobRegistry {
@@ -60,12 +60,12 @@ impl JobRegistry {
 
     pub async fn acquire_permit(
         &self,
-    ) -> std::result::Result<OwnedSemaphorePermit, VideoProcessorError> {
+    ) -> std::result::Result<OwnedSemaphorePermit, VideoForgeError> {
         self.semaphore
             .clone()
             .acquire_owned()
             .await
-            .map_err(|_| VideoProcessorError::Internal("job queue closed".into()))
+            .map_err(|_| VideoForgeError::Internal("job queue closed".into()))
     }
 
     pub fn register(&self) -> (String, CancellationToken) {
@@ -84,7 +84,7 @@ impl JobRegistry {
     pub fn complete(
         &self,
         job_id: &str,
-        result: std::result::Result<JobResult, VideoProcessorError>,
+        result: std::result::Result<JobResult, VideoForgeError>,
     ) {
         if let Some(record) = self.jobs.lock().get(job_id) {
             *record.result.lock() = Some(result);
@@ -114,11 +114,11 @@ impl JobRegistry {
                         return result;
                     }
                 } else {
-                    return Err(VideoProcessorError::JobNotFound(job_id.to_string()));
+                    return Err(VideoForgeError::JobNotFound(job_id.to_string()));
                 }
             }
             if Instant::now() >= deadline {
-                return Err(VideoProcessorError::Internal("job wait timeout".into()));
+                return Err(VideoForgeError::Internal("job wait timeout".into()));
             }
             std::thread::sleep(Duration::from_millis(50));
         }

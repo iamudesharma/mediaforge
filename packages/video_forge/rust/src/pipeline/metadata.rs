@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::{
     ensure_ffmpeg_initialized, ensure_input_accessible, is_remote_input, open_input,
     prefer_software_preview, stream_has_dolby_vision,
@@ -66,7 +66,7 @@ fn probe_with_ffmpeg(input: &str) -> Result<MediaInfo> {
         0
     } else {
         std::fs::metadata(input)
-            .map_err(|e| VideoProcessorError::IoError(e.to_string()))?
+            .map_err(|e| VideoForgeError::IoError(e.to_string()))?
             .len()
     };
 
@@ -136,6 +136,6 @@ mod tests {
     #[test]
     fn probe_missing_file_errors() {
         let err = probe_media_info("/nonexistent/video.mp4").unwrap_err();
-        assert!(matches!(err, crate::error::VideoProcessorError::FileNotFound(_)));
+        assert!(matches!(err, crate::error::VideoForgeError::FileNotFound(_)));
     }
 }

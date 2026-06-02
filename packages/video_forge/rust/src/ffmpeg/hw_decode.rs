@@ -11,10 +11,10 @@ use ffmpeg_next::codec::Id;
 use ffmpeg_next::ffi;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::util::frame::video::Video as VideoFrame;
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::map_ffmpeg_error;
 
-fn map_av_err(ret: i32) -> VideoProcessorError {
+fn map_av_err(ret: i32) -> VideoForgeError {
     map_ffmpeg_error(ffmpeg_next::util::error::Error::from(ret))
 }
 
@@ -299,7 +299,7 @@ impl HwFrameTransfer {
     /// Download a HW-decoded frame into `dst` (allocated by FFmpeg if needed).
     pub fn transfer_to_sw(&self, src: &VideoFrame, dst: &mut VideoFrame) -> Result<()> {
         if !is_hw_pixel_format(src.format()) {
-            return Err(VideoProcessorError::Internal(
+            return Err(VideoForgeError::Internal(
                 "transfer_to_sw called on non-HW frame".into(),
             ));
         }
@@ -376,7 +376,7 @@ pub fn attach_hw_device_ctx(dec_ctx: &mut CodecContext) -> Result<Option<HwFrame
         (*avctx).hw_device_ctx = ffi::av_buffer_ref(device.ptr);
         if (*avctx).hw_device_ctx.is_null() {
             drop(Box::from_raw(opaque));
-            return Err(VideoProcessorError::FfmpegError(
+            return Err(VideoForgeError::FfmpegError(
                 "av_buffer_ref(hw_device_ctx) failed".into(),
             ));
         }

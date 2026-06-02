@@ -5,7 +5,7 @@ use ffmpeg_next::codec::discard::Discard;
 use ffmpeg_next::util::frame::video::Video;
 use ffmpeg_next::Rational;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::{
     ensure_ffmpeg_initialized, ensure_input_accessible, flush_video_decoder, hw_decode,
     map_ffmpeg_error, ms_to_stream_ts, open_input, open_video_decoder, seek_stream_backward,
@@ -39,15 +39,15 @@ pub fn decode_preview_pixel_buffer(
     let stream = ictx
         .streams()
         .best(ffmpeg_next::media::Type::Video)
-        .ok_or_else(|| VideoProcessorError::InvalidInput("no video stream".into()))?;
+        .ok_or_else(|| VideoForgeError::InvalidInput("no video stream".into()))?;
     let stream_idx = stream.index();
     let tb = stream.time_base();
     let params = stream.parameters();
 
     let (mut decoder, hw) =
-        open_video_decoder(params, true).map_err(|e| VideoProcessorError::Internal(e.to_string()))?;
+        open_video_decoder(params, true).map_err(|e| VideoForgeError::Internal(e.to_string()))?;
     let mut hw = hw.ok_or_else(|| {
-        VideoProcessorError::Internal("VideoToolbox preview decode unavailable".into())
+        VideoForgeError::Internal("VideoToolbox preview decode unavailable".into())
     })?;
 
     let target_ms = position_ms;
@@ -86,7 +86,7 @@ pub fn decode_preview_pixel_buffer(
     decoder.skip_frame(Discard::None);
 
     if !captured || !hw_decode::is_hw_pixel_format(frame.format()) {
-        return Err(VideoProcessorError::Internal(
+        return Err(VideoForgeError::Internal(
             "HW preview decode did not produce a VideoToolbox frame".into(),
         ));
     }
@@ -98,7 +98,7 @@ pub fn decode_preview_pixel_buffer(
     hw.ensure_transfer_session()?;
     let session = hw
         .transfer_session()
-        .ok_or_else(|| VideoProcessorError::Internal("VT transfer session missing".into()))?;
+        .ok_or_else(|| VideoForgeError::Internal("VT transfer session missing".into()))?;
 
     unsafe {
         let pb = crate::ffmpeg::vt_pipeline::transfer_vt_frame_to_bgra_pixel_buffer(
@@ -123,7 +123,7 @@ pub fn decode_preview_pixel_buffer(
     _position_ms: u64,
     _max_edge: Option<u32>,
 ) -> Result<PreviewFramePixelBuffer> {
-    Err(VideoProcessorError::Internal(
+    Err(VideoForgeError::Internal(
         "HW preview decode is only available on Apple platforms".into(),
     ))
 }

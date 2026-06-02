@@ -45,6 +45,9 @@ jobs:
       - name: Analyze video_forge
         run: dart run melos exec --scope=video_forge -- flutter analyze --no-fatal-infos
 
+      - name: Test video_forge
+        run: dart run melos exec --scope=video_forge -- flutter test
+
       - name: Test video_forge_kit
         run: dart run melos exec --scope=video_forge_kit -- flutter test
 

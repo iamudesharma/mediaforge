@@ -20,7 +20,7 @@ use ffmpeg_next::Rational;
 use image::{ImageBuffer, ImageFormat, RgbImage};
 use rayon::prelude::*;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::{
     apply_preview_scrub_decoder_settings, apply_thumbnail_decoder_settings,
     ensure_ffmpeg_initialized, ensure_input_accessible, flush_video_decoder, input_duration_ms,
@@ -90,7 +90,7 @@ pub fn extract_batch_thumbnails(
     token: CancellationToken,
 ) -> Result<BatchThumbnailResult> {
     if token.is_cancelled() {
-        return Err(VideoProcessorError::Cancelled);
+        return Err(VideoForgeError::Cancelled);
     }
 
     ensure_ffmpeg_initialized()?;
@@ -104,7 +104,7 @@ pub fn extract_batch_thumbnails(
 
     let explicit_paths = options.output_paths.as_ref().map(|paths| {
         if paths.len() != n {
-            Err(VideoProcessorError::InvalidInput(format!(
+            Err(VideoForgeError::InvalidInput(format!(
                 "output_paths length {} must match positions_ms length {n}",
                 paths.len()
             )))
@@ -126,7 +126,7 @@ pub fn extract_batch_thumbnails(
     } else {
         let dir = PathBuf::from(options.output_dir.trim());
         if options.output_dir.trim().is_empty() {
-            return Err(VideoProcessorError::InvalidInput(
+            return Err(VideoForgeError::InvalidInput(
                 "output_dir is required when output_paths is not set".into(),
             ));
         }
@@ -174,7 +174,7 @@ pub fn extract_batch_thumbnail_bytes(
     token: CancellationToken,
 ) -> Result<BatchThumbnailBytesResult> {
     if token.is_cancelled() {
-        return Err(VideoProcessorError::Cancelled);
+        return Err(VideoForgeError::Cancelled);
     }
 
     ensure_ffmpeg_initialized()?;
@@ -232,12 +232,12 @@ fn build_targets(positions_ms: &[u64]) -> Vec<BatchTarget> {
         .collect()
 }
 
-fn missing_bytes_err(index: usize) -> VideoProcessorError {
-    VideoProcessorError::Internal(format!("missing thumbnail bytes for index {index}"))
+fn missing_bytes_err(index: usize) -> VideoForgeError {
+    VideoForgeError::Internal(format!("missing thumbnail bytes for index {index}"))
 }
 
-fn missing_rgb_err(index: usize) -> VideoProcessorError {
-    VideoProcessorError::Internal(format!("missing decoded RGB for thumbnail index {index}"))
+fn missing_rgb_err(index: usize) -> VideoForgeError {
+    VideoForgeError::Internal(format!("missing decoded RGB for thumbnail index {index}"))
 }
 
 /// Decode one video frame to packed RGB24 (preview / scrub; separate from JPEG thumbnail path).
@@ -276,7 +276,7 @@ pub(crate) fn decode_scrub_rgb_frame_at(
         true,
     )?;
     target.rgb.ok_or_else(|| {
-        VideoProcessorError::InvalidInput("could not decode frame at position".into())
+        VideoForgeError::InvalidInput("could not decode frame at position".into())
     })
 }
 
@@ -311,7 +311,7 @@ fn decode_batch_frames(
     let stream = ictx
         .streams()
         .best(ffmpeg_next::media::Type::Video)
-        .ok_or_else(|| VideoProcessorError::InvalidInput("no video stream".into()))?;
+        .ok_or_else(|| VideoForgeError::InvalidInput("no video stream".into()))?;
     let stream_idx = stream.index();
     let tb = stream.time_base();
     let params = stream.parameters();
@@ -423,7 +423,7 @@ fn decode_batch_sequential(
 
     for (s, packet) in ictx.packets() {
         if token.is_cancelled() {
-            return Err(VideoProcessorError::Cancelled);
+            return Err(VideoForgeError::Cancelled);
         }
         if s.index() != stream_idx {
             continue;
@@ -500,7 +500,7 @@ fn decode_batch_segmented(
 
     for t in targets.iter_mut() {
         if token.is_cancelled() {
-            return Err(VideoProcessorError::Cancelled);
+            return Err(VideoForgeError::Cancelled);
         }
 
         let target_ms = t.position_ms;
@@ -543,7 +543,7 @@ fn decode_batch_segmented(
 
         decoder.skip_frame(Discard::None);
         if !captured {
-            return Err(VideoProcessorError::InvalidInput(format!(
+            return Err(VideoForgeError::InvalidInput(format!(
                 "could not decode thumbnail at {target_ms}ms"
             )));
         }
@@ -569,7 +569,7 @@ fn decode_one_segmented_target(
     color_src_key: &mut Option<(u32, u32, Pixel, u32, u32)>,
 ) -> Result<bool> {
     if token.is_cancelled() {
-        return Err(VideoProcessorError::Cancelled);
+        return Err(VideoForgeError::Cancelled);
     }
 
     let seek_ts = ms_to_stream_ts(seek_ms, tb);
@@ -586,7 +586,7 @@ fn decode_one_segmented_target(
     for (s, packet) in ictx.packets() {
         if token.is_cancelled() {
             decoder.skip_frame(Discard::None);
-            return Err(VideoProcessorError::Cancelled);
+            return Err(VideoForgeError::Cancelled);
         }
         if s.index() != stream_idx {
             continue;
@@ -701,7 +701,7 @@ fn encode_batch_targets_parallel(
     token: &CancellationToken,
 ) -> Result<()> {
     if token.is_cancelled() {
-        return Err(VideoProcessorError::Cancelled);
+        return Err(VideoForgeError::Cancelled);
     }
 
     if targets.len() <= 1 {
@@ -716,7 +716,7 @@ fn encode_batch_targets_parallel(
         .par_iter()
         .map(|t| {
             if token.is_cancelled() {
-                return Err(VideoProcessorError::Cancelled);
+                return Err(VideoForgeError::Cancelled);
             }
             let rgb = t.rgb.as_ref().ok_or_else(|| missing_rgb_err(t.index))?;
             encode_rgb_to_bytes(rgb, format)
@@ -733,7 +733,7 @@ fn batch_incomplete_error(decoded: usize, total: usize) -> Result<()> {
     if decoded >= total {
         return Ok(());
     }
-    Err(VideoProcessorError::InvalidInput(
+    Err(VideoForgeError::InvalidInput(
         format!(
             "could not decode {} of {} batch thumbnail positions",
             total - decoded,
@@ -803,7 +803,7 @@ fn convert_frame_to_rgb24(
     let src_h = frame.height();
     let fmt = frame.format();
     if crate::ffmpeg::hw_decode::is_hw_pixel_format(fmt) {
-        return Err(VideoProcessorError::Internal(
+        return Err(VideoForgeError::Internal(
             "cannot swscale hardware-decoded frame; transfer to system memory or use pixel-buffer preview path".into(),
         ));
     }
@@ -849,7 +849,7 @@ fn copy_rgb24_plane(rgb: &Video) -> Result<Vec<u8>> {
 fn encode_rgb_to_bytes(frame: &RgbFrame, format: &ThumbnailFormat) -> Result<Vec<u8>> {
     let img: RgbImage =
         ImageBuffer::from_raw(frame.width, frame.height, frame.data.clone()).ok_or_else(|| {
-            VideoProcessorError::Internal("invalid RGB buffer".into())
+            VideoForgeError::Internal("invalid RGB buffer".into())
         })?;
 
     let image_format = match format {
@@ -868,8 +868,8 @@ fn write_bytes(bytes: &[u8], path: &Path) -> Result<()> {
     std::fs::write(path, bytes).map_err(map_io_err)
 }
 
-fn map_io_err(err: impl std::fmt::Display) -> VideoProcessorError {
-    VideoProcessorError::IoError(err.to_string())
+fn map_io_err(err: impl std::fmt::Display) -> VideoForgeError {
+    VideoForgeError::IoError(err.to_string())
 }
 
 fn ensure_output_parent(path: &Path) -> Result<()> {
@@ -904,7 +904,7 @@ fn resolve_thumb_path(
         return Ok(PathBuf::from(p));
     }
     if crate::ffmpeg::is_remote_input(input) {
-        return Err(VideoProcessorError::InvalidInput(
+        return Err(VideoForgeError::InvalidInput(
             "remote input requires an explicit thumbnail output path".into(),
         ));
     }

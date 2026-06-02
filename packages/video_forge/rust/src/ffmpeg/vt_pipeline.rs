@@ -11,7 +11,7 @@ use ffmpeg_next::ffi;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::util::frame::video::Video as VideoFrame;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::hw_decode::HwFrameTransfer;
 use crate::ffmpeg::map_ffmpeg_error;
 use crate::ffmpeg::vt_link::VtLinkMode;
@@ -55,8 +55,8 @@ extern "C" {
     ) -> OSStatus;
 }
 
-fn map_vt_status(err: OSStatus, ctx: &str) -> VideoProcessorError {
-    VideoProcessorError::FfmpegError(format!("{ctx}: OSStatus {err}"))
+fn map_vt_status(err: OSStatus, ctx: &str) -> VideoForgeError {
+    VideoForgeError::FfmpegError(format!("{ctx}: OSStatus {err}"))
 }
 
 unsafe fn cv_buffer_from_frame(frame: *const ffi::AVFrame) -> Option<CVPixelBufferRef> {
@@ -79,7 +79,7 @@ pub unsafe fn alloc_hw_frames(
 ) -> Result<*mut ffi::AVBufferRef> {
     let mut frames_ref = ffi::av_hwframe_ctx_alloc(device);
     if frames_ref.is_null() {
-        return Err(VideoProcessorError::FfmpegError(
+        return Err(VideoForgeError::FfmpegError(
             "av_hwframe_ctx_alloc failed".into(),
         ));
     }
@@ -107,7 +107,7 @@ unsafe fn attach_hw_frames_to_codec(
         (*avctx).hw_frames_ctx = ffi::av_buffer_ref(frames_ref);
     }
     if (*avctx).hw_frames_ctx.is_null() {
-        return Err(VideoProcessorError::FfmpegError(
+        return Err(VideoForgeError::FfmpegError(
             "av_buffer_ref(hw_frames_ctx) failed".into(),
         ));
     }
@@ -122,7 +122,7 @@ unsafe fn attach_device_to_codec(
         (*avctx).hw_device_ctx = ffi::av_buffer_ref(device);
     }
     if (*avctx).hw_device_ctx.is_null() {
-        return Err(VideoProcessorError::FfmpegError(
+        return Err(VideoForgeError::FfmpegError(
             "av_buffer_ref(hw_device_ctx) failed".into(),
         ));
     }
@@ -211,13 +211,13 @@ impl VtScaler {
         hw.ensure_transfer_session()?;
         let session = hw
             .transfer_session()
-            .ok_or_else(|| VideoProcessorError::Internal("VT session missing".into()))?;
+            .ok_or_else(|| VideoForgeError::Internal("VT session missing".into()))?;
 
         let mut dst_frame = VideoFrame::empty();
         unsafe {
             let frames = hw
                 .encode_frames_ref()
-                .ok_or_else(|| VideoProcessorError::Internal("encode hw_frames missing".into()))?;
+                .ok_or_else(|| VideoForgeError::Internal("encode hw_frames missing".into()))?;
             let ret = ffi::av_hwframe_get_buffer(frames, dst_frame.as_mut_ptr(), 0);
             if ret < 0 {
                 return Err(map_ffmpeg_error(ffmpeg_next::util::error::Error::from(ret)));
@@ -239,10 +239,10 @@ impl VtScaler {
             let src_ptr = src.as_ptr();
             let dst_ptr = self.dst_frame.as_mut_ptr();
             let src_buf = cv_buffer_from_frame(src_ptr).ok_or_else(|| {
-                VideoProcessorError::Internal("VT frame missing CVPixelBuffer".into())
+                VideoForgeError::Internal("VT frame missing CVPixelBuffer".into())
             })?;
             let dst_buf = cv_buffer_from_frame(dst_ptr).ok_or_else(|| {
-                VideoProcessorError::Internal("VT dst frame missing CVPixelBuffer".into())
+                VideoForgeError::Internal("VT dst frame missing CVPixelBuffer".into())
             })?;
 
             let err =
@@ -325,12 +325,12 @@ pub unsafe fn transfer_vt_frame_to_bgra_pixel_buffer(
     height: usize,
 ) -> Result<CVPixelBufferRef> {
     if session.is_null() {
-        return Err(VideoProcessorError::Internal(
+        return Err(VideoForgeError::Internal(
             "VTPixelTransferSession is null".into(),
         ));
     }
     let src_buf = cv_buffer_from_frame(src.as_ptr()).ok_or_else(|| {
-        VideoProcessorError::Internal("VT frame missing CVPixelBuffer".into())
+        VideoForgeError::Internal("VT frame missing CVPixelBuffer".into())
     })?;
 
     let mut dst: CVPixelBufferRef = ptr::null_mut();

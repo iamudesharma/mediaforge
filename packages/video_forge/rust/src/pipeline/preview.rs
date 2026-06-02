@@ -13,7 +13,7 @@ use ffmpeg_next::software::scaling::context::Context as ScalerContext;
 use ffmpeg_next::util::frame::video::Video as VideoFrame;
 use ffmpeg_next::Rational;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::{
     apply_preview_scrub_decoder_settings, apply_thumbnail_decoder_settings,
     ensure_ffmpeg_initialized, ensure_input_accessible, flush_video_decoder, map_ffmpeg_error,
@@ -102,7 +102,7 @@ pub fn decode_preview_frame_pixel_buffer(
     #[cfg(not(any(target_os = "ios", target_os = "macos")))]
     {
         let _ = (input_path, position_ms, max_edge);
-        Err(VideoProcessorError::Internal(
+        Err(VideoForgeError::Internal(
             "HW preview decode is only available on Apple platforms".into(),
         ))
     }
@@ -127,7 +127,7 @@ fn rgb24_to_rgba8888(rgb: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
     let h = height as usize;
     let expected = w * h * 3;
     if rgb.len() < expected {
-        return Err(VideoProcessorError::Internal(format!(
+        return Err(VideoForgeError::Internal(format!(
             "RGB buffer too small: got {} need {expected}",
             rgb.len()
         )));
@@ -203,7 +203,7 @@ impl VideoPreviewSession {
                 }
             })
             .map_err(|e| {
-                VideoProcessorError::Internal(format!(
+                VideoForgeError::Internal(format!(
                     "failed to spawn preview worker thread: {e}"
                 ))
             })?;
@@ -219,10 +219,10 @@ impl VideoPreviewSession {
         self.cmd_tx
             .lock()
             .send(SessionCommand::NextFrameRgba { reply: reply_tx })
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?;
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?;
         reply_rx
             .recv()
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?
     }
 
     pub fn read_next_pixel_buffer(&self) -> Result<Option<PreviewFramePixelBuffer>> {
@@ -230,10 +230,10 @@ impl VideoPreviewSession {
         self.cmd_tx
             .lock()
             .send(SessionCommand::NextFramePixelBuffer { reply: reply_tx })
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?;
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?;
         reply_rx
             .recv()
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?
     }
 
     pub fn seek_and_read_rgba(&self, position_ms: u64) -> Result<PreviewFrameRgba> {
@@ -244,10 +244,10 @@ impl VideoPreviewSession {
                 position_ms,
                 reply: reply_tx,
             })
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?;
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?;
         reply_rx
             .recv()
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?
     }
 
     pub fn seek_and_read_pixel_buffer(
@@ -261,31 +261,31 @@ impl VideoPreviewSession {
                 position_ms,
                 reply: reply_tx,
             })
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?;
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?;
         reply_rx
             .recv()
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))?
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))?
     }
 
     pub fn start_playback_inner(&self, rate: f64, sink: crate::frb_generated::StreamSink<PlaybackFrame, flutter_rust_bridge::for_generated::SseCodec>) -> Result<()> {
         self.cmd_tx
             .lock()
             .send(SessionCommand::StartPlayback { rate, sink })
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))
     }
 
     pub fn pause_playback_inner(&self) -> Result<()> {
         self.cmd_tx
             .lock()
             .send(SessionCommand::PausePlayback)
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))
     }
 
     pub fn set_max_edge_inner(&self, max_edge: Option<u32>) -> Result<()> {
         self.cmd_tx
             .lock()
             .send(SessionCommand::SetMaxEdge { max_edge })
-            .map_err(|_| VideoProcessorError::Internal("worker thread hung up".into()))
+            .map_err(|_| VideoForgeError::Internal("worker thread hung up".into()))
     }
 
     pub fn shutdown(&self) {
@@ -360,7 +360,7 @@ fn run_worker(
     let stream = ictx
         .streams()
         .best(ffmpeg_next::media::Type::Video)
-        .ok_or_else(|| VideoProcessorError::InvalidInput("no video stream".into()))?;
+        .ok_or_else(|| VideoForgeError::InvalidInput("no video stream".into()))?;
     let stream_idx = stream.index();
     let tb = stream.time_base();
     let params = stream.parameters();
@@ -374,7 +374,7 @@ fn run_worker(
 
     let (mut decoder, mut hw) = if use_hw {
         open_video_decoder(params.clone(), true)
-            .map_err(|e| VideoProcessorError::Internal(e.to_string()))?
+            .map_err(|e| VideoForgeError::Internal(e.to_string()))?
     } else {
         let mut dec_ctx = CodecContext::from_parameters(params.clone()).map_err(map_ffmpeg_error)?;
         if preview_needs_clean_seek(&params, input) {
@@ -503,7 +503,7 @@ fn run_worker(
                 SessionCommand::SeekAndDecodePixelBuffer { position_ms, reply } => {
                     state.playing = false;
                     if !session_use_hw || state.using_sw_fallback {
-                        let _ = reply.send(Err(VideoProcessorError::Internal(
+                        let _ = reply.send(Err(VideoForgeError::Internal(
                             "PREVIEW_RGBA_ONLY".into(),
                         )));
                         continue;
@@ -535,7 +535,7 @@ fn run_worker(
                             decoder = new_decoder;
                             state.using_sw_fallback = true;
                             session_use_hw = false;
-                            res = Err(VideoProcessorError::Internal(
+                            res = Err(VideoForgeError::Internal(
                                 "PREVIEW_RGBA_ONLY".into(),
                             ));
                         }
@@ -568,7 +568,7 @@ fn run_worker(
             let target_pts_ms =
                 playback_target_pts_ms(start_inst, state.playback_start_pts_ms, state.playback_rate);
 
-            let res_frame: std::result::Result<Option<PlaybackFrame>, VideoProcessorError> = if has_hw {
+            let res_frame: std::result::Result<Option<PlaybackFrame>, VideoForgeError> = if has_hw {
                 match do_next_playback_frame_pixel_buffer(
                     &mut ictx,
                     &mut decoder,
@@ -804,7 +804,7 @@ fn fallback_to_sw_decode(
     let stream = ictx
         .streams()
         .best(ffmpeg_next::media::Type::Video)
-        .ok_or_else(|| VideoProcessorError::InvalidInput("no video stream".into()))?;
+        .ok_or_else(|| VideoForgeError::InvalidInput("no video stream".into()))?;
     let tb = stream.time_base();
     let params = stream.parameters();
     let reliable_sw = preview_needs_clean_seek(&params, input);
@@ -1036,7 +1036,7 @@ fn do_next_frame_pixel_buffer(
     {
         let mut frame = VideoFrame::empty();
         let hw_transfer = hw.as_mut().ok_or_else(|| {
-            VideoProcessorError::Internal("VideoToolbox preview decode unavailable".into())
+            VideoForgeError::Internal("VideoToolbox preview decode unavailable".into())
         })?;
 
         for (s, packet) in ictx.packets() {
@@ -1047,7 +1047,7 @@ fn do_next_frame_pixel_buffer(
 
             if decoder.receive_frame(&mut frame).is_ok() {
                 if !crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format()) {
-                    return Err(VideoProcessorError::Internal(
+                    return Err(VideoForgeError::Internal(
                         "HW preview decode did not produce a VideoToolbox frame".into(),
                     ));
                 }
@@ -1058,7 +1058,7 @@ fn do_next_frame_pixel_buffer(
 
                 hw_transfer.ensure_transfer_session()?;
                 let session = hw_transfer.transfer_session().ok_or_else(|| {
-                    VideoProcessorError::Internal("VT transfer session missing".into())
+                    VideoForgeError::Internal("VT transfer session missing".into())
                 })?;
 
                 unsafe {
@@ -1084,7 +1084,7 @@ fn do_next_frame_pixel_buffer(
         let _ = decoder.send_eof();
         if decoder.receive_frame(&mut frame).is_ok() {
             if !crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format()) {
-                return Err(VideoProcessorError::Internal(
+                return Err(VideoForgeError::Internal(
                     "HW preview decode did not produce a VideoToolbox frame".into(),
                 ));
             }
@@ -1095,7 +1095,7 @@ fn do_next_frame_pixel_buffer(
 
             hw_transfer.ensure_transfer_session()?;
             let session = hw_transfer.transfer_session().ok_or_else(|| {
-                VideoProcessorError::Internal("VT transfer session missing".into())
+                VideoForgeError::Internal("VT transfer session missing".into())
             })?;
 
             unsafe {
@@ -1122,7 +1122,7 @@ fn do_next_frame_pixel_buffer(
     #[cfg(not(any(target_os = "ios", target_os = "macos")))]
     {
         let _ = (ictx, decoder, stream_idx, tb, max_edge, hw);
-        Err(VideoProcessorError::Internal(
+        Err(VideoForgeError::Internal(
             "HW preview decode is only available on Apple platforms".into(),
         ))
     }
@@ -1136,7 +1136,7 @@ fn vt_frame_to_pixel_buffer(
     hw: &mut crate::ffmpeg::HwFrameTransfer,
 ) -> Result<PreviewFramePixelBuffer> {
     if !crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format()) {
-        return Err(VideoProcessorError::Internal(
+        return Err(VideoForgeError::Internal(
             "HW preview decode did not produce a VideoToolbox frame".into(),
         ));
     }
@@ -1147,7 +1147,7 @@ fn vt_frame_to_pixel_buffer(
 
     hw.ensure_transfer_session()?;
     let session = hw.transfer_session().ok_or_else(|| {
-        VideoProcessorError::Internal("VT transfer session missing".into())
+        VideoForgeError::Internal("VT transfer session missing".into())
     })?;
 
     unsafe {
@@ -1178,7 +1178,7 @@ fn seek_and_decode_playback_pixel_buffer(
     hw: &mut Option<crate::ffmpeg::HwFrameTransfer>,
 ) -> Result<Option<PreviewFramePixelBuffer>> {
     let hw_transfer = hw.as_mut().ok_or_else(|| {
-        VideoProcessorError::Internal("VideoToolbox preview decode unavailable".into())
+        VideoForgeError::Internal("VideoToolbox preview decode unavailable".into())
     })?;
 
     do_seek(ictx, decoder, stream_idx, tb, target_pts_ms)?;
@@ -1384,7 +1384,7 @@ fn do_seek_and_decode_rgba(
                 reliable_sw_preview,
             );
         }
-        return Err(VideoProcessorError::InvalidInput(format!(
+        return Err(VideoForgeError::InvalidInput(format!(
             "could not decode frame at {position_ms}ms"
         )));
     }
@@ -1411,7 +1411,7 @@ fn do_seek_and_decode_pixel_buffer(
     #[cfg(any(target_os = "ios", target_os = "macos"))]
     {
         if hw.is_none() {
-            return Err(VideoProcessorError::Internal(
+            return Err(VideoForgeError::Internal(
                 "pixel-buffer preview requires VideoToolbox decode (use RGBA path)".into(),
             ));
         }
@@ -1424,7 +1424,7 @@ fn do_seek_and_decode_pixel_buffer(
         let mut pts_ms = position_ms;
 
         let hw_transfer = hw.as_mut().ok_or_else(|| {
-            VideoProcessorError::Internal("VideoToolbox preview decode unavailable".into())
+            VideoForgeError::Internal("VideoToolbox preview decode unavailable".into())
         })?;
 
         for (s, packet) in ictx.packets() {
@@ -1457,14 +1457,14 @@ fn do_seek_and_decode_pixel_buffer(
         decoder.skip_frame(Discard::None);
 
         if !captured {
-            return Err(VideoProcessorError::InvalidInput(format!(
+            return Err(VideoForgeError::InvalidInput(format!(
                 "could not decode HW frame at {position_ms}ms"
             )));
         }
 
         if !crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format()) {
             flush_video_decoder(decoder);
-            return Err(VideoProcessorError::Internal(
+            return Err(VideoForgeError::Internal(
                 "HW preview decode did not produce a VideoToolbox frame (decoder flushed)"
                     .into(),
             ));
@@ -1476,7 +1476,7 @@ fn do_seek_and_decode_pixel_buffer(
 
         hw_transfer.ensure_transfer_session()?;
         let session = hw_transfer.transfer_session().ok_or_else(|| {
-            VideoProcessorError::Internal("VT transfer session missing".into())
+            VideoForgeError::Internal("VT transfer session missing".into())
         })?;
 
         unsafe {
@@ -1500,7 +1500,7 @@ fn do_seek_and_decode_pixel_buffer(
     #[cfg(not(any(target_os = "ios", target_os = "macos")))]
     {
         let _ = (ictx, decoder, stream_idx, tb, position_ms, max_edge, hw);
-        Err(VideoProcessorError::Internal(
+        Err(VideoForgeError::Internal(
             "HW preview decode is only available on Apple platforms".into(),
         ))
     }

@@ -8,7 +8,7 @@ use ffmpeg_next::media;
 use ffmpeg_next::util::rational::Rational;
 use uuid::Uuid;
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::{ensure_ffmpeg_initialized, is_remote_input, map_ffmpeg_error, open_input};
 
 /// Stream-copy a remote URL to `{dest_dir}/{uuid}_prefetch.mp4`.
@@ -16,15 +16,15 @@ pub fn prefetch_remote_input(url: &str, dest_dir: &Path) -> Result<String> {
     ensure_ffmpeg_initialized()?;
     let trimmed = url.trim();
     if trimmed.is_empty() {
-        return Err(VideoProcessorError::InvalidInput("empty URL".into()));
+        return Err(VideoForgeError::InvalidInput("empty URL".into()));
     }
     if !is_remote_input(trimmed) {
-        return Err(VideoProcessorError::InvalidInput(
+        return Err(VideoForgeError::InvalidInput(
             "prefetch_remote_input requires an http(s) or streaming URL".into(),
         ));
     }
 
-    std::fs::create_dir_all(dest_dir).map_err(|e| VideoProcessorError::IoError(e.to_string()))?;
+    std::fs::create_dir_all(dest_dir).map_err(|e| VideoForgeError::IoError(e.to_string()))?;
 
     let dest = dest_dir.join(format!("{}_prefetch.mp4", Uuid::new_v4()));
     if dest.exists() {
@@ -74,7 +74,7 @@ fn remux_stream_copy(input: &str, output: &Path) -> Result<()> {
     }
 
     if ost_index == 0 {
-        return Err(VideoProcessorError::InvalidInput(
+        return Err(VideoForgeError::InvalidInput(
             "remote input has no copyable video or audio stream".into(),
         ));
     }
@@ -85,7 +85,7 @@ fn remux_stream_copy(input: &str, output: &Path) -> Result<()> {
         ost_time_bases[idx] = octx
             .stream(idx)
             .ok_or_else(|| {
-                VideoProcessorError::FfmpegError(format!("missing output stream {idx}"))
+                VideoForgeError::FfmpegError(format!("missing output stream {idx}"))
             })?
             .time_base();
     }
@@ -115,6 +115,6 @@ mod tests {
     #[test]
     fn rejects_local_path() {
         let err = prefetch_remote_input("/tmp/x.mp4", Path::new("/tmp")).unwrap_err();
-        assert!(matches!(err, VideoProcessorError::InvalidInput(_)));
+        assert!(matches!(err, VideoForgeError::InvalidInput(_)));
     }
 }

@@ -10,7 +10,7 @@ use ffmpeg_next::util::format::sample::Sample;
 use ffmpeg_next::util::rational::Rational;
 use ffmpeg_next::{encoder, media, ChannelLayout, Packet};
 
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::ffmpeg::interrupt::InterruptContext;
 use crate::ffmpeg::{ensure_input_accessible, map_ffmpeg_error, open_input};
 use crate::types::AudioTrackInput;
@@ -40,7 +40,7 @@ pub struct MixedAudioOutput {
 /// FFmpeg decodes but AVPlayer opens silently.
 pub fn add_aac_output_stream(octx: &mut Output) -> Result<MixedAudioOutput> {
     let codec = encoder::find(Id::AAC)
-        .ok_or_else(|| VideoProcessorError::UnsupportedCodec("aac".into()))?;
+        .ok_or_else(|| VideoForgeError::UnsupportedCodec("aac".into()))?;
     let enc_ctx = CodecContext::new_with_codec(codec);
     let mut encoder = enc_ctx.encoder().audio().map_err(map_ffmpeg_error)?;
     encoder.set_rate(OUTPUT_SAMPLE_RATE as i32);
@@ -79,7 +79,7 @@ impl ChunkedAudioDecoder {
         let stream = ictx
             .streams()
             .best(media::Type::Audio)
-            .ok_or_else(|| VideoProcessorError::InvalidInput(format!("no audio in {path}")))?;
+            .ok_or_else(|| VideoForgeError::InvalidInput(format!("no audio in {path}")))?;
         let stream_index = stream.index();
         let params = stream.parameters();
         let dec_ctx = CodecContext::from_parameters(params).map_err(map_ffmpeg_error)?;
@@ -143,7 +143,7 @@ impl ChunkedAudioDecoder {
         let mut resampled = Audio::empty();
         loop {
             if interrupt.check() {
-                return Err(VideoProcessorError::Cancelled);
+                return Err(VideoForgeError::Cancelled);
             }
 
             if self.decoder.receive_frame(&mut decoded).is_ok() {
@@ -157,7 +157,7 @@ impl ChunkedAudioDecoder {
             let mut got = false;
             for (stream, packet) in self.ictx.packets() {
                 if interrupt.check() {
-                    return Err(VideoProcessorError::Cancelled);
+                    return Err(VideoForgeError::Cancelled);
                 }
                 if stream.index() != self.stream_index {
                     continue;
@@ -263,14 +263,14 @@ pub fn write_mixed_audio(
     }
 
     if lanes.is_empty() {
-        return Err(VideoProcessorError::InvalidInput(
+        return Err(VideoForgeError::InvalidInput(
             "no audio lanes to mix".into(),
         ));
     }
 
     let ost = octx
         .stream(output.stream_index)
-        .ok_or_else(|| VideoProcessorError::FfmpegError("missing audio out stream".into()))?;
+        .ok_or_else(|| VideoForgeError::FfmpegError("missing audio out stream".into()))?;
     let time_base = ost.time_base();
     let encoder = &mut output.encoder;
 
@@ -284,7 +284,7 @@ pub fn write_mixed_audio(
 
     while out_sample_cursor < total_out_samples {
         if interrupt.check() {
-            return Err(VideoProcessorError::Cancelled);
+            return Err(VideoForgeError::Cancelled);
         }
 
         let chunk_samples =

@@ -58,6 +58,19 @@ section "Rust (image_forge_core): cargo test + build --features ${TEST_RUST_FEAT
   cargo build --features "${TEST_RUST_FEATURES}"
 )
 
+section "Rust (video_forge): cargo test + build"
+(
+  cd "${SCRIPT_DIR}/packages/video_forge"
+  cargo test -p video_forge
+  cargo build -p video_forge
+)
+
+section "Dart unit tests: video_forge test/types/"
+(
+  cd "${SCRIPT_DIR}/packages/video_forge"
+  flutter test test/
+)
+
 section "Dart unit tests: flutter test test/editor/"
 if [[ "${SKIP_NATIVE_SYNC:-0}" != "1" && -f "${DYLIB_DEBUG}" ]]; then
   export RUST_IMAGE_DYLIB="${DYLIB_DEBUG}"

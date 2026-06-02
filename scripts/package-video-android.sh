@@ -13,6 +13,12 @@ source "${TOOLS}/release/android-env.sh"
 
 mkdir -p "${PLUGIN_JNI}" "${OUT}/jniLibs"
 
+# Wipe any stale .so from a previous package (pre-1.0 / pre-2.0 used
+# `libvideo_processor_core.so`). Without this, an old stale .so can shadow
+# the freshly built `libvideo_forge.so` and cause confusing runtime errors.
+find "${PLUGIN_JNI}" -name 'libvideo_processor_core.so' -delete 2>/dev/null || true
+find "${OUT}/jniLibs" -name 'libvideo_processor_core.so' -delete 2>/dev/null || true
+
 # Default: device ABI only (faster). Pass --all for emulator + 32-bit.
 ABIS=("aarch64-linux-android:arm64-v8a")
 if [[ "${1:-}" == "--all" ]]; then

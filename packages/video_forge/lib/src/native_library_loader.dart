@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// Resolves and opens `libvideo_forge` for the current platform.
@@ -7,17 +8,20 @@ abstract final class NativeLibraryLoader {
   static const String stem = 'video_forge';
 
   static Future<ExternalLibrary> load() async {
+    final loaderLog = _LoaderLog();
+
     // iOS: linked via CocoaPods vendored_frameworks — not a loose CodeAsset dylib.
     if (Platform.isIOS) {
-      // Linked via CocoaPods vendored_frameworks (see ios/video_forge.podspec).
-      for (final name in [
+      for (final name in <String>[
         'video_forge.framework/video_forge',
         _bundledLibName(),
       ]) {
         try {
-          return ExternalLibrary.open(name, debugInfo: 'ios framework');
-        } catch (_) {
-          // try next
+          final lib = ExternalLibrary.open(name, debugInfo: 'ios framework');
+          loaderLog.logMatch('ios framework: $name');
+          return lib;
+        } catch (e) {
+          loaderLog.logCandidate('ios framework: $name', e);
         }
       }
     }
@@ -25,21 +29,34 @@ abstract final class NativeLibraryLoader {
     // Android: .so in jniLibs / APK.
     if (Platform.isAndroid) {
       try {
-        return ExternalLibrary.open(_bundledLibName());
-      } catch (_) {
-        // Fall through to path search / FRB default.
+        final lib = ExternalLibrary.open(_bundledLibName());
+        loaderLog.logMatch('android bundled: ${_bundledLibName()}');
+        return lib;
+      } catch (e) {
+        loaderLog.logCandidate('android bundled: ${_bundledLibName()}', e);
       }
     }
 
-    final candidates = _candidatePaths();
-    for (final path in candidates) {
-      if (File(path).existsSync()) {
-        return ExternalLibrary.open(path);
+    // Three ordered tiers: env override → packaged → workspace target.
+    for (final tier in _candidateTiers()) {
+      for (final path in tier.paths) {
+        if (!File(path).existsSync()) {
+          loaderLog.logMiss('${tier.label}: $path (not found)');
+          continue;
+        }
+        try {
+          final lib = ExternalLibrary.open(path);
+          loaderLog.logMatch('${tier.label}: $path');
+          return lib;
+        } catch (e) {
+          loaderLog.logCandidate('${tier.label}: $path', e);
+        }
       }
     }
 
+    // Last resort: FRB's default loader (looks under the active executable).
     try {
-      return await loadExternalLibrary(
+      final lib = await loadExternalLibrary(
         const ExternalLibraryLoaderConfig(
           stem: stem,
           ioDirectory: null,
@@ -47,13 +64,17 @@ abstract final class NativeLibraryLoader {
           wasmBindgenName: 'wasm_bindgen',
         ),
       );
-    } catch (_) {
-      throw StateError(
-        'Could not load native library "$stem".\n'
-        '${_platformHint()}\n'
-        'Tried:\n${candidates.map((p) => '  - $p').join('\n')}',
-      );
+      loaderLog.logMatch('frb default loader');
+      return lib;
+    } catch (e) {
+      loaderLog.logCandidate('frb default loader', e);
     }
+
+    throw StateError(
+      'Could not load native library "$stem".\n'
+      '${_platformHint()}\n\n'
+      'Loader log:\n${loaderLog.snapshot()}',
+    );
   }
 
   static String _bundledLibName() {
@@ -87,55 +108,100 @@ abstract final class NativeLibraryLoader {
         '  cargo build --release -p video_forge';
   }
 
-  static List<String> _candidatePaths() {
+  static List<_LoaderTier> _candidateTiers() {
     final envDir = Platform.environment[
         'FRB_DART_LOAD_EXTERNAL_LIBRARY_NATIVE_LIB_DIR'];
-    if (envDir != null && envDir.isNotEmpty) {
-      return [_libNameInDir(envDir)];
-    }
-
     final cwd = Directory.current.path;
     final executable = Platform.resolvedExecutable;
     final execDir = File(executable).parent.path;
+    final macosFramework = Platform.isMacOS
+        ? '$execDir/../Frameworks/$stem.framework/$stem'
+        : null;
+    final macosDylib = Platform.isMacOS
+        ? '$execDir/../Frameworks/${_bundledLibName()}'
+        : null;
 
-    final paths = <String>[
-      '$cwd/../target/release/${_dylibFileName()}',
-      '$cwd/../../target/release/${_dylibFileName()}',
-      '$cwd/../../../target/release/${_dylibFileName()}',
-      '$cwd/../../../../target/release/${_dylibFileName()}',
-      '$cwd/../../packages/video_forge/rust/target/release/${_dylibFileName()}',
-      '$cwd/../packages/video_forge/rust/target/release/${_dylibFileName()}',
-      '$execDir/../Frameworks/${_dylibFileName()}',
-      '$execDir/../Frameworks/$stem.framework/$stem',
-      '$execDir/Frameworks/${_dylibFileName()}',
-      '$execDir/Frameworks/$stem.framework/$stem',
-      '$cwd/../packages/video_forge/macos/Frameworks/$stem.framework/$stem',
-      '$cwd/../../packages/video_forge/macos/Frameworks/$stem.framework/$stem',
-      '$cwd/packages/video_forge/macos/Frameworks/$stem.framework/$stem',
+    return [
+      _LoaderTier('tier1:env', () {
+        if (envDir == null || envDir.isEmpty) return const <String>[];
+        return [_pathInDir(envDir, _bundledLibName())];
+      }()),
+      _LoaderTier('tier2:packaged', () {
+        if (macosFramework != null && macosDylib != null) {
+          return [macosFramework, macosDylib];
+        }
+        if (Platform.isAndroid) {
+          return const ['lib/lib$stem.so', '../lib/lib$stem.so'];
+        }
+        return const <String>[];
+      }()),
+      _LoaderTier('tier3:workspace', () {
+        return [
+          '$cwd/../target/release/${_bundledLibName()}',
+          '$cwd/../../target/release/${_bundledLibName()}',
+          '$cwd/../../../target/release/${_bundledLibName()}',
+          '$cwd/../../../../target/release/${_bundledLibName()}',
+          '$cwd/../../packages/video_forge/rust/target/release/${_bundledLibName()}',
+          '$cwd/../packages/video_forge/rust/target/release/${_bundledLibName()}',
+          '$cwd/../packages/video_forge/macos/Frameworks/$stem.framework/$stem',
+          '$cwd/../../packages/video_forge/macos/Frameworks/$stem.framework/$stem',
+          '$cwd/packages/video_forge/macos/Frameworks/$stem.framework/$stem',
+          ..._androidAppDataCandidates(execDir),
+          ..._macosSystemCandidates(),
+        ];
+      }()),
     ];
-
-    if (Platform.isAndroid) {
-      // Flutter may extract native assets under app data (dev / hook builds).
-      paths.addAll([
-        '$execDir/lib/${_dylibFileName()}',
-        '$execDir/../lib/${_dylibFileName()}',
-      ]);
-    }
-
-    if (Platform.isMacOS || Platform.isIOS) {
-      paths.addAll([
-        '/usr/local/lib/${_dylibFileName()}',
-        '${Platform.environment['HOME']}/.video_forge/${_dylibFileName()}',
-      ]);
-    }
-
-    return paths;
   }
 
-  static String _libNameInDir(String dir) {
+  static List<String> _androidAppDataCandidates(String execDir) {
+    if (!Platform.isAndroid) return const [];
+    return [
+      '$execDir/lib/${_bundledLibName()}',
+      '$execDir/../lib/${_bundledLibName()}',
+    ];
+  }
+
+  static List<String> _macosSystemCandidates() {
+    if (!Platform.isMacOS && !Platform.isIOS) return const [];
+    return [
+      '/usr/local/lib/${_bundledLibName()}',
+      '${Platform.environment['HOME']}/.video_forge/${_bundledLibName()}',
+    ];
+  }
+
+  static String _pathInDir(String dir, String name) {
     final normalized = dir.endsWith('/') ? dir : '$dir/';
-    return '$normalized${_dylibFileName()}';
+    return '$normalized$name';
+  }
+}
+
+class _LoaderTier {
+  _LoaderTier(this.label, this.paths);
+  final String label;
+  final List<String> paths;
+}
+
+class _LoaderLog {
+  final List<String> _entries = [];
+
+  void logMatch(String path) {
+    _entries.add('  + $path');
   }
 
-  static String _dylibFileName() => _bundledLibName();
+  void logMiss(String path) {
+    if (kDebugMode) {
+      _entries.add('  - $path');
+    }
+  }
+
+  void logCandidate(String path, Object error) {
+    _entries.add('  ! $path → ${_shortError(error)}');
+  }
+
+  String snapshot() => _entries.join('\n');
+
+  String _shortError(Object e) {
+    final s = e.toString();
+    return s.length > 200 ? '${s.substring(0, 200)}…' : s;
+  }
 }

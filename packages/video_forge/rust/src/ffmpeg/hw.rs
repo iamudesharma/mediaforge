@@ -1,4 +1,4 @@
-use crate::error::{Result, VideoProcessorError};
+use crate::error::{Result, VideoForgeError};
 use crate::types::VideoCodec;
 
 #[derive(Clone, Debug)]
@@ -137,7 +137,7 @@ pub fn select_encoder(codec: &VideoCodec, prefer_hardware: bool) -> Result<Encod
         }
     }
 
-    Err(VideoProcessorError::UnsupportedCodec(format!(
+    Err(VideoForgeError::UnsupportedCodec(format!(
         "no encoder available for {codec:?}"
     )))
 }
