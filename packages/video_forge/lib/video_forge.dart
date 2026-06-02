@@ -10,3 +10,4 @@ export 'src/frb_generated/pipeline/preview.dart';
 export 'src/native_bindings.dart';
 export 'src/deprecated_aliases.dart';
 export 'src/decoder_cache.dart';
+export 'src/release_token.dart';

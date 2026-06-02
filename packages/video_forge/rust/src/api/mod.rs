@@ -230,6 +230,23 @@ pub async fn decode_preview_frame_rgba(
     .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
+/// PR #5: same as [decode_preview_frame_rgba] but returns a
+/// `PreviewFrameRgbaBuf` paired with a `release_token` so the Dart
+/// side can return the underlying buffer to the pool via its
+/// `Finalizer` (no manual `bufferPoolRelease` required).
+#[frb]
+pub async fn decode_preview_frame_rgba_buf(
+    input_path: String,
+    position_ms: u64,
+    max_edge: Option<u32>,
+) -> Result<PreviewFrameRgbaBuf> {
+    tokio::task::spawn_blocking(move || {
+        pipeline::decode_preview_frame_rgba_buf(&input_path, position_ms, max_edge)
+    })
+    .await
+    .map_err(|e| VideoForgeError::Internal(e.to_string()))?
+}
+
 /// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
 #[frb]
 pub async fn decode_preview_frame_pixel_buffer(
@@ -338,10 +355,29 @@ pub fn buffer_pool_release(buf: Vec<u8>) {
     crate::pool::release_buffer(buf);
 }
 
+/// PR #5: release a buffer by its token. Called by the Dart-side
+/// `Finalizer` on a `ReleaseToken` when the corresponding frame
+/// object is garbage-collected. The token `0` is a no-op (reserved
+/// for "no token").
+#[frb(sync)]
+pub fn buffer_pool_release_by_token(token: u64) {
+    crate::pool::release_buffer_by_token(token);
+}
+
 /// Acquires a buffer from the video processor's native pool with a minimum capacity.
 #[frb(sync)]
 pub fn buffer_pool_acquire(min_capacity: u32) -> Vec<u8> {
     crate::pool::acquire_buffer(min_capacity as usize)
+}
+
+/// PR #5: acquire a buffer + return a stable token. The token can
+/// be passed back to [buffer_pool_release_by_token] when the
+/// consumer (e.g. a Dart `ReleaseToken` finalizer) is done with the
+/// buffer. The token is also useful for diagnostics ("5
+/// PreviewFrameRgba in flight").
+#[frb(sync)]
+pub fn buffer_pool_acquire_with_token(min_capacity: u32) -> (Vec<u8>, u64) {
+    crate::pool::acquire_buffer_with_token(min_capacity as usize)
 }
 
 /// Returns the current statistics of the video processor's buffer pool (count, total bytes).

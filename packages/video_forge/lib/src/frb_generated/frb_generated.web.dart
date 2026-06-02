@@ -226,10 +226,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PreviewFrameRgba dco_decode_preview_frame_rgba(dynamic raw);
 
   @protected
+  PreviewFrameRgbaBuf dco_decode_preview_frame_rgba_buf(dynamic raw);
+
+  @protected
   ProcessingPhase dco_decode_processing_phase(dynamic raw);
 
   @protected
   ProgressEvent dco_decode_progress_event(dynamic raw);
+
+  @protected
+  (Uint8List, BigInt) dco_decode_record_list_prim_u_8_strict_u_64(dynamic raw);
 
   @protected
   (BigInt, BigInt) dco_decode_record_usize_usize(dynamic raw);
@@ -503,10 +509,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PreviewFrameRgba sse_decode_preview_frame_rgba(SseDeserializer deserializer);
 
   @protected
+  PreviewFrameRgbaBuf sse_decode_preview_frame_rgba_buf(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ProcessingPhase sse_decode_processing_phase(SseDeserializer deserializer);
 
   @protected
   ProgressEvent sse_decode_progress_event(SseDeserializer deserializer);
+
+  @protected
+  (Uint8List, BigInt) sse_decode_record_list_prim_u_8_strict_u_64(
+    SseDeserializer deserializer,
+  );
 
   @protected
   (BigInt, BigInt) sse_decode_record_usize_usize(SseDeserializer deserializer);
@@ -831,6 +847,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_preview_frame_rgba_buf(
+    PreviewFrameRgbaBuf self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_processing_phase(
     ProcessingPhase self,
     SseSerializer serializer,
@@ -838,6 +860,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_progress_event(ProgressEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_list_prim_u_8_strict_u_64(
+    (Uint8List, BigInt) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_record_usize_usize(

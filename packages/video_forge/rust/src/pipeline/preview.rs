@@ -22,7 +22,7 @@ use crate::ffmpeg::{
 };
 use crate::jobs::registry::CancellationToken;
 use crate::pipeline::thumbnail::{thumb_dimensions, video_to_rgb};
-use crate::types::{PlaybackFrame, PreviewFramePixelBuffer, PreviewFrameRgba};
+use crate::types::{PlaybackFrame, PreviewFramePixelBuffer, PreviewFrameRgba, PreviewFrameRgbaBuf};
 
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 use super::preview_hw;
@@ -92,6 +92,40 @@ pub fn decode_preview_frame_rgba(
     })
 }
 
+/// PR #5: same as [decode_preview_frame_rgba] but returns a
+/// `PreviewFrameRgbaBuf` with a `release_token` so the Dart side's
+/// `Finalizer` can hand the underlying buffer back to the pool.
+pub fn decode_preview_frame_rgba_buf(
+    input_path: &str,
+    position_ms: u64,
+    max_edge: Option<u32>,
+) -> Result<PreviewFrameRgbaBuf> {
+    let token = CancellationToken::new();
+    let max_w = max_edge;
+    let rgb = crate::pipeline::thumbnail::decode_scrub_rgb_frame_at_cached(
+        input_path.trim(),
+        position_ms,
+        max_w,
+        None,
+        token,
+    )?;
+    let (rgba, release_token) = crate::pool::acquire_rgba_buffer_with_token(rgb.width, rgb.height);
+    let mut rgba = rgba;
+    let width = rgb.width as usize;
+    let height = rgb.height as usize;
+    if rgba.len() < width * height * 4 {
+        rgba.resize(width * height * 4, 0);
+    }
+    rgb24_to_rgba8888_into(&rgb.data, width, height, &mut rgba)?;
+    Ok(PreviewFrameRgbaBuf {
+        pts_ms: position_ms,
+        width: rgb.width,
+        height: rgb.height,
+        rgba,
+        release_token,
+    })
+}
+
 /// Apple HW path: VideoToolbox decode → BGRA `CVPixelBuffer` (hand off via [pixel_buffer_ptr]).
 pub fn decode_preview_frame_pixel_buffer(
     input_path: &str,
@@ -146,6 +180,29 @@ fn rgb24_to_rgba8888(rgb: &[u8], width: u32, height: u32) -> Result<Vec<u8>> {
         rgba.push(255);
     }
     Ok(rgba)
+}
+
+/// PR #5: write into a caller-supplied buffer (no allocation). The
+/// output buffer must be at least `width * height * 4` bytes; the
+/// helper clears + reserves before writing.
+fn rgb24_to_rgba8888_into(rgb: &[u8], width: usize, height: usize, rgba: &mut Vec<u8>) -> Result<()> {
+    let expected = width * height * 3;
+    if rgb.len() < expected {
+        return Err(VideoForgeError::Internal(format!(
+            "RGB buffer too small: got {} need {expected}",
+            rgb.len()
+        )));
+    }
+    rgba.clear();
+    rgba.reserve(width * height * 4);
+    for i in 0..(width * height) {
+        let si = i * 3;
+        rgba.push(rgb[si]);
+        rgba.push(rgb[si + 1]);
+        rgba.push(rgb[si + 2]);
+        rgba.push(255);
+    }
+    Ok(())
 }
 
 fn frame_pts_ms(frame: &VideoFrame, tb: Rational) -> u64 {

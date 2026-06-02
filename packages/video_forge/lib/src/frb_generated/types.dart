@@ -589,6 +589,50 @@ class PreviewFrameRgba {
           rgba == other.rgba;
 }
 
+/// PR #5: preview frame paired with a `ReleaseToken` so the Dart
+/// side can hand the underlying buffer back to the Rust pool via a
+/// `Finalizer` (no manual `bufferPoolRelease` call required from
+/// app code). New code should prefer this struct; the bare
+/// [PreviewFrameRgba] is kept for back-compat.
+class PreviewFrameRgbaBuf {
+  final BigInt ptsMs;
+  final int width;
+  final int height;
+  final Uint8List rgba;
+
+  /// Stable token for [crate::pool::release_buffer_by_token]. The
+  /// value `0` means "no token" (the buffer will be released by
+  /// the explicit `bufferPoolRelease` path instead).
+  final BigInt releaseToken;
+
+  const PreviewFrameRgbaBuf({
+    required this.ptsMs,
+    required this.width,
+    required this.height,
+    required this.rgba,
+    required this.releaseToken,
+  });
+
+  @override
+  int get hashCode =>
+      ptsMs.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      rgba.hashCode ^
+      releaseToken.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PreviewFrameRgbaBuf &&
+          runtimeType == other.runtimeType &&
+          ptsMs == other.ptsMs &&
+          width == other.width &&
+          height == other.height &&
+          rgba == other.rgba &&
+          releaseToken == other.releaseToken;
+}
+
 enum ProcessingPhase {
   probing,
   decoding,

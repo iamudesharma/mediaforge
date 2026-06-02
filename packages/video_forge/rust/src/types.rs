@@ -305,6 +305,24 @@ pub struct PreviewFrameRgba {
     pub rgba: Vec<u8>,
 }
 
+/// PR #5: preview frame paired with a `ReleaseToken` so the Dart
+/// side can hand the underlying buffer back to the Rust pool via a
+/// `Finalizer` (no manual `bufferPoolRelease` call required from
+/// app code). New code should prefer this struct; the bare
+/// [PreviewFrameRgba] is kept for back-compat.
+#[frb]
+#[derive(Clone, Debug)]
+pub struct PreviewFrameRgbaBuf {
+    pub pts_ms: u64,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+    /// Stable token for [crate::pool::release_buffer_by_token]. The
+    /// value `0` means "no token" (the buffer will be released by
+    /// the explicit `bufferPoolRelease` path instead).
+    pub release_token: u64,
+}
+
 /// Apple HW preview frame: BGRA `CVPixelBuffer` pointer for zero-copy texture present (V1.4).
 #[frb]
 #[derive(Clone, Debug)]

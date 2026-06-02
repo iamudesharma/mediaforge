@@ -97,6 +97,20 @@ Future<PreviewFrameRgba> decodePreviewFrameRgba({
   maxEdge: maxEdge,
 );
 
+/// PR #5: same as [decode_preview_frame_rgba] but returns a
+/// `PreviewFrameRgbaBuf` paired with a `release_token` so the Dart
+/// side can return the underlying buffer to the pool via its
+/// `Finalizer` (no manual `bufferPoolRelease` required).
+Future<PreviewFrameRgbaBuf> decodePreviewFrameRgbaBuf({
+  required String inputPath,
+  required BigInt positionMs,
+  int? maxEdge,
+}) => RustLib.instance.api.crateApiDecodePreviewFrameRgbaBuf(
+  inputPath: inputPath,
+  positionMs: positionMs,
+  maxEdge: maxEdge,
+);
+
 /// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
 Future<PreviewFramePixelBuffer> decodePreviewFramePixelBuffer({
   required String inputPath,
@@ -125,9 +139,26 @@ Future<void> cleanupJob({required String jobId}) =>
 void bufferPoolRelease({required List<int> buf}) =>
     RustLib.instance.api.crateApiBufferPoolRelease(buf: buf);
 
+/// PR #5: release a buffer by its token. Called by the Dart-side
+/// `Finalizer` on a `ReleaseToken` when the corresponding frame
+/// object is garbage-collected. The token `0` is a no-op (reserved
+/// for "no token").
+void bufferPoolReleaseByToken({required BigInt token}) =>
+    RustLib.instance.api.crateApiBufferPoolReleaseByToken(token: token);
+
 /// Acquires a buffer from the video processor's native pool with a minimum capacity.
 Uint8List bufferPoolAcquire({required int minCapacity}) =>
     RustLib.instance.api.crateApiBufferPoolAcquire(minCapacity: minCapacity);
+
+/// PR #5: acquire a buffer + return a stable token. The token can
+/// be passed back to [buffer_pool_release_by_token] when the
+/// consumer (e.g. a Dart `ReleaseToken` finalizer) is done with the
+/// buffer. The token is also useful for diagnostics ("5
+/// PreviewFrameRgba in flight").
+(Uint8List, BigInt) bufferPoolAcquireWithToken({required int minCapacity}) =>
+    RustLib.instance.api.crateApiBufferPoolAcquireWithToken(
+      minCapacity: minCapacity,
+    );
 
 /// Returns the current statistics of the video processor's buffer pool (count, total bytes).
 (BigInt, BigInt) bufferPoolStats() =>
