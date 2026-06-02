@@ -39,32 +39,53 @@ pub struct CachedMasks {
 /// compute writes into directly. On Apple, this wraps a `MTLTexture` that
 /// itself views the same IOSurface as the Flutter display `CVPixelBuffer`,
 /// so the next `textureFrameAvailable` on the Swift side picks up the new
-/// pixels. On benchmark or test paths, the `MTLTexture` is `None` and the
-/// wgpu texture is a plain storage texture.
+/// pixels. On benchmark or test paths, there is no Flutter `CVPixelBuffer`
+/// to adopt — the wgpu texture is a plain storage texture and the variant
+/// is [`OutputTexture::Benchmark`].
 #[cfg(target_vendor = "apple")]
-pub struct OutputTexture {
-    /// Reference to the Flutter-side `CVPixelBuffer`. We retain +1 the buffer
-    /// pointer we received from Swift (`pixel_buffer_retain`) and release the
-    /// +1 in Drop. While the surface lives, the CVPixelBuffer stays alive
-    /// even if Swift releases its own reference.
-    /// `0` when no real CVPixelBuffer is bound (e.g. benchmark path).
-    pub pixel_buffer_ptr: u64,
-    /// Holds a +1 retain on the underlying `MTLTexture` so the wgpu import
-    /// stays valid for the lifetime of this struct. Drop releases the +1.
-    /// `None` on the benchmark path (pure-wgpu storage texture).
-    pub metal_texture: Option<metal::Texture>,
-    pub wgpu_texture: wgpu::Texture,
-    pub width: u32,
-    pub height: u32,
+pub enum OutputTexture {
+    /// Adopted Flutter-side zero-copy target. Owns the +1 on the
+    /// `CVPixelBuffer` and the +1 on the `MTLTexture` via the
+    /// [`pixel_surface::metal_iosurface::BeautyOutputTarget`] wrapper;
+    /// the wgpu `Texture` borrows the Metal resource. The wrapper's
+    /// `Drop` releases the `CVPixelBuffer` in the right order relative
+    /// to the wgpu `Texture` borrow.
+    Adopted(pixel_surface::metal_iosurface::BeautyOutputTarget),
+    /// Benchmark-only path. The wgpu texture is a pure storage texture
+    /// with no Flutter `CVPixelBuffer` backing. There are no Core
+    /// Foundation or Objective-C resources to release.
+    Benchmark {
+        wgpu_texture: wgpu::Texture,
+        width: u32,
+        height: u32,
+    },
 }
 
 #[cfg(target_vendor = "apple")]
-impl Drop for OutputTexture {
-    fn drop(&mut self) {
-        if self.pixel_buffer_ptr != 0 {
-            pixel_surface::metal_iosurface::release_pixel_buffer(
-                self.pixel_buffer_ptr as pixel_surface::metal_iosurface::CVPixelBufferRef,
-            );
+impl OutputTexture {
+    /// Borrow the inner wgpu `Texture` for use as a compute pass output.
+    pub fn wgpu_texture(&self) -> &wgpu::Texture {
+        match self {
+            OutputTexture::Adopted(t) => t.wgpu_texture(),
+            OutputTexture::Benchmark { wgpu_texture, .. } => wgpu_texture,
+        }
+    }
+    /// Output texture width in pixels. Exposed for diagnostics; not on
+    /// the hot path.
+    #[allow(dead_code)]
+    pub fn width(&self) -> u32 {
+        match self {
+            OutputTexture::Adopted(t) => t.width(),
+            OutputTexture::Benchmark { width, .. } => *width,
+        }
+    }
+    /// Output texture height in pixels. Exposed for diagnostics; not on
+    /// the hot path.
+    #[allow(dead_code)]
+    pub fn height(&self) -> u32 {
+        match self {
+            OutputTexture::Adopted(t) => t.height(),
+            OutputTexture::Benchmark { height, .. } => *height,
         }
     }
 }
@@ -129,57 +150,43 @@ pub fn attach_output_texture(
     pixel_buffer_ptr: u64,
 ) -> Result<(), String> {
     use pixel_surface::metal_iosurface;
-    use pixel_surface::wgpu_metal_import;
 
     let surface = surface_for(id)?;
     let gpu = engine::engine()?;
 
-    if mtl_texture_ptr == 0 {
-        return Err("mtl_texture_ptr must be non-zero".into());
+    if mtl_texture_ptr == 0 || pixel_buffer_ptr == 0 {
+        return Err("mtl_texture_ptr and pixel_buffer_ptr must be non-zero".into());
     }
 
-    // Take +1 retain on the CVPixelBuffer so the surface stays valid for
-    // its entire lifetime, even if Swift releases its own reference. The
-    // matching release is in OutputTexture's Drop impl.
-    let owned_pixel_buffer_ptr = if pixel_buffer_ptr != 0 {
-        metal_iosurface::retain_pixel_buffer(pixel_buffer_ptr as metal_iosurface::CVPixelBufferRef)
-    } else {
-        std::ptr::null_mut()
+    // Adopt both +1 retains into the safe `BeautyOutputTarget` wrapper.
+    // The wrapper validates the pointers, takes the +1 on the
+    // `CVPixelBuffer`, and produces the wgpu import in a single call.
+    // On validation failure, the just-adopted +1s are released by the
+    // wrapper's `Drop` and the function returns `None` — no leak.
+    //
+    // SAFETY: caller guarantees mtl_texture_ptr is a valid +1-retained
+    // `MTLTexture*` backed by the same Metal device as `gpu.device`,
+    // BGRA8Unorm + 2D + ShaderRead/Write usage. pixel_buffer_ptr is
+    // a valid +1-retained `CVPixelBuffer` of the same dimensions.
+    let target = unsafe {
+        metal_iosurface::BeautyOutputTarget::from_adopted(
+            &gpu.device,
+            mtl_texture_ptr as *mut metal::MTLTexture,
+            pixel_buffer_ptr as metal_iosurface::CVPixelBufferRef,
+        )
     };
-
-    // SAFETY: the caller guarantees mtl_texture_ptr is a valid +1 retained
-    // MTLTexture*. We transfer that +1 into the OutputTexture; its Drop
-    // releases it when the surface is destroyed or replaced.
-    let mtl_texture =
-        unsafe { metal_iosurface::adopt_metal_texture(mtl_texture_ptr as *mut metal::MTLTexture) };
-    let width = mtl_texture.width() as u32;
-    let height = mtl_texture.height() as u32;
-        if width != surface.width || height != surface.height {
-        // Drop the pixel-buffer retain we just took — the wgpu import will
-        // not happen so we own both the buffer and the texture.
-        if !owned_pixel_buffer_ptr.is_null() {
-            metal_iosurface::release_pixel_buffer(owned_pixel_buffer_ptr);
-        }
+    let Some(target) = target else {
+        return Err("output texture adoption rejected (see logs)".into());
+    };
+    let width = target.width();
+    let height = target.height();
+    if width != surface.width || height != surface.height {
         return Err(format!(
             "output texture {width}x{height} does not match surface {}x{}",
             surface.width, surface.height
         ));
     }
-    let wgpu_texture = unsafe {
-        wgpu_metal_import::wrap_metal_texture_as_wgpu_bgra(
-            &gpu.device,
-            mtl_texture.clone(),
-            width,
-            height,
-        )
-    };
-    let ot = OutputTexture {
-        pixel_buffer_ptr: owned_pixel_buffer_ptr as u64,
-        metal_texture: Some(mtl_texture),
-        wgpu_texture,
-        width,
-        height,
-    };
+    let ot = OutputTexture::Adopted(target);
     *surface
         .output_texture
         .lock()
@@ -194,7 +201,7 @@ pub fn attach_output_texture(
 /// This is the **benchmark-only** path — it has no Flutter CVPixelBuffer
 /// backing, so the result is not visible on screen. It exists so the
 /// benchmark can measure beauty compute + swizzle shader without the
-/// cost of a CPU readback. The pixel_buffer_ptr is recorded as 0.
+/// cost of a CPU readback.
 #[cfg(target_vendor = "apple")]
 pub fn attach_output_texture_wgpu(
     id: i64,
@@ -209,9 +216,7 @@ pub fn attach_output_texture_wgpu(
             surface.width, surface.height
         ));
     }
-    let ot = OutputTexture {
-        pixel_buffer_ptr: 0,
-        metal_texture: None,
+    let ot = OutputTexture::Benchmark {
         wgpu_texture,
         width,
         height,
@@ -635,7 +640,7 @@ pub fn apply_surface_beauty_pipeline_with_output(
                 under_eye_buf.as_ref(),
                 lip_buf.as_ref(),
                 lip_center,
-                &ot.wgpu_texture,
+                ot.wgpu_texture(),
             )?;
         } else {
             drop(output_guard);
