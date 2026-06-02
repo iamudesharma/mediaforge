@@ -137,6 +137,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CompressResult dco_decode_compress_result(dynamic raw);
 
   @protected
+  DecoderCacheStatsDto dco_decode_decoder_cache_stats_dto(dynamic raw);
+
+  @protected
   double dco_decode_f_32(dynamic raw);
 
   @protected
@@ -374,6 +377,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   CompressResult sse_decode_compress_result(SseDeserializer deserializer);
+
+  @protected
+  DecoderCacheStatsDto sse_decode_decoder_cache_stats_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   double sse_decode_f_32(SseDeserializer deserializer);
@@ -654,6 +662,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_compress_result(
     CompressResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_decoder_cache_stats_dto(
+    DecoderCacheStatsDto self,
     SseSerializer serializer,
   );
 

@@ -7,6 +7,8 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'types.dart';
 
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+
 /// Initialize the native video processor (call once at app startup).
 Future<void> initialize() => RustLib.instance.api.crateApiInitialize();
 
@@ -97,3 +99,51 @@ Uint8List bufferPoolAcquire({required int minCapacity}) =>
 /// Returns the current statistics of the video processor's buffer pool (count, total bytes).
 (BigInt, BigInt) bufferPoolStats() =>
     RustLib.instance.api.crateApiBufferPoolStats();
+
+/// Drop all cached demuxer/decoder pairs and return the number of entries
+/// dropped. Use for tests, low-memory warnings, or after a project is
+/// closed (so the next call for a new project does not see stale
+/// state from a previous one).
+BigInt clearDecoderCache() => RustLib.instance.api.crateApiClearDecoderCache();
+
+/// Snapshot of the demuxer/decoder cache state. Cheap; takes the cache
+/// lock briefly. Use for telemetry, memory pressure warnings, and
+/// integration tests.
+DecoderCacheStatsDto decoderCacheStats() =>
+    RustLib.instance.api.crateApiDecoderCacheStats();
+
+/// Public stats DTO. Fields mirror [crate::cache::CacheStatsSnapshot].
+class DecoderCacheStatsDto {
+  final BigInt hits;
+  final BigInt misses;
+  final BigInt evictions;
+  final int entries;
+  final BigInt workingSetBytes;
+
+  const DecoderCacheStatsDto({
+    required this.hits,
+    required this.misses,
+    required this.evictions,
+    required this.entries,
+    required this.workingSetBytes,
+  });
+
+  @override
+  int get hashCode =>
+      hits.hashCode ^
+      misses.hashCode ^
+      evictions.hashCode ^
+      entries.hashCode ^
+      workingSetBytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DecoderCacheStatsDto &&
+          runtimeType == other.runtimeType &&
+          hits == other.hits &&
+          misses == other.misses &&
+          evictions == other.evictions &&
+          entries == other.entries &&
+          workingSetBytes == other.workingSetBytes;
+}

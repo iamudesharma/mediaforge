@@ -75,7 +75,7 @@ pub fn extract_thumbnail_bytes(
     let input = options.input_path.trim();
     ensure_input_accessible(input)?;
 
-    let rgb = decode_rgb_frame_at(
+    let rgb = decode_scrub_rgb_frame_at_cached(
         input,
         options.position_ms,
         options.width,
@@ -280,6 +280,62 @@ pub(crate) fn decode_scrub_rgb_frame_at(
     })
 }
 
+/// Cache-aware variant of [decode_scrub_rgb_frame_at]: tries the demuxer
+/// cache first to avoid the `avformat_open_input` round-trip on repeated
+/// calls. On miss, opens a fresh decoder, decodes, then re-inserts the
+/// (open) entry into the cache via [crate::cache::release].
+pub(crate) fn decode_scrub_rgb_frame_at_cached(
+    input: &str,
+    position_ms: u64,
+    max_w: Option<u32>,
+    max_h: Option<u32>,
+    token: CancellationToken,
+) -> Result<RgbFrame> {
+    use crate::cache::{acquire, release, OpenMode};
+
+    let mut entry = acquire(input, OpenMode::Preview)?;
+    let stream_idx = match entry.ictx.streams().best(ffmpeg_next::media::Type::Video) {
+        Some(s) => s.index(),
+        None => {
+            return Err(VideoForgeError::InvalidInput(
+                "no video stream in cached input".into(),
+            ));
+        }
+    };
+    let tb = entry
+        .ictx
+        .stream(stream_idx)
+        .map(|s| s.time_base())
+        .ok_or_else(|| VideoForgeError::Internal("missing stream for time_base".into()))?;
+
+    let mut target = BatchTarget {
+        index: 0,
+        position_ms,
+        rgb: None,
+        bytes: None,
+    };
+    let decode_out = decode_batch_frames_with_decoder(
+        &mut entry.ictx,
+        &mut entry.decoder,
+        stream_idx,
+        tb,
+        std::slice::from_mut(&mut target),
+        max_w,
+        max_h,
+        None,
+        &token,
+        true,
+    );
+    // Always release the entry back to the cache (even on error) so the
+    // next call to the same path avoids the open. Decoder state may be
+    // partially mid-seek; that is fine — the next call will re-seek.
+    release(input, entry);
+    decode_out?;
+    target.rgb.ok_or_else(|| {
+        VideoForgeError::InvalidInput("could not decode frame at position".into())
+    })
+}
+
 /// Decode all batch positions using single-pass or segmented seek (A1).
 fn decode_batch_frames(
     input: &str,
@@ -328,6 +384,44 @@ fn decode_batch_frames(
     let positions: Vec<u64> = targets.iter().map(|t| t.position_ms).collect();
     let use_segmented = use_segmented_thumbnail_seek(&positions, duration_ms)
         || (preview_scrub && targets.len() == 1);
+    decode_batch_frames_with_decoder(
+        &mut ictx,
+        &mut decoder,
+        stream_idx,
+        tb,
+        targets,
+        max_w,
+        max_h,
+        encode_format,
+        &token,
+        preview_scrub,
+    )
+}
+
+/// Inner decode loop, shared by the open-and-decode path
+/// ([decode_batch_frames]) and the cache-aware path
+/// ([crate::cache::acquire] -> [decode_scrub_rgb_frame_at_cached]).
+///
+/// Owning the [Input] / [DecoderVideo] outside the lock is the cache
+/// protocol — the caller is responsible for re-inserting the entry via
+/// [crate::cache::release] after this function returns (success or
+/// error).
+fn decode_batch_frames_with_decoder(
+    ictx: &mut Input,
+    decoder: &mut DecoderVideo,
+    stream_idx: usize,
+    tb: Rational,
+    targets: &mut [BatchTarget],
+    max_w: Option<u32>,
+    max_h: Option<u32>,
+    encode_format: Option<&ThumbnailFormat>,
+    token: &CancellationToken,
+    preview_scrub: bool,
+) -> Result<()> {
+    let duration_ms = input_duration_ms(ictx);
+    let positions: Vec<u64> = targets.iter().map(|t| t.position_ms).collect();
+    let use_segmented = use_segmented_thumbnail_seek(&positions, duration_ms)
+        || (preview_scrub && targets.len() == 1);
     if use_segmented {
         let first = positions[0];
         let last = *positions.last().unwrap();
@@ -339,14 +433,14 @@ fn decode_batch_frames(
             duration_ms
         );
         decode_batch_segmented(
-            &mut ictx,
+            ictx,
             stream_idx,
             tb,
-            &mut decoder,
+            decoder,
             targets,
             max_w,
             max_h,
-            &token,
+            token,
             segmented_gop_approach_ms(preview_scrub, targets.len()),
         )?;
     } else {
@@ -356,10 +450,10 @@ fn decode_batch_frames(
             positions.last().unwrap().saturating_sub(positions[0])
         );
         decode_batch_sequential(
-            &mut ictx,
+            ictx,
             stream_idx,
             tb,
-            &mut decoder,
+            decoder,
             targets,
             max_w,
             max_h,

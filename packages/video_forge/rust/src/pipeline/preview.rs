@@ -73,7 +73,10 @@ pub fn decode_preview_frame_rgba(
 ) -> Result<PreviewFrameRgba> {
     let token = CancellationToken::new();
     let max_w = max_edge;
-    let rgb = crate::pipeline::thumbnail::decode_scrub_rgb_frame_at(
+    // Use the cache-aware variant so repeated calls on the same path
+    // skip the FFmpeg open (the dominant cost for iPhone HEVC + DV
+    // MOV with deep probe budgets). The cache is a no-op if disabled.
+    let rgb = crate::pipeline::thumbnail::decode_scrub_rgb_frame_at_cached(
         input_path.trim(),
         position_ms,
         max_w,

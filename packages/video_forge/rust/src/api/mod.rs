@@ -277,3 +277,38 @@ pub fn buffer_pool_stats() -> (usize, usize) {
     crate::pool::pool_stats()
 }
 
+/// Drop all cached demuxer/decoder pairs and return the number of entries
+/// dropped. Use for tests, low-memory warnings, or after a project is
+/// closed (so the next call for a new project does not see stale
+/// state from a previous one).
+#[frb(sync)]
+pub fn clear_decoder_cache() -> usize {
+    crate::cache::clear()
+}
+
+/// Snapshot of the demuxer/decoder cache state. Cheap; takes the cache
+/// lock briefly. Use for telemetry, memory pressure warnings, and
+/// integration tests.
+#[frb(sync)]
+pub fn decoder_cache_stats() -> DecoderCacheStatsDto {
+    let s = crate::cache::stats();
+    DecoderCacheStatsDto {
+        hits: s.hits,
+        misses: s.misses,
+        evictions: s.evictions,
+        entries: s.entries as u32,
+        working_set_bytes: s.working_set_bytes,
+    }
+}
+
+/// Public stats DTO. Fields mirror [crate::cache::CacheStatsSnapshot].
+#[frb]
+#[derive(Clone, Copy, Debug)]
+pub struct DecoderCacheStatsDto {
+    pub hits: u64,
+    pub misses: u64,
+    pub evictions: u64,
+    pub entries: u32,
+    pub working_set_bytes: u64,
+}
+

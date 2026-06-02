@@ -1,3 +1,35 @@
+## 2.1.0
+
+### Performance
+- **Demuxer/decoder LRU cache** (default-on). Repeated `thumbnail`,
+  `batch_thumbnails`, and `decodePreviewFrameRgba` calls on the same
+  input now reuse the open `AVFormatContext` and decoder. The default
+  config keeps 4 entries with a 30 s idle TTL and a ~256 MB working-set
+  cap. The cache is a no-op when disabled via
+  `setDecoderCacheConfig(disabled)`. Use `clearDecoderCache()` from Dart
+  in low-memory warnings or when a project is closed.
+- **`wait_for_job` no longer polls.** The 50 ms `std::thread::sleep`
+  poll in `JobRegistry::wait_result` was replaced with a per-record
+  `parking_lot::Condvar`; `complete` now calls `notify_all` so waiters
+  wake in single-digit ms instead of up to 50 ms. Tested with a
+  `wait_result_wakes_immediately_on_complete` regression that asserts
+  < 100 ms (CI budget for scheduling jitter).
+
+### Public API
+- `clearDecoderCache() -> int` (sync FFI; was `#[frb(sync)]`).
+- `decoderCacheStats() -> DecoderCacheStatsDto` (sync FFI; new struct).
+- Dart-side helpers `readDecoderCacheStats()` and `dropDecoderCache()`
+  in `lib/src/decoder_cache.dart` (re-exported from
+  `package:video_forge/video_forge.dart`).
+
+### Tests
+- 5 new `cache::tests::*` unit tests (LRU key normalization, stats,
+  clear, config).
+- 4 new `jobs::registry::tests::*` unit tests (immediate wake, not
+  found, timeout, active count).
+- 4 new `DecoderCacheStats` Dart tests (hit ratio math, toString,
+  wrapper shape).
+
 ## 2.0.0
 
 ### Breaking
