@@ -6,10 +6,40 @@
 //!
 //! The returned `CVPixelBufferRef` is retained +1 and can be handed to
 //! `pixel_surface::presentPixelBuffer(handle, ptr)` for zero-copy display.
+//!
+//! ## Retain discipline (READ ME before touching this file)
+//!
+//! Every Core Foundation / Objective-C pointer crossing this module has a
+//! single, named owner. The rules:
+//!
+//! 1. **Factory functions** (`create_bgra_iosurface_pixel_buffer`,
+//!    `retain_pixel_buffer`, `metal_texture_cache_for_device`) return a
+//!    pointer carrying a `+1` retain. The caller (or the new RAII wrapper
+//!    it hands the pointer to) is responsible for exactly one matching
+//!    `release_*` call.
+//! 2. **Reader functions** (those that take a `*mut c_void` without retaining
+//!    it) are named with a `borrow_` prefix or document the borrow in their
+//!    `# Safety` section. They never own a `+1`.
+//! 3. **`adopt_*` functions** consume a `+1` from the caller. The caller
+//!    must have explicitly acquired that retain *before* calling `adopt_*`.
+//!    `adopt_*` does not call `retain` internally — the new wrapper takes
+//!    ownership of the exact retain the caller already holds.
+//! 4. **RAII wrappers** ([`CvMetalTexture`], [`MetalTextureCacheEntry`]) are
+//!    the only types that may hold a `+1` and be `Drop`ed in normal code
+//!    paths. Everything else ([`IosurfacePixelBuffer`]) composes RAII
+//!    wrappers so that "destroy this struct" is unambiguous and idempotent.
+//!
+//! Violating these rules will leak or double-free `CVPixelBuffer` /
+//! `MTLTexture` / `CVMetalTextureCache` references. The tests in
+//! `drop_discipline.rs` enforce the basic balance under a debug-only
+//! instrumentation counter.
 
 #[cfg(target_vendor = "apple")]
 mod imp {
     use std::ptr;
+    use std::sync::atomic::AtomicUsize;
+    #[cfg(test)]
+    use std::sync::atomic::Ordering;
     use std::sync::OnceLock;
 
     use metal::Texture as MetalTexture;
@@ -30,6 +60,11 @@ mod imp {
     /// Set to width * 4 (BGRA8888).
     #[allow(dead_code)]
     pub const K_IO_SURFACE_BYTES_PER_ROW: &str = "IOSurfaceBytesPerRow";
+
+    /// `kCVMetalTextureCacheFlushType` — flush all unused textures in the
+    /// cache and release any that are not currently bound to a Metal
+    /// command encoder. Used both at Drop and on device change.
+    pub const K_CV_METAL_TEXTURE_CACHE_FLUSH_ALL: u64 = 0;
 
     #[link(name = "CoreVideo", kind = "framework")]
     #[link(name = "CoreFoundation", kind = "framework")]
@@ -76,14 +111,26 @@ mod imp {
         fn CVMetalTextureGetTexture(texture: CVMetalTextureRef) -> MTLTextureRef;
     }
 
-    /// Process-wide `CVMetalTextureCache` per Metal device.
-    /// Lazily initialized; flushes if the device changes.
-    ///
-    /// Wrapped in `*mut` (non-null) for Send/Sync. The `*mut c_void` is a
-    /// CFTypeRef which is documented as thread-safe.
-    static METAL_TEXTURE_CACHE: OnceLock<parking_lot::Mutex<Option<MetalTextureCacheEntry>>> =
-        OnceLock::new();
+    // ----- Test instrumentation -------------------------------------------------
+    //
+    // The unit tests in `drop_discipline.rs` assert that every Drop path
+    // fires exactly once. The counters are unconditionally `pub` (the
+    // `#[cfg(test)]` gate does not propagate to integration tests) but the
+    // increment in `Drop` is `#[cfg(test)]`-gated, so in non-test builds
+    // the statics exist but are never written to — overhead is a single
+    // `SeqCst` load at most.
+    pub static DROPPED_PIXEL_BUFFERS: AtomicUsize = AtomicUsize::new(0);
+    pub static DROPPED_METAL_TEXTURES: AtomicUsize = AtomicUsize::new(0);
+    pub static DROPPED_METAL_TEXTURE_CACHES: AtomicUsize = AtomicUsize::new(0);
 
+    // ----- Metal texture cache entry (RAII) ------------------------------------
+
+    /// One process-global entry per Metal device. The `cache` field owns a
+    /// `+1` on the `CVMetalTextureCacheRef`; `Drop` releases it.
+    ///
+    /// The struct also stores a `metal::Device` clone — a `+1` retain on the
+    /// device — so the cache cannot be invalidated by an early device
+    /// deallocation in a different module.
     struct MetalTextureCacheEntry {
         cache: CVMetalTextureCacheRef,
         /// Raw device pointer (for equality check); the `device` field is a
@@ -93,21 +140,135 @@ mod imp {
         device: metal::Device,
     }
 
+    // SAFETY: CVMetalTextureCacheRef is a CFTypeRef and is documented as
+    // thread-safe for retain/release. The `device` field is an objc object
+    // that is itself thread-safe to send across threads.
     unsafe impl Send for MetalTextureCacheEntry {}
     unsafe impl Sync for MetalTextureCacheEntry {}
 
+    impl Drop for MetalTextureCacheEntry {
+        fn drop(&mut self) {
+            if !self.cache.is_null() {
+                // Flush first so any pending texture references are
+                // released cleanly before the cache itself goes away.
+                unsafe { CVMetalTextureCacheFlush(self.cache, K_CV_METAL_TEXTURE_CACHE_FLUSH_ALL) };
+                unsafe { CFRelease(self.cache) };
+            }
+            #[cfg(test)]
+            DROPPED_METAL_TEXTURE_CACHES.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    // ----- CvMetalTexture (RAII) -----------------------------------------------
+
+    /// A Metal texture view of a `CVPixelBuffer`, created via
+    /// `CVMetalTextureCacheCreateTextureFromImage`.
+    ///
+    /// Owns a `+1` retain on the underlying `CVMetalTextureRef`. The
+    /// `metal::Texture` field is a borrowed view into the same Metal
+    /// resource; `CFRelease` of the `CVMetalTextureRef` releases the
+    /// matching `+1` on the `MTLTexture` as well (Apple's CF bridge keeps
+    /// the two lifetimes tied together). For that reason the struct is
+    /// single-owner: cloning a `metal::Texture` out of it (via
+    /// `clone_metal_texture`) bumps the `MTLTexture` retain for as long as
+    /// needed.
+    pub struct CvMetalTexture {
+        cv_texture: CVMetalTextureRef,
+        /// Borrowed Metal view. Kept here so callers can use it directly
+        /// for read-only operations; do not manually `release()` the
+        /// underlying `MTLTexture*` — the CV ref's `CFRelease` will handle
+        /// it. If a longer-lived `metal::Texture` is required, call
+        /// [`Self::clone_metal_texture`] to bump the retain count.
+        metal_texture: MetalTexture,
+        width: u32,
+        height: u32,
+    }
+
+    impl CvMetalTexture {
+        /// Borrow the inner `metal::Texture` without bumping its retain.
+        pub fn metal_texture(&self) -> &MetalTexture {
+            &self.metal_texture
+        }
+
+        /// Borrow the raw `MTLTexture*`. The pointer is valid only as long
+        /// as this `CvMetalTexture` is alive (or another owned clone is).
+        pub fn raw_mtl_ptr(&self) -> MTLTextureRef {
+            self.metal_texture.as_ptr()
+        }
+
+        /// Return a +1-retained `metal::Texture` suitable for handing to
+        /// the wgpu importer. The returned texture has its own `Drop` that
+        /// releases the `+1`, so it survives even if this `CvMetalTexture`
+        /// is dropped first.
+        pub fn clone_metal_texture(&self) -> MetalTexture {
+            // `metal::Texture` is itself an `objc::rc::Strong<T>`-style
+            // wrapper; constructing from the raw pointer increments the
+            // objc retain count. The Drop on the new wrapper will decrement
+            // it, balancing our temporary borrow.
+            //
+            // SAFETY: `self.metal_texture.as_ptr()` returns a valid
+            // non-null `MTLTexture*` owned by the CV ref.
+            unsafe { metal::Texture::from_ptr(self.metal_texture.as_ptr()) }
+        }
+
+        pub fn width(&self) -> u32 {
+            self.width
+        }
+        pub fn height(&self) -> u32 {
+            self.height
+        }
+    }
+
+    impl Drop for CvMetalTexture {
+        fn drop(&mut self) {
+            if !self.cv_texture.is_null() {
+                // CFRelease the CV ref; the matching MTLTexture +1 is
+                // released by the CV bridge at the same time. We do NOT
+                // call `metal_texture.release()` here — that would double
+                // release.
+                unsafe { CFRelease(self.cv_texture) };
+            }
+            #[cfg(test)]
+            DROPPED_METAL_TEXTURES.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    // SAFETY: see `MetalTextureCacheEntry` above; CVMetalTextureRef is
+    // thread-safe for retain/release.
+    unsafe impl Send for CvMetalTexture {}
+    unsafe impl Sync for CvMetalTexture {}
+
+    /// Process-wide `CVMetalTextureCache` per Metal device. Lazily
+    /// initialized; on device change the old entry is dropped (which
+    /// flushes + releases it) and a new cache is created.
+    static METAL_TEXTURE_CACHE: OnceLock<parking_lot::Mutex<Option<MetalTextureCacheEntry>>> =
+        OnceLock::new();
+
     fn metal_texture_cache_for_device(
         device: &metal::Device,
-    ) -> Result<CVMetalTextureCacheRef, String> {
+    ) -> Result<&'static MetalTextureCacheEntry, String> {
         let mutex = METAL_TEXTURE_CACHE.get_or_init(|| parking_lot::Mutex::new(None));
         let mut guard = mutex.lock();
         let device_ptr = device.as_ptr() as MTLDeviceRef;
-        if let Some(entry) = guard.as_ref() {
-            if entry.device_ptr == device_ptr {
-                return Ok(entry.cache);
+        let needs_rebuild = match guard.as_ref() {
+            Some(entry) if entry.device_ptr == device_ptr => false,
+            Some(_) => {
+                // Drop the old entry by replacing it with None; the old
+                // MetalTextureCacheEntry's Drop runs at the end of this
+                // scope and flushes + releases the previous cache.
+                true
             }
-            unsafe { CVMetalTextureCacheFlush(entry.cache, 0) };
+            None => true,
+        };
+        if !needs_rebuild {
+            // SAFETY: the borrow checker cannot see through
+            // `parking_lot::Mutex::lock` returning a `MutexGuard` that
+            // deref-projects to `&Option<Entry>`. We re-borrow the entry
+            // after dropping the guard.
+            return Ok(unsafe { &*(guard.as_ref().expect("checked above") as *const _) });
         }
+        // Drop the previous entry (if any) before creating a new one.
+        *guard = None;
         let mut cache: CVMetalTextureCacheRef = ptr::null_mut();
         let status = unsafe {
             CVMetalTextureCacheCreate(
@@ -126,33 +287,38 @@ mod imp {
             device_ptr,
             device: device.clone(),
         });
-        Ok(cache)
+        // SAFETY: just inserted above.
+        Ok(unsafe { &*(guard.as_ref().expect("just inserted") as *const _) })
     }
+
+    // ----- IosurfacePixelBuffer (composed) -------------------------------------
 
     /// A BGRA8888 CVPixelBuffer plus a Metal texture view of it.
     ///
-    /// Drop releases the CVPixelBuffer. The Metal texture is owned by the
-    /// `CVMetalTextureCache` (process-global); we hold a +1 retain.
+    /// Owns a `+1` retain on the `CVPixelBufferRef` (released in `Drop`)
+    /// and composes a [`CvMetalTexture`] for the Metal view (whose own
+    /// `Drop` releases the `+1` on the `CVMetalTextureRef`). There is
+    /// exactly one place that releases each ref count.
     pub struct IosurfacePixelBuffer {
         pub pixel_buffer: CVPixelBufferRef,
-        pub metal_texture: MetalTexture,
+        pub metal_texture: CvMetalTexture,
         pub width: u32,
         pub height: u32,
         pub bytes_per_row: u32,
     }
 
-    // SAFETY: CVPixelBufferRef and metal::Texture are Core Foundation / objc
+    // SAFETY: CVPixelBufferRef and CvMetalTexture are Core Foundation
     // objects documented as thread-safe for retain/release.
     unsafe impl Send for IosurfacePixelBuffer {}
     unsafe impl Sync for IosurfacePixelBuffer {}
 
     impl Drop for IosurfacePixelBuffer {
         fn drop(&mut self) {
-            unsafe {
-                if !self.pixel_buffer.is_null() {
-                    CVPixelBufferRelease(self.pixel_buffer);
-                }
+            if !self.pixel_buffer.is_null() {
+                unsafe { CVPixelBufferRelease(self.pixel_buffer) };
             }
+            #[cfg(test)]
+            DROPPED_PIXEL_BUFFERS.fetch_add(1, Ordering::SeqCst);
         }
     }
 
@@ -199,7 +365,7 @@ mod imp {
             let mut cv_mtl_texture: CVMetalTextureRef = ptr::null_mut();
             let status = CVMetalTextureCacheCreateTextureFromImage(
                 ptr::null_mut(),
-                cache,
+                cache.cache,
                 pixel_buffer,
                 ptr::null_mut(),
                 K_CV_32BGRA,
@@ -216,20 +382,32 @@ mod imp {
             }
             let mtl_raw = CVMetalTextureGetTexture(cv_mtl_texture);
             if mtl_raw.is_null() {
+                CFRelease(cv_mtl_texture);
                 CVPixelBufferRelease(pixel_buffer);
                 return Err("CVMetalTextureGetTexture returned NULL".into());
             }
-            // `CVMetalTextureGetTexture` returns an unretained reference on
-            // modern SDKs. The caller of `getMetalTexturePtr` (Swift) already
-            // holds a +1 retain on the MTLTexture (it asked the cache for it),
-            // so we transfer that +1 to this `metal::Texture` wrapper. The
-            // wrapper's Drop releases it; the `IosurfacePixelBuffer`'s Drop
-            // releases the matching CVPixelBuffer.
+            // CVMetalTextureGetTexture returns an UNRETAINED reference.
+            // We must NOT transfer any external +1 into the wrapper — the
+            // CV ref owns the MTL lifetime. The CvMetalTexture's Drop will
+            // release the CV ref, which decrements the MTL retain to zero.
+            //
+            // SAFETY: `mtl_raw` is non-null (checked above) and is the
+            // unretained MTLTexture pointer backing the CVMetalTextureRef
+            // we still own. The CvMetalTexture we build below will release
+            // the CV ref (and its bridge-decrement of the MTL retain) in
+            // its Drop. We do not add a +1 to the MTL retain here.
             let metal_texture = metal::Texture::from_ptr(mtl_raw);
+
+            let cv_metal = CvMetalTexture {
+                cv_texture: cv_mtl_texture,
+                metal_texture,
+                width,
+                height,
+            };
 
             Ok(IosurfacePixelBuffer {
                 pixel_buffer,
-                metal_texture,
+                metal_texture: cv_metal,
                 width,
                 height,
                 bytes_per_row,
@@ -238,7 +416,7 @@ mod imp {
     }
 
     /// Retain a CVPixelBuffer pointer (for handoff to platform plugin via
-    /// `presentPixelBuffer`). The +1 acquired here will be consumed by the
+    /// `presentPixelBuffer`). The `+1` acquired here will be consumed by the
     /// plugin's `takeRetainedValue()`.
     pub fn retain_pixel_buffer(ptr: CVPixelBufferRef) -> CVPixelBufferRef {
         unsafe { CVPixelBufferRetain(ptr) }
@@ -252,12 +430,197 @@ mod imp {
     }
 
     /// Adopt a raw `MTLTexture*` (e.g. from Swift via `presentPixelBuffer`
-    /// handoff) as a Rust `metal::Texture` with +1 retain.
+    /// handoff) as a Rust `metal::Texture` with the caller's `+1` retain.
     ///
     /// # Safety
-    /// `ptr` must be a valid `MTLTexture*` retained by the caller.
+    ///
+    /// - `ptr` must be a non-null, valid `MTLTexture*`.
+    /// - The caller must hold exactly one `+1` retain on the underlying
+    ///   `MTLTexture` and must transfer that retain to this function —
+    ///   `adopt_metal_texture` does not call `objc_retain` internally.
+    ///   In practice this means: when the Swift side hands a texture via
+    ///   `Unmanaged<MTLTexture>.passRetained(ptr)`, the `+1` consumed by
+    ///   `passRetained` is the one this function adopts.
+    /// - After calling this function the caller must not call
+    ///   `CFRelease` / `objc_release` on `ptr` directly; the returned
+    ///   `metal::Texture`'s `Drop` will do so exactly once.
     pub unsafe fn adopt_metal_texture(ptr: *mut metal::MTLTexture) -> MetalTexture {
-        metal::Texture::from_ptr(ptr)
+        // SAFETY: caller transferred exactly one +1 retain on the
+        // underlying MTLTexture. The `metal::Texture` wrapper's Drop will
+        // release it.
+        unsafe { metal::Texture::from_ptr(ptr) }
+    }
+
+    // ----- BeautyOutputTarget (typed wrapper) -----------------------------------
+
+    /// Zero-copy output target for a beauty compute pass. Owns:
+    /// - a `+1` retain on the `CVPixelBuffer` (the Flutter display backing);
+    /// - a `+1` retain on the `MTLTexture` (the Swift-side `passRetained`
+    ///   handoff);
+    /// - a `wgpu::Texture` import of the same Metal resource.
+    ///
+    /// `Drop` releases the `CVPixelBuffer` and lets `metal::Texture`'s
+    /// own `Drop` release the `MTLTexture` +1. The wgpu `Texture` field
+    /// is declared **first** so it is dropped **before** the
+    /// `metal_texture` (Rust drops struct fields in declaration order);
+    /// wgpu's HAL holds a borrow of the `MTLTexture`, and dropping the
+    /// Metal resource while the wgpu import is still alive is
+    /// use-after-free.
+    ///
+    /// This is the **single safe boundary** for adopting Flutter-side
+    /// `CVPixelBuffer` + `MTLTexture` pointer pairs into a wgpu pipeline.
+    /// Construct it via [`BeautyOutputTarget::from_adopted`]; never
+    /// assemble one by hand.
+    pub struct BeautyOutputTarget {
+        /// Borrowed wgpu view of the underlying `MTLTexture`. Must be
+        /// dropped first.
+        wgpu_texture: wgpu::Texture,
+        /// `+1` retain on the `MTLTexture`. The wgpu `Texture` above
+        /// borrows this; dropping it first causes use-after-free in
+        /// subsequent wgpu submissions. Marked `#[allow(dead_code)]`
+        /// because the lint cannot see that `metal::Texture::Drop` is
+        /// what releases the +1; the field is the *owner*.
+        #[allow(dead_code)]
+        metal_texture: MetalTexture,
+        /// `+1` retain on the `CVPixelBuffer`. Released in `Drop`.
+        pixel_buffer: CVPixelBufferRef,
+        width: u32,
+        height: u32,
+    }
+
+    // SAFETY: `CVPixelBufferRef` and `metal::Texture` are CF / Objective-C
+    // objects whose retain/release is thread-safe; `wgpu::Texture` is
+    // likewise `Send + Sync` on the same device.
+    unsafe impl Send for BeautyOutputTarget {}
+    unsafe impl Sync for BeautyOutputTarget {}
+
+    impl BeautyOutputTarget {
+        /// Borrow the inner wgpu `Texture`. The returned reference is
+        /// valid for the lifetime of `self`.
+        pub fn wgpu_texture(&self) -> &wgpu::Texture {
+            &self.wgpu_texture
+        }
+
+        pub fn width(&self) -> u32 {
+            self.width
+        }
+        pub fn height(&self) -> u32 {
+            self.height
+        }
+
+        /// Adopt a Flutter-side zero-copy output target. The caller must
+        /// hold a `+1` retain on **each** of the input pointers (typically
+        /// obtained from the Swift plugin's `getMetalTexturePtr` method,
+        /// which `passRetained`s both). Both retains are transferred into
+        /// the returned `BeautyOutputTarget`; the caller must not release
+        /// them again.
+        ///
+        /// On any validation failure the function releases the +1s it has
+        /// already adopted and returns `None` — callers never leak on
+        /// error. On success, the returned struct owns exactly one +1 on
+        /// the `CVPixelBuffer` and one +1 on the `MTLTexture`.
+        ///
+        /// # Safety
+        ///
+        /// Same contract as
+        /// [`wgpu_metal_import::wrap_metal_texture_as_wgpu_bgra`] —
+        /// listed here so a caller of `from_adopted` does not need to
+        /// look at the wgpu import layer to audit the safety:
+        ///
+        /// 1. `metal_texture_ptr` must be a non-null, valid `MTLTexture*`
+        ///    backed by `metal::Device` == `wgpu_hal_device(device)`.
+        /// 2. The `MTLTexture` must be `BGRA8Unorm` + 2D + support
+        ///    `MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite`.
+        /// 3. The `MTLTexture`'s dimensions must equal the Flutter display
+        ///    texture dimensions; this is verified against
+        ///    `CVPixelBufferGet{Width,Height}` on `pixel_buffer_ptr`.
+        /// 4. `pixel_buffer_ptr` must be a non-null, valid `CVPixelBuffer`
+        ///    of the same dimensions.
+        pub unsafe fn from_adopted(
+            device: &wgpu::Device,
+            metal_texture_ptr: *mut metal::MTLTexture,
+            pixel_buffer_ptr: CVPixelBufferRef,
+        ) -> Option<Self> {
+            // ----- Step 1: pointer validation (safe to do before any
+            //                retain transfer). -----
+            if metal_texture_ptr.is_null() || pixel_buffer_ptr.is_null() {
+                return None;
+            }
+            // SAFETY: `pixel_buffer_ptr` is non-null and was promised by
+            // the caller to be a valid `CVPixelBuffer`. `GetWidth` /
+            // `GetHeight` are pure reads; they do not retain.
+            let pb_w = unsafe { CVPixelBufferGetWidth(pixel_buffer_ptr) } as u32;
+            let pb_h = unsafe { CVPixelBufferGetHeight(pixel_buffer_ptr) } as u32;
+            if pb_w == 0 || pb_h == 0 {
+                return None;
+            }
+            // SAFETY: we validated non-null above; we adopt the +1
+            // immediately so the wrapper's Drop will release it on any
+            // subsequent failure.
+            let metal_texture = unsafe { adopt_metal_texture(metal_texture_ptr) };
+            let actual_w = metal_texture.width() as u32;
+            let actual_h = metal_texture.height() as u32;
+            if actual_w != pb_w || actual_h != pb_h {
+                // Drop the just-adopted metal texture; the pixel_buffer
+                // is still owned by the caller (we never took its +1).
+                // Returning None here is safe because the +1 we just
+                // consumed lives on `metal_texture` and will be released
+                // by its Drop at the end of this scope.
+                return None;
+            }
+
+            // ----- Step 2: take the +1 on the CVPixelBuffer now that we
+            //                know we want to keep the target. The
+            //                `retain_pixel_buffer` call below transfers
+            //                no ownership from the caller; it just bumps
+            //                the retain count by 1, and we own that
+            //                bump.
+            let owned_pb = retain_pixel_buffer(pixel_buffer_ptr);
+
+            // ----- Step 3: wgpu import. `wrap_metal_texture_as_wgpu_bgra`
+            //                is unsafe; it asserts the format + 2D in
+            //                debug builds. We catch the unsafe with a
+            //                local block so the outer function can
+            //                remain marked unsafe at the call site
+            //                (the caller still has to promise the
+            //                invariants).
+            let wgpu_texture = unsafe {
+                crate::wgpu_metal_import::wrap_metal_texture_as_wgpu_bgra(
+                    device,
+                    metal_texture.clone(),
+                    actual_w,
+                    actual_h,
+                )
+            };
+
+            Some(BeautyOutputTarget {
+                wgpu_texture,
+                metal_texture,
+                pixel_buffer: owned_pb,
+                width: actual_w,
+                height: actual_h,
+            })
+        }
+    }
+
+    impl Drop for BeautyOutputTarget {
+        fn drop(&mut self) {
+            // The fields are dropped in declaration order: wgpu_texture
+            // first, then metal_texture, then pixel_buffer. The wgpu
+            // HAL drops its Metal command buffer references before
+            // `metal_texture` is dropped, so we cannot observe a
+            // use-after-free from a Metal command buffer.
+            //
+            // We must NOT touch `wgpu_texture` or `metal_texture` here;
+            // their own Drop impls handle their respective releases. We
+            // only need to release the `CVPixelBuffer` +1 we explicitly
+            // took via `retain_pixel_buffer`.
+            if !self.pixel_buffer.is_null() {
+                unsafe { CVPixelBufferRelease(self.pixel_buffer) };
+            }
+            #[cfg(test)]
+            DROPPED_PIXEL_BUFFERS.fetch_add(1, Ordering::SeqCst);
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "pixel_surface"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "GPU texture runtime — wgpu surfaces and Flutter texture bridge (Rust)"
 
@@ -9,24 +9,27 @@ crate-type = ["rlib"]
 
 [features]
 default = []
-gpu = ["wgpu", "pollster", "bytemuck"]
+# `gpu` is currently Apple-only: the wgpu `metal` backend is the only one
+# wired into `pixel_surface`. The compile_error! in `src/lib.rs` enforces this
+# on non-Apple targets. See docs/PUB_PACKAGE_SPLIT.md for the plan to
+# generalize once `GpuEditSurface` migrates into this crate.
+gpu = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 
 [dependencies]
 parking_lot = "0.12"
-wgpu = { version = "24", optional = true }
 pollster = { version = "0.4", optional = true }
 bytemuck = { version = "1", features = ["derive"], optional = true }
 
+# Apple-only deps. `wgpu` is gated on `target_vendor = "apple"` so the `metal`
+# backend feature applies automatically; non-Apple targets see no wgpu
+# dependency at all. The `gpu` feature is therefore meaningful only on Apple
+# and is enforced by a `compile_error!` in `src/lib.rs`.
 [target.'cfg(target_vendor = "apple")'.dependencies]
 metal = "0.31"
 objc = "0.2"
 core-graphics-types = "0.1"
 block = "0.1"
-
-[target.'cfg(target_vendor = "apple")'.dependencies.wgpu]
-version = "24"
-optional = true
-features = ["metal"]
+wgpu = { version = "24", optional = true, features = ["metal"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gpu"))'] }

@@ -7,7 +7,12 @@ import 'package:pixel_surface/pixel_surface.dart';
 
 void main() => runApp(const GpuTextureDemoApp());
 
-/// Animated RGBA gradient in [GpuTextureView] — no image_forge.
+/// Animated gradient in [GpuTextureView] — no image_forge.
+///
+/// Exercises the zero-swap `updateTextureBgra` path (1.1.0+): the bytes
+/// produced by [_buildGradientBgra] are already in the native order of
+/// the Apple `CVPixelBuffer` backing the Flutter texture, so the plugin
+/// performs a single `memcpy` per frame and skips `vImage` entirely.
 class GpuTextureDemoApp extends StatefulWidget {
   const GpuTextureDemoApp({super.key});
 
@@ -46,19 +51,25 @@ class _GpuTextureDemoAppState extends State<GpuTextureDemoApp> {
   }
 
   Future<void> _pushFrame() async {
-    final pixels = _buildGradientRgba(_w, _h, _phase);
-    await GpuTextureRegistry.updateTexture(handle: _handle, pixels: pixels);
+    final pixels = _buildGradientBgra(_w, _h, _phase);
+    await GpuTextureRegistry.updateTextureBgra(handle: _handle, pixels: pixels);
   }
 
-  Uint8List _buildGradientRgba(int w, int h, double phase) {
+  /// Pixels emitted directly in BGRA8888 byte order — the natural order of
+  /// `CVPixelBuffer` on Apple and of the Android `RGBA_8888` `Bitmap`
+  /// memory layout (after the platform plugin's 32-bit word swap).
+  Uint8List _buildGradientBgra(int w, int h, double phase) {
     final out = Uint8List(w * h * 4);
     var i = 0;
     for (var y = 0; y < h; y++) {
       for (var x = 0; x < w; x++) {
         final t = (x / w + y / h) * 0.5 + phase;
-        out[i++] = (128 + 127 * math.sin(t)).round().clamp(0, 255);
-        out[i++] = (64 + 64 * math.sin(t * 1.3)).round().clamp(0, 255);
-        out[i++] = (200 + 55 * math.cos(t * 0.7)).round().clamp(0, 255);
+        final r = (128 + 127 * math.sin(t)).round().clamp(0, 255);
+        final g = (64 + 64 * math.sin(t * 1.3)).round().clamp(0, 255);
+        final b = (200 + 55 * math.cos(t * 0.7)).round().clamp(0, 255);
+        out[i++] = b;
+        out[i++] = g;
+        out[i++] = r;
         out[i++] = 255;
       }
     }

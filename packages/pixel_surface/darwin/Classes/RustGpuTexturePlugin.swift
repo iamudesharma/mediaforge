@@ -11,6 +11,13 @@ import Flutter
 import Metal
 #endif
 
+/// Pixel byte order for `updateTexture`. Mirrors the Dart `PixelLayout`.
+private enum UploadLayout: String {
+  case rgba8888
+  case bgra8888
+  static let `default`: UploadLayout = .rgba8888
+}
+
 private final class RustGpuPixelTexture: NSObject, FlutterTexture {
   var pixelBuffer: CVPixelBuffer?
 
@@ -26,6 +33,12 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
   private weak var textureRegistry: FlutterTextureRegistry?
   private var metalTextureCache: CVMetalTextureCache?
   private let metalTextureCacheLock = NSLock()
+  private let pool = PixelBufferPool()
+  private let poolLock = NSLock()
+
+  /// Last time we got a memory / thermal warning. Used by `debugStats`
+  /// to confirm the warning handler fired.
+  private var lastMemoryWarningMs: Double = 0
 
   public static func register(with registrar: FlutterPluginRegistrar) {
 #if canImport(FlutterMacOS)
@@ -43,6 +56,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
 #else
     instance.textureRegistry = registrar.textures()
 #endif
+    instance.installMemoryWarningObservers()
     registrar.addMethodCallDelegate(instance, channel: channel)
   }
 
@@ -59,20 +73,14 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
         return
       }
       let tex = RustGpuPixelTexture()
-      var pb: CVPixelBuffer?
-      let attrs = Self.metalPixelBufferAttributes()
-      CVPixelBufferCreate(
-        kCFAllocatorDefault,
-        width,
-        height,
-        kCVPixelFormatType_32BGRA,
-        attrs,
-        &pb
-      )
+      let pb = dequeueFromPool(width: width, height: height)
+        ?? Self.createPixelBufferDirect(width: width, height: height)
       tex.pixelBuffer = pb
       let texId = registry.register(tex)
       textures[handle] = tex
       textureIds[handle] = texId
+      NSLog("[PixelSurface] create handle=%lld %dx%d id=%lld",
+            handle, width, height, texId)
       result(texId)
 
     case "updateTexture":
@@ -87,6 +95,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "bad_args", message: "handle/pixels required", details: nil))
         return
       }
+      let layout = Self.layoutFromArgs(args["layout"])
       CVPixelBufferLockBaseAddress(pb, [])
       defer { CVPixelBufferUnlockBaseAddress(pb, []) }
       guard let base = CVPixelBufferGetBaseAddress(pb) else {
@@ -102,35 +111,64 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "size_mismatch", message: "pixel buffer too small", details: nil))
         return
       }
-      src.withUnsafeBytes { raw in
-        guard let srcPtr = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return }
+      src.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+        guard let baseAddr = raw.baseAddress else { return }
+        let srcPtr = baseAddr.assumingMemoryBound(to: UInt8.self)
         let dst = base.assumingMemoryBound(to: UInt8.self)
-        if rowBytes == width * 4 {
-          // Tightly packed rows: vectorized BGRA swap (R/B per pixel) via
-          // vImagePermuteChannels_ARGB8888 — ~1 GB/s on Apple Silicon.
-          var srcBuf = vImage_Buffer(
-            data: UnsafeMutableRawPointer(mutating: srcPtr),
-            height: vImagePixelCount(height),
-            width: vImagePixelCount(width),
-            rowBytes: width * 4
-          )
-          var dstBuf = vImage_Buffer(
-            data: dst,
-            height: vImagePixelCount(height),
-            width: vImagePixelCount(width),
-            rowBytes: rowBytes
-          )
-          let permute: [UInt8] = [2, 1, 0, 3]
-          vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
-        } else {
-          for y in 0..<height {
-            let si = y * width * 4
-            let di = y * rowBytes
-            swapBgraRow(
-              src: srcPtr.advanced(by: si),
-              dst: dst.advanced(by: di),
-              count: width
+        switch layout {
+        case .bgra8888:
+          // BGRA8888 upload: natural byte order for the CVPixelBuffer. No
+          // channel swap; per-row memcpy handles non-contiguous strides.
+          if rowBytes == width * 4 {
+            memcpy(dst, srcPtr, expected)
+          } else {
+            for y in 0..<height {
+              memcpy(
+                dst.advanced(by: y * rowBytes),
+                srcPtr.advanced(by: y * width * 4),
+                width * 4
+              )
+            }
+          }
+        case .rgba8888:
+          // RGBA8888 upload: vectorized channel swap (R/B) via vImage
+          // Accelerate. ~1 GB/s on Apple Silicon, also vectorized on iOS
+          // (see Phase 2.2 — the iOS copy of this plugin previously used a
+          // scalar loop, which is the case Phase 2.2 unifies).
+          if rowBytes == width * 4 {
+            var srcBuf = vImage_Buffer(
+              data: UnsafeMutableRawPointer(mutating: srcPtr),
+              height: vImagePixelCount(height),
+              width: vImagePixelCount(width),
+              rowBytes: width * 4
             )
+            var dstBuf = vImage_Buffer(
+              data: dst,
+              height: vImagePixelCount(height),
+              width: vImagePixelCount(width),
+              rowBytes: rowBytes
+            )
+            let permute: [UInt8] = [2, 1, 0, 3]
+            vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
+          } else {
+            // Non-contiguous stride: per-row vImage call. vImage is still
+            // ~10× faster than the previous scalar Swift loop.
+            for y in 0..<height {
+              var srcBuf = vImage_Buffer(
+                data: UnsafeMutableRawPointer(mutating: srcPtr.advanced(by: y * width * 4)),
+                height: vImagePixelCount(1),
+                width: vImagePixelCount(width),
+                rowBytes: width * 4
+              )
+              var dstBuf = vImage_Buffer(
+                data: dst.advanced(by: y * rowBytes),
+                height: vImagePixelCount(1),
+                width: vImagePixelCount(width),
+                rowBytes: rowBytes
+              )
+              let permute: [UInt8] = [2, 1, 0, 3]
+              vImagePermuteChannels_ARGB8888(&srcBuf, &dstBuf, permute, vImage_Flags(kvImageNoFlags))
+            }
           }
         }
       }
@@ -166,21 +204,59 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       let height = CVPixelBufferGetHeight(srcPb)
 
       if Self.canAdoptPixelBufferDirectly(srcPb) {
+        // Zero-copy adoption: the Flutter display texture's pixel buffer
+        // is now backed by the caller's BGRA/IOSurface/Metal-compatible
+        // buffer. The next frame is the caller's bytes verbatim.
         tex.pixelBuffer = srcPb
         registry.textureFrameAvailable(texId)
+        NSLog("[PixelSurface] present adopted handle=%lld %dx%d", handle, width, height)
         result(nil)
         return
       }
 
-      guard let dstPb = Self.ensureMetalPixelBuffer(tex: tex, width: width, height: height) else {
+      guard let dstPb = dequeueFromPool(width: width, height: height)
+        ?? Self.createPixelBufferDirect(width: width, height: height) else {
         result(FlutterError(code: "create_failed", message: "Metal CVPixelBuffer alloc failed", details: nil))
         return
       }
+      // The pool handed us a +1; release our local handle when the
+      // reference goes out of scope, and assign to the Flutter texture.
+      tex.pixelBuffer = dstPb
       if !Self.copyPixelBufferContents(from: srcPb, to: dstPb) {
         result(FlutterError(code: "blit_failed", message: "CVPixelBuffer copy failed", details: nil))
         return
       }
       registry.textureFrameAvailable(texId)
+      NSLog("[PixelSurface] present copied handle=%lld %dx%d", handle, width, height)
+      result(nil)
+
+    case "resizeTexture":
+      guard let args = call.arguments as? [String: Any],
+            let handle = Self.handleFromArgs(args["handle"]),
+            let width = args["width"] as? Int,
+            let height = args["height"] as? Int,
+            let tex = textures[handle],
+            let registry = textureRegistry
+      else {
+        result(FlutterError(code: "bad_args", message: "handle/width/height required", details: nil))
+        return
+      }
+      let newPb = dequeueFromPool(width: width, height: height)
+        ?? Self.createPixelBufferDirect(width: width, height: height)
+      guard let newPb else {
+        result(FlutterError(code: "create_failed", message: "Metal CVPixelBuffer alloc failed", details: nil))
+        return
+      }
+      tex.pixelBuffer = newPb
+      // Drop every buffer that the new pool is not actively using; the
+      // Flutter side does not keep a +1 on the old buffer once we
+      // overwrite the pointer, so a non-reusable flush is safe.
+      poolLock.lock()
+      pool.flushNonReusable()
+      poolLock.unlock()
+      let texId = textureIds[handle] ?? -1
+      registry.textureFrameAvailable(texId)
+      NSLog("[PixelSurface] resize handle=%lld %dx%d", handle, width, height)
       result(nil)
 
     case "disposeTexture":
@@ -250,10 +326,38 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       let _ = registry.textureFrameAvailable(texId)
       result(nil)
 
+    case "debugStats":
+      poolLock.lock()
+      let poolSnapshot = pool.snapshot()
+      poolLock.unlock()
+      result([
+        "handleCount": textures.count,
+        "poolCount": poolSnapshot["poolCount"] ?? 0,
+        "createCount": poolSnapshot["createCount"] ?? 0,
+        "lastFlushMs": poolSnapshot["lastFlushMs"] ?? 0,
+        "lastMemoryWarningMs": lastMemoryWarningMs,
+      ])
+
+    case "flushPools":
+      // Operator-driven flush (e.g. a "release memory" debug action).
+      poolLock.lock()
+      pool.flushAll()
+      let snapshot = pool.snapshot()
+      poolLock.unlock()
+      metalTextureCacheLock.lock()
+      if let cache = metalTextureCache {
+        CVMetalTextureCacheFlush(cache, 0)
+      }
+      metalTextureCacheLock.unlock()
+      NSLog("[PixelSurface] flushPools pools=%d", snapshot["poolCount"] as? Int ?? 0)
+      result(nil)
+
     default:
       result(FlutterMethodNotImplemented)
     }
   }
+
+  // ----- Private helpers ------------------------------------------------------
 
   private static func handleFromArgs(_ value: Any?) -> Int64? {
     if let handle = value as? Int64 { return handle }
@@ -269,6 +373,11 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     return nil
   }
 
+  private static func layoutFromArgs(_ value: Any?) -> UploadLayout {
+    guard let raw = value as? String else { return .default }
+    return UploadLayout(rawValue: raw) ?? .default
+  }
+
   /// IOSurface + Metal compatibility — required for Flutter macOS/iOS `Texture` (avoids CVReturn -6660).
   private static func metalPixelBufferAttributes() -> CFDictionary {
     [
@@ -277,16 +386,9 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     ] as CFDictionary
   }
 
-  private static func ensureMetalPixelBuffer(
-    tex: RustGpuPixelTexture,
-    width: Int,
-    height: Int
-  ) -> CVPixelBuffer? {
-    if let existing = tex.pixelBuffer,
-       CVPixelBufferGetWidth(existing) == width,
-       CVPixelBufferGetHeight(existing) == height {
-      return existing
-    }
+  /// Fallback path: build a CVPixelBuffer directly when the pool is not
+  /// warm yet (first frame) or pool creation failed.
+  private static func createPixelBufferDirect(width: Int, height: Int) -> CVPixelBuffer? {
     var pb: CVPixelBuffer?
     let err = CVPixelBufferCreate(
       kCFAllocatorDefault,
@@ -297,7 +399,15 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       &pb
     )
     guard err == kCVReturnSuccess, let pb else { return nil }
-    tex.pixelBuffer = pb
+    return pb
+  }
+
+  /// Try the bucketed pool first; fall back to direct allocation. Lock
+  /// only around the pool mutating calls (the pool dict is not thread-safe).
+  private func dequeueFromPool(width: Int, height: Int) -> CVPixelBuffer? {
+    poolLock.lock()
+    let pb = pool.dequeue(width: width, height: height, format: kCVPixelFormatType_32BGRA)
+    poolLock.unlock()
     return pb
   }
 
@@ -369,22 +479,6 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     return true
   }
 
-  /// Per-row R/B channel swap (BGRA ↔ RGBA) for a tightly packed row of
-  /// [count] pixels. Used when CVPixelBuffer rows are not contiguous.
-  @inline(__always)
-  private static func swapBgraRow(src: UnsafePointer<UInt8>, dst: UnsafeMutablePointer<UInt8>, count: Int) {
-    var si = 0
-    var di = 0
-    for _ in 0..<count {
-      dst[di + 0] = src[si + 2]
-      dst[di + 1] = src[si + 1]
-      dst[di + 2] = src[si + 0]
-      dst[di + 3] = src[si + 3]
-      si += 4
-      di += 4
-    }
-  }
-
   /// Lazily-create the plugin's `CVMetalTextureCache`. Thread-safe via lock.
   private func acquireMetalTextureCache() -> CVMetalTextureCache? {
     metalTextureCacheLock.lock()
@@ -397,5 +491,57 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
     guard err == kCVReturnSuccess, let cache else { return nil }
     metalTextureCache = cache
     return cache
+  }
+
+  // ----- Memory pressure handling --------------------------------------------
+
+  /// Hook the platform-specific "we're about to OOM" signal. We flush
+  /// the pool (drop non-reusable buffers) and the Metal cache (release
+  /// cached texture wrappers). The Flutter-side `TextureRegistry` keeps
+  /// its own strong references to the in-flight `RustGpuPixelTexture`
+  /// objects, so dropping here is safe.
+  private func installMemoryWarningObservers() {
+    let center = NotificationCenter.default
+    #if canImport(UIKit)
+      center.addObserver(
+        self,
+        selector: #selector(handleMemoryWarning),
+        name: UIApplication.didReceiveMemoryWarningNotification,
+        object: nil
+      )
+    #else
+      // macOS: thermal state change is the closest analogue. ProcessInfo
+      // posts `thermalStateDidChangeNotification` when the system moves
+      // into .serious / .critical. We also subscribe to
+      // `NSApplication.didResignActiveNotification` so we drop backlog
+      // when the user backgrounds the app.
+      center.addObserver(
+        self,
+        selector: #selector(handleMemoryWarning),
+        name: ProcessInfo.thermalStateDidChangeNotification,
+        object: nil
+      )
+      center.addObserver(
+        self,
+        selector: #selector(handleMemoryWarning),
+        name: NSApplication.didResignActiveNotification,
+        object: nil
+      )
+    #endif
+  }
+
+  @objc private func handleMemoryWarning() {
+    let now = CFAbsoluteTimeGetCurrent() * 1000
+    lastMemoryWarningMs = now
+    poolLock.lock()
+    pool.flushAll()
+    let poolCount = pool.snapshot()["poolCount"] as? Int ?? 0
+    poolLock.unlock()
+    metalTextureCacheLock.lock()
+    if let cache = metalTextureCache {
+      CVMetalTextureCacheFlush(cache, 0)
+    }
+    metalTextureCacheLock.unlock()
+    NSLog("[PixelSurface] memory warning -> flush pools=%d", poolCount)
   }
 }

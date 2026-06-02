@@ -1,2 +1,5 @@
-# Copied by ios podspec prepare_command (pod install).
+# Copied by ios + macos podspec prepare_command (pod install).
 /ios/Classes/Darwin/
+/ios/Tests/
+/macos/Classes/Darwin/
+/macos/Tests/
