@@ -23,6 +23,39 @@ String prefetchRemoteInput({required String url, required String destDir}) =>
       destDir: destDir,
     );
 
+/// PR #4: download a byte range of a remote URL to a local file.
+/// Currently performs a full stream copy (Range-aware follow-up is
+/// tracked separately). See [crate::ffmpeg::prefetch::prefetch_remote_input_range].
+String prefetchRemoteInputRange({
+  required String url,
+  required BigInt startBytes,
+  required BigInt endBytes,
+  required String destDir,
+}) => RustLib.instance.api.crateApiPrefetchRemoteInputRange(
+  url: url,
+  startBytes: startBytes,
+  endBytes: endBytes,
+  destDir: destDir,
+);
+
+/// PR #4: stream-copy a remote URL to a local file asynchronously,
+/// reporting progress events through [progress]. Returns a `job_id`
+/// that can be polled with [wait_for_job] or cancelled via
+/// [cancel_job]. Reuses the same [JobRegistry] as compression so the
+/// kit's existing job-orchestration code can manage the lifecycle.
+///
+/// The non-async [prefetch_remote_input] is preserved for callers
+/// that want a single blocking call. New code should prefer this
+/// async variant for any non-trivial file (the existing one blocks
+/// the Dart isolate for the full download).
+Stream<ProgressEvent> startPrefetchRemoteInput({
+  required String url,
+  required String destDir,
+}) => RustLib.instance.api.crateApiStartPrefetchRemoteInput(
+  url: url,
+  destDir: destDir,
+);
+
 /// Start compression in the background; returns job id immediately.
 Stream<ProgressEvent> startCompress({required CompressOptions options}) =>
     RustLib.instance.api.crateApiStartCompress(options: options);

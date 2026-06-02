@@ -5,7 +5,7 @@ description: >
   Hardware-accelerated video transcoding, frame-accurate previews, audio mixing, and fast thumbnail generation powered by FFmpeg.
   Low-level engine. For a higher-level SDK with job queues, presets, and cached thumbnails,
   use `video_forge_kit` instead.
-version: 2.2.0
+version: 2.3.0
 homepage: https://github.com/iamudesharma/mediaforge
 repository: https://github.com/iamudesharma/mediaforge
 issue_tracker: https://github.com/iamudesharma/mediaforge/issues

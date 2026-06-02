@@ -30,6 +30,65 @@
 - 4 new `DecoderCacheStats` Dart tests (hit ratio math, toString,
   wrapper shape).
 
+## 2.3.0
+
+### Output container profiles
+- **New `OutputProfile` enum** replaces the legacy
+  `CompressOptions.fast_start` + `fragmented_mp4` boolean pair. Three
+  variants:
+  - `ProgressiveMp4 { fastStart: bool }` (current default behavior).
+  - `FragmentedMp4 { fragmentDurationMs: u32 }` (CMAF-style fMP4).
+  - `Hls { segmentDurationMs, masterPlaylist, hlsVersion }` (new).
+- The legacy booleans are kept for one release (deprecated in
+  comments) so existing 2.x callers keep compiling. `effective_output_profile(opts)`
+  returns the right profile in priority order: `outputProfile` field
+  → legacy booleans → default.
+- New `pipeline::streaming::movflags_for_profile` and `hls_options`
+  helpers translate the enum into FFmpeg `movflags` / `hls_*`
+  options.
+- New `requires_gop_alignment` + `recommended_keyint_ms` helpers
+  tell the encoder how to set `gop` / `keyint_max` for streaming
+  outputs.
+
+### Network streaming pipeline
+- Improved HTTP options in `remote_input_dictionary`:
+  - `seekable=1` (so byte-range seeks work on remote inputs).
+  - `tcp_nodelay=1` (disables Nagle, ~40 ms RTT savings on small packets).
+  - `send_buffer_size=65536`, `recv_buffer_size=131072` (wider kernel
+    socket buffers).
+  - `icy=0` (skip ICY metadata polling on non-radio streams).
+  - `listen_timeout=10_000_000` (fail fast on a stalled server).
+- `remote_dictionary_public()` exposes the option set for tests and
+  for the `prefetch_remote_input_range` follow-up.
+
+### Async prefetch
+- `start_prefetch_remote_input(url, destDir, progress)` returns a
+  `job_id` that can be polled with `waitForJob` or cancelled with
+  `cancelJob`. Streams `ProgressEvent` for parity with `startCompress`.
+- The existing `prefetch_remote_input` (sync, blocks the Dart
+  isolate) is preserved.
+
+### Partial prefetch helper
+- New `prefetch_remote_input_range(url, start, end, destDir)` —
+  currently performs a full stream copy and records the requested
+  `[start, end]` bounds in the destination filename. A real byte-range
+  HTTP fetch + moov-aware head/tail concatenation are tracked
+  separately; this PR ships the validated API + tests so callers
+  can adopt the new name without a follow-up breaking change.
+
+### Tests
+- 7 new `pipeline::streaming::tests::*` unit tests
+  (OutputProfile::movflags for each variant, hls_options, GOP
+  alignment, keyint recommendations).
+- 4 new `ffmpeg::prefetch::tests::*` (empty URL rejection, range
+  rejects local path, range rejects empty URL, range rejects
+  end-before-start).
+- 5 new `output_profile_test.dart` Dart cases (3 variant reachable
+  + 2 CompressOptions round-trip).
+
+### Build / version
+- Bump 2.2.0 -> 2.3.0.
+
 ## 2.2.0
 
 ### Thumbnail reliability on non-keyframes

@@ -11,6 +11,59 @@ pub enum VideoCodec {
     Hevc,
 }
 
+/// PR #4: output container profile. Replaces the legacy
+/// [CompressOptions::fast_start] + [CompressOptions::fragmented_mp4]
+/// booleans with an explicit enum so callers can pick HLS / fMP4
+/// without inventing new flags.
+#[frb]
+#[derive(Clone, Debug, PartialEq)]
+pub enum OutputProfile {
+    /// Single progressive MP4. `fast_start: true` (default) moves the
+    /// moov atom to the front of the file so the asset can play before
+    /// the download completes. Equivalent to the old
+    /// `fast_start: true, fragmented_mp4: false`.
+    ProgressiveMp4 {
+        /// Move the moov atom to the front of the file so playback
+        /// can start before the download completes. Default: `true`.
+        fast_start: bool,
+    },
+    /// Fragmented MP4 (CMAF-style). Each fragment is independently
+    /// decodable, so the asset is seekable as soon as the first
+    /// fragment is downloaded. Pair with HLS / DASH for adaptive
+    /// streaming or with social-media uploads that expect fMP4 input.
+    /// `fragment_duration_ms` controls the target fragment length
+    /// (FFmpeg `movflags=+frag_keyframe+frag_duration_ms=N`).
+    FragmentedMp4 {
+        /// Target fragment length in milliseconds. Default: `2000`
+        /// (matches the HLS default segment length).
+        fragment_duration_ms: u32,
+    },
+    /// HTTP Live Streaming (HLS, m3u8 + .ts segments). The output
+    /// directory must already exist; FFmpeg writes
+    /// `playlist.m3u8` + `segment_NNN.ts` alongside the output path
+    /// (the output path is used as a prefix — e.g. `/out/playlist.m3u8`
+    /// produces segments at `/out/playlistN.ts`).
+    Hls {
+        /// Target segment length in milliseconds. Default: `6000`
+        /// (Apple's recommended HLS segment length).
+        segment_duration_ms: u32,
+        /// When `true`, FFmpeg also writes a `master.m3u8` with
+        /// `#EXT-X-STREAM-INF` tags for adaptive bitrate ladders.
+        /// Currently a single rendition is emitted; the master
+        /// playlist is correct in shape but lists only one variant.
+        master_playlist: bool,
+        /// HLS protocol version. Default: `6` (HLSv6, supports
+        /// fMP4 / CMAF segments). Use `3` for legacy clients.
+        hls_version: u8,
+    },
+}
+
+impl Default for OutputProfile {
+    fn default() -> Self {
+        OutputProfile::ProgressiveMp4 { fast_start: true }
+    }
+}
+
 #[frb]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VideoQuality {
@@ -92,8 +145,17 @@ pub struct CompressOptions {
     pub max_height: Option<u32>,
     pub max_fps: Option<f32>,
     pub include_audio: bool,
+    /// PR #4 (deprecated): use [output_profile] instead. Retained for
+    /// one release so existing 2.x callers keep compiling.
+    /// `true` + `fragmented_mp4 = false` -> `ProgressiveMp4 { fast_start: true }`.
+    /// `fragmented_mp4 = true` (regardless of fast_start) -> `FragmentedMp4 { fragment_duration_ms: 2000 }`.
     pub fast_start: bool,
+    /// PR #4 (deprecated): see [output_profile].
     pub fragmented_mp4: bool,
+    /// PR #4: output container profile. When `None`, the deprecated
+    /// `fast_start` + `fragmented_mp4` booleans are used. When `Some`,
+    /// `output_profile` wins. New code should always set this.
+    pub output_profile: Option<OutputProfile>,
     pub prefer_hardware_encoder: bool,
     /// Inclusive clip start in milliseconds (0 = beginning).
     pub start_ms: Option<u64>,
@@ -283,12 +345,31 @@ impl Default for CompressOptions {
             include_audio: true,
             fast_start: true,
             fragmented_mp4: false,
+            output_profile: None,
             prefer_hardware_encoder: true,
             start_ms: None,
             end_ms: None,
             burn_in_overlays: Vec::new(),
             audio_tracks: Vec::new(),
             mute_original_audio: false,
+        }
+    }
+}
+
+/// Resolve the effective output profile. The new `output_profile` field
+/// wins when set; otherwise we honor the legacy `fast_start` /
+/// `fragmented_mp4` booleans for callers that have not yet migrated.
+pub fn effective_output_profile(opts: &CompressOptions) -> OutputProfile {
+    if let Some(profile) = opts.output_profile.clone() {
+        return profile;
+    }
+    if opts.fragmented_mp4 {
+        OutputProfile::FragmentedMp4 {
+            fragment_duration_ms: 2000,
+        }
+    } else {
+        OutputProfile::ProgressiveMp4 {
+            fast_start: opts.fast_start,
         }
     }
 }

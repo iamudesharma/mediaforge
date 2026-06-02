@@ -100,6 +100,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_32(dynamic raw);
 
   @protected
+  OutputProfile dco_decode_box_autoadd_output_profile(dynamic raw);
+
+  @protected
   PreviewFramePixelBuffer dco_decode_box_autoadd_preview_frame_pixel_buffer(
     dynamic raw,
   );
@@ -187,6 +190,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double? dco_decode_opt_box_autoadd_f_32(dynamic raw);
 
   @protected
+  OutputProfile? dco_decode_opt_box_autoadd_output_profile(dynamic raw);
+
+  @protected
   PreviewFramePixelBuffer?
   dco_decode_opt_box_autoadd_preview_frame_pixel_buffer(dynamic raw);
 
@@ -204,6 +210,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String>? dco_decode_opt_list_String(dynamic raw);
+
+  @protected
+  OutputProfile dco_decode_output_profile(dynamic raw);
 
   @protected
   PlaybackFrame dco_decode_playback_frame(dynamic raw);
@@ -344,6 +353,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_box_autoadd_f_32(SseDeserializer deserializer);
 
   @protected
+  OutputProfile sse_decode_box_autoadd_output_profile(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PreviewFramePixelBuffer sse_decode_box_autoadd_preview_frame_pixel_buffer(
     SseDeserializer deserializer,
   );
@@ -445,6 +459,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double? sse_decode_opt_box_autoadd_f_32(SseDeserializer deserializer);
 
   @protected
+  OutputProfile? sse_decode_opt_box_autoadd_output_profile(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PreviewFramePixelBuffer?
   sse_decode_opt_box_autoadd_preview_frame_pixel_buffer(
     SseDeserializer deserializer,
@@ -466,6 +485,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
+
+  @protected
+  OutputProfile sse_decode_output_profile(SseDeserializer deserializer);
 
   @protected
   PlaybackFrame sse_decode_playback_frame(SseDeserializer deserializer);
@@ -630,6 +652,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_output_profile(
+    OutputProfile self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_preview_frame_pixel_buffer(
     PreviewFramePixelBuffer self,
     SseSerializer serializer,
@@ -753,6 +781,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_box_autoadd_f_32(double? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_output_profile(
+    OutputProfile? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_preview_frame_pixel_buffer(
     PreviewFramePixelBuffer? self,
     SseSerializer serializer,
@@ -775,6 +809,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_output_profile(OutputProfile self, SseSerializer serializer);
 
   @protected
   void sse_encode_playback_frame(PlaybackFrame self, SseSerializer serializer);

@@ -33,6 +33,79 @@ pub fn prefetch_remote_input(url: String, dest_dir: String) -> Result<String> {
     crate::ffmpeg::prefetch_remote_input(&url, Path::new(dest_dir.trim()))
 }
 
+/// PR #4: download a byte range of a remote URL to a local file.
+/// Currently performs a full stream copy (Range-aware follow-up is
+/// tracked separately). See [crate::ffmpeg::prefetch::prefetch_remote_input_range].
+#[frb(sync)]
+pub fn prefetch_remote_input_range(
+    url: String,
+    start_bytes: u64,
+    end_bytes: u64,
+    dest_dir: String,
+) -> Result<String> {
+    use std::path::Path;
+    crate::ffmpeg::prefetch_remote_input_range(
+        &url,
+        start_bytes,
+        end_bytes,
+        Path::new(dest_dir.trim()),
+    )
+}
+
+/// PR #4: stream-copy a remote URL to a local file asynchronously,
+/// reporting progress events through [progress]. Returns a `job_id`
+/// that can be polled with [wait_for_job] or cancelled via
+/// [cancel_job]. Reuses the same [JobRegistry] as compression so the
+/// kit's existing job-orchestration code can manage the lifecycle.
+///
+/// The non-async [prefetch_remote_input] is preserved for callers
+/// that want a single blocking call. New code should prefer this
+/// async variant for any non-trivial file (the existing one blocks
+/// the Dart isolate for the full download).
+#[frb]
+pub async fn start_prefetch_remote_input(
+    url: String,
+    dest_dir: String,
+    progress: StreamSink<ProgressEvent>,
+) -> Result<String> {
+    let reg = registry();
+    let _permit = reg.acquire_permit().await?;
+    let (job_id, token) = reg.register();
+
+    let jid = job_id.clone();
+    let mut reporter = ProgressReporter::new(job_id.clone(), progress);
+    reporter.emit(ProcessingPhase::Probing, 0.0, 0, 0.0, 0, true);
+
+    let handle = tokio::task::spawn_blocking(move || {
+        use std::path::Path;
+        let result = crate::ffmpeg::prefetch_remote_input(&url, Path::new(dest_dir.trim()));
+        match &result {
+            Ok(path) => {
+                reporter.emit(ProcessingPhase::Done, 1.0, 0, 0.0, 0, true);
+                reg.complete(&jid, Ok(JobResult::Empty));
+                log::info!("[Prefetch] async done job={} path={}", jid, path);
+            }
+            Err(VideoForgeError::Cancelled) => {
+                reporter.cancelled();
+                reg.complete(&jid, Err(VideoForgeError::Cancelled));
+            }
+            Err(e) => {
+                reporter.failed();
+                reg.complete(&jid, Err(e.clone()));
+            }
+        }
+        drop(_permit);
+        result
+    });
+
+    // Detach; result retrieved via wait_for_job.
+    tokio::spawn(async move {
+        let _ = handle.await;
+    });
+
+    Ok(job_id)
+}
+
 /// Start compression in the background; returns job id immediately.
 #[frb]
 pub async fn start_compress(

@@ -270,6 +270,386 @@ String toString() {
 
 
 /// @nodoc
+mixin _$OutputProfile {
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OutputProfile);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'OutputProfile()';
+}
+
+
+}
+
+/// @nodoc
+class $OutputProfileCopyWith<$Res>  {
+$OutputProfileCopyWith(OutputProfile _, $Res Function(OutputProfile) __);
+}
+
+
+/// Adds pattern-matching-related methods to [OutputProfile].
+extension OutputProfilePatterns on OutputProfile {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( OutputProfile_ProgressiveMp4 value)?  progressiveMp4,TResult Function( OutputProfile_FragmentedMp4 value)?  fragmentedMp4,TResult Function( OutputProfile_Hls value)?  hls,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case OutputProfile_ProgressiveMp4() when progressiveMp4 != null:
+return progressiveMp4(_that);case OutputProfile_FragmentedMp4() when fragmentedMp4 != null:
+return fragmentedMp4(_that);case OutputProfile_Hls() when hls != null:
+return hls(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( OutputProfile_ProgressiveMp4 value)  progressiveMp4,required TResult Function( OutputProfile_FragmentedMp4 value)  fragmentedMp4,required TResult Function( OutputProfile_Hls value)  hls,}){
+final _that = this;
+switch (_that) {
+case OutputProfile_ProgressiveMp4():
+return progressiveMp4(_that);case OutputProfile_FragmentedMp4():
+return fragmentedMp4(_that);case OutputProfile_Hls():
+return hls(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( OutputProfile_ProgressiveMp4 value)?  progressiveMp4,TResult? Function( OutputProfile_FragmentedMp4 value)?  fragmentedMp4,TResult? Function( OutputProfile_Hls value)?  hls,}){
+final _that = this;
+switch (_that) {
+case OutputProfile_ProgressiveMp4() when progressiveMp4 != null:
+return progressiveMp4(_that);case OutputProfile_FragmentedMp4() when fragmentedMp4 != null:
+return fragmentedMp4(_that);case OutputProfile_Hls() when hls != null:
+return hls(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( bool fastStart)?  progressiveMp4,TResult Function( int fragmentDurationMs)?  fragmentedMp4,TResult Function( int segmentDurationMs,  bool masterPlaylist,  int hlsVersion)?  hls,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case OutputProfile_ProgressiveMp4() when progressiveMp4 != null:
+return progressiveMp4(_that.fastStart);case OutputProfile_FragmentedMp4() when fragmentedMp4 != null:
+return fragmentedMp4(_that.fragmentDurationMs);case OutputProfile_Hls() when hls != null:
+return hls(_that.segmentDurationMs,_that.masterPlaylist,_that.hlsVersion);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( bool fastStart)  progressiveMp4,required TResult Function( int fragmentDurationMs)  fragmentedMp4,required TResult Function( int segmentDurationMs,  bool masterPlaylist,  int hlsVersion)  hls,}) {final _that = this;
+switch (_that) {
+case OutputProfile_ProgressiveMp4():
+return progressiveMp4(_that.fastStart);case OutputProfile_FragmentedMp4():
+return fragmentedMp4(_that.fragmentDurationMs);case OutputProfile_Hls():
+return hls(_that.segmentDurationMs,_that.masterPlaylist,_that.hlsVersion);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( bool fastStart)?  progressiveMp4,TResult? Function( int fragmentDurationMs)?  fragmentedMp4,TResult? Function( int segmentDurationMs,  bool masterPlaylist,  int hlsVersion)?  hls,}) {final _that = this;
+switch (_that) {
+case OutputProfile_ProgressiveMp4() when progressiveMp4 != null:
+return progressiveMp4(_that.fastStart);case OutputProfile_FragmentedMp4() when fragmentedMp4 != null:
+return fragmentedMp4(_that.fragmentDurationMs);case OutputProfile_Hls() when hls != null:
+return hls(_that.segmentDurationMs,_that.masterPlaylist,_that.hlsVersion);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class OutputProfile_ProgressiveMp4 extends OutputProfile {
+  const OutputProfile_ProgressiveMp4({required this.fastStart}): super._();
+  
+
+/// Move the moov atom to the front of the file so playback
+/// can start before the download completes. Default: `true`.
+ final  bool fastStart;
+
+/// Create a copy of OutputProfile
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OutputProfile_ProgressiveMp4CopyWith<OutputProfile_ProgressiveMp4> get copyWith => _$OutputProfile_ProgressiveMp4CopyWithImpl<OutputProfile_ProgressiveMp4>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OutputProfile_ProgressiveMp4&&(identical(other.fastStart, fastStart) || other.fastStart == fastStart));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,fastStart);
+
+@override
+String toString() {
+  return 'OutputProfile.progressiveMp4(fastStart: $fastStart)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $OutputProfile_ProgressiveMp4CopyWith<$Res> implements $OutputProfileCopyWith<$Res> {
+  factory $OutputProfile_ProgressiveMp4CopyWith(OutputProfile_ProgressiveMp4 value, $Res Function(OutputProfile_ProgressiveMp4) _then) = _$OutputProfile_ProgressiveMp4CopyWithImpl;
+@useResult
+$Res call({
+ bool fastStart
+});
+
+
+
+
+}
+/// @nodoc
+class _$OutputProfile_ProgressiveMp4CopyWithImpl<$Res>
+    implements $OutputProfile_ProgressiveMp4CopyWith<$Res> {
+  _$OutputProfile_ProgressiveMp4CopyWithImpl(this._self, this._then);
+
+  final OutputProfile_ProgressiveMp4 _self;
+  final $Res Function(OutputProfile_ProgressiveMp4) _then;
+
+/// Create a copy of OutputProfile
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? fastStart = null,}) {
+  return _then(OutputProfile_ProgressiveMp4(
+fastStart: null == fastStart ? _self.fastStart : fastStart // ignore: cast_nullable_to_non_nullable
+as bool,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class OutputProfile_FragmentedMp4 extends OutputProfile {
+  const OutputProfile_FragmentedMp4({required this.fragmentDurationMs}): super._();
+  
+
+/// Target fragment length in milliseconds. Default: `2000`
+/// (matches the HLS default segment length).
+ final  int fragmentDurationMs;
+
+/// Create a copy of OutputProfile
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OutputProfile_FragmentedMp4CopyWith<OutputProfile_FragmentedMp4> get copyWith => _$OutputProfile_FragmentedMp4CopyWithImpl<OutputProfile_FragmentedMp4>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OutputProfile_FragmentedMp4&&(identical(other.fragmentDurationMs, fragmentDurationMs) || other.fragmentDurationMs == fragmentDurationMs));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,fragmentDurationMs);
+
+@override
+String toString() {
+  return 'OutputProfile.fragmentedMp4(fragmentDurationMs: $fragmentDurationMs)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $OutputProfile_FragmentedMp4CopyWith<$Res> implements $OutputProfileCopyWith<$Res> {
+  factory $OutputProfile_FragmentedMp4CopyWith(OutputProfile_FragmentedMp4 value, $Res Function(OutputProfile_FragmentedMp4) _then) = _$OutputProfile_FragmentedMp4CopyWithImpl;
+@useResult
+$Res call({
+ int fragmentDurationMs
+});
+
+
+
+
+}
+/// @nodoc
+class _$OutputProfile_FragmentedMp4CopyWithImpl<$Res>
+    implements $OutputProfile_FragmentedMp4CopyWith<$Res> {
+  _$OutputProfile_FragmentedMp4CopyWithImpl(this._self, this._then);
+
+  final OutputProfile_FragmentedMp4 _self;
+  final $Res Function(OutputProfile_FragmentedMp4) _then;
+
+/// Create a copy of OutputProfile
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? fragmentDurationMs = null,}) {
+  return _then(OutputProfile_FragmentedMp4(
+fragmentDurationMs: null == fragmentDurationMs ? _self.fragmentDurationMs : fragmentDurationMs // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class OutputProfile_Hls extends OutputProfile {
+  const OutputProfile_Hls({required this.segmentDurationMs, required this.masterPlaylist, required this.hlsVersion}): super._();
+  
+
+/// Target segment length in milliseconds. Default: `6000`
+/// (Apple's recommended HLS segment length).
+ final  int segmentDurationMs;
+/// When `true`, FFmpeg also writes a `master.m3u8` with
+/// `#EXT-X-STREAM-INF` tags for adaptive bitrate ladders.
+/// Currently a single rendition is emitted; the master
+/// playlist is correct in shape but lists only one variant.
+ final  bool masterPlaylist;
+/// HLS protocol version. Default: `6` (HLSv6, supports
+/// fMP4 / CMAF segments). Use `3` for legacy clients.
+ final  int hlsVersion;
+
+/// Create a copy of OutputProfile
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OutputProfile_HlsCopyWith<OutputProfile_Hls> get copyWith => _$OutputProfile_HlsCopyWithImpl<OutputProfile_Hls>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OutputProfile_Hls&&(identical(other.segmentDurationMs, segmentDurationMs) || other.segmentDurationMs == segmentDurationMs)&&(identical(other.masterPlaylist, masterPlaylist) || other.masterPlaylist == masterPlaylist)&&(identical(other.hlsVersion, hlsVersion) || other.hlsVersion == hlsVersion));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,segmentDurationMs,masterPlaylist,hlsVersion);
+
+@override
+String toString() {
+  return 'OutputProfile.hls(segmentDurationMs: $segmentDurationMs, masterPlaylist: $masterPlaylist, hlsVersion: $hlsVersion)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $OutputProfile_HlsCopyWith<$Res> implements $OutputProfileCopyWith<$Res> {
+  factory $OutputProfile_HlsCopyWith(OutputProfile_Hls value, $Res Function(OutputProfile_Hls) _then) = _$OutputProfile_HlsCopyWithImpl;
+@useResult
+$Res call({
+ int segmentDurationMs, bool masterPlaylist, int hlsVersion
+});
+
+
+
+
+}
+/// @nodoc
+class _$OutputProfile_HlsCopyWithImpl<$Res>
+    implements $OutputProfile_HlsCopyWith<$Res> {
+  _$OutputProfile_HlsCopyWithImpl(this._self, this._then);
+
+  final OutputProfile_Hls _self;
+  final $Res Function(OutputProfile_Hls) _then;
+
+/// Create a copy of OutputProfile
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? segmentDurationMs = null,Object? masterPlaylist = null,Object? hlsVersion = null,}) {
+  return _then(OutputProfile_Hls(
+segmentDurationMs: null == segmentDurationMs ? _self.segmentDurationMs : segmentDurationMs // ignore: cast_nullable_to_non_nullable
+as int,masterPlaylist: null == masterPlaylist ? _self.masterPlaylist : masterPlaylist // ignore: cast_nullable_to_non_nullable
+as bool,hlsVersion: null == hlsVersion ? _self.hlsVersion : hlsVersion // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$PlaybackFrame {
 
  Object get field0;

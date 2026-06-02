@@ -11,7 +11,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'video_forge'
-  s.version          = '2.2.0'
+  s.version          = '2.3.0'
   s.summary          = 'Rust-powered video processing for Flutter'
   s.description      = <<-DESC
 High-performance video compression, transcoding, and thumbnails powered by Rust + FFmpeg.

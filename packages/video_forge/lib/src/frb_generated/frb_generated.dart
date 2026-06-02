@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => 1480333546;
+  int get rustContentHash => -373011899;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -174,10 +174,22 @@ abstract class RustLibApi extends BaseApi {
     required String destDir,
   });
 
+  String crateApiPrefetchRemoteInputRange({
+    required String url,
+    required BigInt startBytes,
+    required BigInt endBytes,
+    required String destDir,
+  });
+
   void crateApiReleasePreviewPixelBuffer({required BigInt pixelBufferPtr});
 
   Stream<ProgressEvent> crateApiStartCompress({
     required CompressOptions options,
+  });
+
+  Stream<ProgressEvent> crateApiStartPrefetchRemoteInput({
+    required String url,
+    required String destDir,
   });
 
   Future<String> crateApiThumbnail({required ThumbnailOptions options});
@@ -1002,13 +1014,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  String crateApiPrefetchRemoteInputRange({
+    required String url,
+    required BigInt startBytes,
+    required BigInt endBytes,
+    required String destDir,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(url, serializer);
+          sse_encode_u_64(startBytes, serializer);
+          sse_encode_u_64(endBytes, serializer);
+          sse_encode_String(destDir, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiPrefetchRemoteInputRangeConstMeta,
+        argValues: [url, startBytes, endBytes, destDir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPrefetchRemoteInputRangeConstMeta =>
+      const TaskConstMeta(
+        debugName: "prefetch_remote_input_range",
+        argNames: ["url", "startBytes", "endBytes", "destDir"],
+      );
+
+  @override
   void crateApiReleasePreviewPixelBuffer({required BigInt pixelBufferPtr}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_64(pixelBufferPtr, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1042,7 +1088,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 27,
+              funcId: 28,
               port: port_,
             );
           },
@@ -1065,6 +1111,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Stream<ProgressEvent> crateApiStartPrefetchRemoteInput({
+    required String url,
+    required String destDir,
+  }) {
+    final progress = RustStreamSink<ProgressEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_String(url, serializer);
+            sse_encode_String(destDir, serializer);
+            sse_encode_StreamSink_progress_event_Sse(progress, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 29,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_String,
+            decodeErrorData: sse_decode_AnyhowException,
+          ),
+          constMeta: kCrateApiStartPrefetchRemoteInputConstMeta,
+          argValues: [url, destDir, progress],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return progress.stream;
+  }
+
+  TaskConstMeta get kCrateApiStartPrefetchRemoteInputConstMeta =>
+      const TaskConstMeta(
+        debugName: "start_prefetch_remote_input",
+        argNames: ["url", "destDir", "progress"],
+      );
+
+  @override
   Future<String> crateApiThumbnail({required ThumbnailOptions options}) {
     return handler.executeNormal(
       NormalTask(
@@ -1074,7 +1160,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1104,7 +1190,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1134,7 +1220,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 32,
             port: port_,
           );
         },
@@ -1167,7 +1253,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1198,7 +1284,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1397,6 +1483,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OutputProfile dco_decode_box_autoadd_output_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_output_profile(raw);
+  }
+
+  @protected
   PreviewFramePixelBuffer dco_decode_box_autoadd_preview_frame_pixel_buffer(
     dynamic raw,
   ) {
@@ -1469,8 +1561,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CompressOptions dco_decode_compress_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 18)
-      throw Exception('unexpected arr length: expect 18 but see ${arr.length}');
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
     return CompressOptions(
       inputPath: dco_decode_String(arr[0]),
       outputPath: dco_decode_opt_String(arr[1]),
@@ -1484,12 +1576,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       includeAudio: dco_decode_bool(arr[9]),
       fastStart: dco_decode_bool(arr[10]),
       fragmentedMp4: dco_decode_bool(arr[11]),
-      preferHardwareEncoder: dco_decode_bool(arr[12]),
-      startMs: dco_decode_opt_box_autoadd_u_64(arr[13]),
-      endMs: dco_decode_opt_box_autoadd_u_64(arr[14]),
-      burnInOverlays: dco_decode_list_burn_in_overlay(arr[15]),
-      audioTracks: dco_decode_list_audio_track_input(arr[16]),
-      muteOriginalAudio: dco_decode_bool(arr[17]),
+      outputProfile: dco_decode_opt_box_autoadd_output_profile(arr[12]),
+      preferHardwareEncoder: dco_decode_bool(arr[13]),
+      startMs: dco_decode_opt_box_autoadd_u_64(arr[14]),
+      endMs: dco_decode_opt_box_autoadd_u_64(arr[15]),
+      burnInOverlays: dco_decode_list_burn_in_overlay(arr[16]),
+      audioTracks: dco_decode_list_audio_track_input(arr[17]),
+      muteOriginalAudio: dco_decode_bool(arr[18]),
     );
   }
 
@@ -1643,6 +1736,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OutputProfile? dco_decode_opt_box_autoadd_output_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_output_profile(raw);
+  }
+
+  @protected
   PreviewFramePixelBuffer?
   dco_decode_opt_box_autoadd_preview_frame_pixel_buffer(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -1679,6 +1778,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<String>? dco_decode_opt_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_String(raw);
+  }
+
+  @protected
+  OutputProfile dco_decode_output_profile(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return OutputProfile_ProgressiveMp4(fastStart: dco_decode_bool(raw[1]));
+      case 1:
+        return OutputProfile_FragmentedMp4(
+          fragmentDurationMs: dco_decode_u_32(raw[1]),
+        );
+      case 2:
+        return OutputProfile_Hls(
+          segmentDurationMs: dco_decode_u_32(raw[1]),
+          masterPlaylist: dco_decode_bool(raw[2]),
+          hlsVersion: dco_decode_u_8(raw[3]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
   }
 
   @protected
@@ -2077,6 +2197,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OutputProfile sse_decode_box_autoadd_output_profile(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_output_profile(deserializer));
+  }
+
+  @protected
   PreviewFramePixelBuffer sse_decode_box_autoadd_preview_frame_pixel_buffer(
     SseDeserializer deserializer,
   ) {
@@ -2170,6 +2298,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_includeAudio = sse_decode_bool(deserializer);
     var var_fastStart = sse_decode_bool(deserializer);
     var var_fragmentedMp4 = sse_decode_bool(deserializer);
+    var var_outputProfile = sse_decode_opt_box_autoadd_output_profile(
+      deserializer,
+    );
     var var_preferHardwareEncoder = sse_decode_bool(deserializer);
     var var_startMs = sse_decode_opt_box_autoadd_u_64(deserializer);
     var var_endMs = sse_decode_opt_box_autoadd_u_64(deserializer);
@@ -2189,6 +2320,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       includeAudio: var_includeAudio,
       fastStart: var_fastStart,
       fragmentedMp4: var_fragmentedMp4,
+      outputProfile: var_outputProfile,
       preferHardwareEncoder: var_preferHardwareEncoder,
       startMs: var_startMs,
       endMs: var_endMs,
@@ -2411,6 +2543,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OutputProfile? sse_decode_opt_box_autoadd_output_profile(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_output_profile(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PreviewFramePixelBuffer?
   sse_decode_opt_box_autoadd_preview_frame_pixel_buffer(
     SseDeserializer deserializer,
@@ -2478,6 +2623,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       return (sse_decode_list_String(deserializer));
     } else {
       return null;
+    }
+  }
+
+  @protected
+  OutputProfile sse_decode_output_profile(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_fastStart = sse_decode_bool(deserializer);
+        return OutputProfile_ProgressiveMp4(fastStart: var_fastStart);
+      case 1:
+        var var_fragmentDurationMs = sse_decode_u_32(deserializer);
+        return OutputProfile_FragmentedMp4(
+          fragmentDurationMs: var_fragmentDurationMs,
+        );
+      case 2:
+        var var_segmentDurationMs = sse_decode_u_32(deserializer);
+        var var_masterPlaylist = sse_decode_bool(deserializer);
+        var var_hlsVersion = sse_decode_u_8(deserializer);
+        return OutputProfile_Hls(
+          segmentDurationMs: var_segmentDurationMs,
+          masterPlaylist: var_masterPlaylist,
+          hlsVersion: var_hlsVersion,
+        );
+      default:
+        throw UnimplementedError('');
     }
   }
 
@@ -2902,6 +3075,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_output_profile(
+    OutputProfile self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_output_profile(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_preview_frame_pixel_buffer(
     PreviewFramePixelBuffer self,
     SseSerializer serializer,
@@ -2997,6 +3179,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.includeAudio, serializer);
     sse_encode_bool(self.fastStart, serializer);
     sse_encode_bool(self.fragmentedMp4, serializer);
+    sse_encode_opt_box_autoadd_output_profile(self.outputProfile, serializer);
     sse_encode_bool(self.preferHardwareEncoder, serializer);
     sse_encode_opt_box_autoadd_u_64(self.startMs, serializer);
     sse_encode_opt_box_autoadd_u_64(self.endMs, serializer);
@@ -3188,6 +3371,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_output_profile(
+    OutputProfile? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_output_profile(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_preview_frame_pixel_buffer(
     PreviewFramePixelBuffer? self,
     SseSerializer serializer,
@@ -3253,6 +3449,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_list_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_output_profile(OutputProfile self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case OutputProfile_ProgressiveMp4(fastStart: final fastStart):
+        sse_encode_i_32(0, serializer);
+        sse_encode_bool(fastStart, serializer);
+      case OutputProfile_FragmentedMp4(
+        fragmentDurationMs: final fragmentDurationMs,
+      ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_u_32(fragmentDurationMs, serializer);
+      case OutputProfile_Hls(
+        segmentDurationMs: final segmentDurationMs,
+        masterPlaylist: final masterPlaylist,
+        hlsVersion: final hlsVersion,
+      ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_u_32(segmentDurationMs, serializer);
+        sse_encode_bool(masterPlaylist, serializer);
+        sse_encode_u_8(hlsVersion, serializer);
     }
   }
 

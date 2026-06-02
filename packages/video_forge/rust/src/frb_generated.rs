@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1480333546;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -373011899;
 
 // Section: executor
 
@@ -1048,6 +1048,46 @@ fn wire__crate__api__prefetch_remote_input_impl(
         },
     )
 }
+fn wire__crate__api__prefetch_remote_input_range_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "prefetch_remote_input_range",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_url = <String>::sse_decode(&mut deserializer);
+            let api_start_bytes = <u64>::sse_decode(&mut deserializer);
+            let api_end_bytes = <u64>::sse_decode(&mut deserializer);
+            let api_dest_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                (move || {
+                    let output_ok = crate::api::prefetch_remote_input_range(
+                        api_url,
+                        api_start_bytes,
+                        api_end_bytes,
+                        api_dest_dir,
+                    )?;
+                    Ok(output_ok)
+                })(),
+            )
+        },
+    )
+}
 fn wire__crate__api__release_preview_pixel_buffer_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -1113,6 +1153,52 @@ fn wire__crate__api__start_compress_impl(
                     (move || async move {
                         let output_ok =
                             crate::api::start_compress(api_options, api_progress).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__start_prefetch_remote_input_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "start_prefetch_remote_input",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_url = <String>::sse_decode(&mut deserializer);
+            let api_dest_dir = <String>::sse_decode(&mut deserializer);
+            let api_progress = <StreamSink<
+                crate::types::ProgressEvent,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || async move {
+                        let output_ok = crate::api::start_prefetch_remote_input(
+                            api_url,
+                            api_dest_dir,
+                            api_progress,
+                        )
+                        .await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1497,6 +1583,7 @@ impl SseDecode for crate::types::CompressOptions {
         let mut var_includeAudio = <bool>::sse_decode(deserializer);
         let mut var_fastStart = <bool>::sse_decode(deserializer);
         let mut var_fragmentedMp4 = <bool>::sse_decode(deserializer);
+        let mut var_outputProfile = <Option<crate::types::OutputProfile>>::sse_decode(deserializer);
         let mut var_preferHardwareEncoder = <bool>::sse_decode(deserializer);
         let mut var_startMs = <Option<u64>>::sse_decode(deserializer);
         let mut var_endMs = <Option<u64>>::sse_decode(deserializer);
@@ -1516,6 +1603,7 @@ impl SseDecode for crate::types::CompressOptions {
             include_audio: var_includeAudio,
             fast_start: var_fastStart,
             fragmented_mp4: var_fragmentedMp4,
+            output_profile: var_outputProfile,
             prefer_hardware_encoder: var_preferHardwareEncoder,
             start_ms: var_startMs,
             end_ms: var_endMs,
@@ -1742,6 +1830,17 @@ impl SseDecode for Option<f32> {
     }
 }
 
+impl SseDecode for Option<crate::types::OutputProfile> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::types::OutputProfile>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::types::PreviewFramePixelBuffer> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1806,6 +1905,40 @@ impl SseDecode for Option<Vec<String>> {
             return Some(<Vec<String>>::sse_decode(deserializer));
         } else {
             return None;
+        }
+    }
+}
+
+impl SseDecode for crate::types::OutputProfile {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_fastStart = <bool>::sse_decode(deserializer);
+                return crate::types::OutputProfile::ProgressiveMp4 {
+                    fast_start: var_fastStart,
+                };
+            }
+            1 => {
+                let mut var_fragmentDurationMs = <u32>::sse_decode(deserializer);
+                return crate::types::OutputProfile::FragmentedMp4 {
+                    fragment_duration_ms: var_fragmentDurationMs,
+                };
+            }
+            2 => {
+                let mut var_segmentDurationMs = <u32>::sse_decode(deserializer);
+                let mut var_masterPlaylist = <bool>::sse_decode(deserializer);
+                let mut var_hlsVersion = <u8>::sse_decode(deserializer);
+                return crate::types::OutputProfile::Hls {
+                    segment_duration_ms: var_segmentDurationMs,
+                    master_playlist: var_masterPlaylist,
+                    hls_version: var_hlsVersion,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
         }
     }
 }
@@ -2136,19 +2269,20 @@ fn pde_ffi_dispatcher_primary_impl(
         22 => wire__crate__api__get_media_info_impl(port, ptr, rust_vec_len, data_len),
         23 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
         24 => wire__crate__api__initialize_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__start_compress_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__thumbnail_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__thumbnail_bytes_impl(port, ptr, rust_vec_len, data_len),
-        30 => {
+        28 => wire__crate__api__start_compress_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__start_prefetch_remote_input_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__thumbnail_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__thumbnail_bytes_impl(port, ptr, rust_vec_len, data_len),
+        32 => {
             wire__crate__error__video_forge_error_error_code_impl(port, ptr, rust_vec_len, data_len)
         }
-        31 => wire__crate__error__video_forge_error_error_message_impl(
+        33 => wire__crate__error__video_forge_error_error_message_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        32 => wire__crate__api__wait_for_job_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__wait_for_job_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2187,7 +2321,8 @@ fn pde_ffi_dispatcher_sync_impl(
         18 => wire__crate__api__clear_decoder_cache_impl(ptr, rust_vec_len, data_len),
         21 => wire__crate__api__decoder_cache_stats_impl(ptr, rust_vec_len, data_len),
         25 => wire__crate__api__prefetch_remote_input_impl(ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__release_preview_pixel_buffer_impl(ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__prefetch_remote_input_range_impl(ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__release_preview_pixel_buffer_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2367,6 +2502,7 @@ impl flutter_rust_bridge::IntoDart for crate::types::CompressOptions {
             self.include_audio.into_into_dart().into_dart(),
             self.fast_start.into_into_dart().into_dart(),
             self.fragmented_mp4.into_into_dart().into_dart(),
+            self.output_profile.into_into_dart().into_dart(),
             self.prefer_hardware_encoder.into_into_dart().into_dart(),
             self.start_ms.into_into_dart().into_dart(),
             self.end_ms.into_into_dart().into_dart(),
@@ -2473,6 +2609,45 @@ impl flutter_rust_bridge::IntoDart for crate::types::MediaInfo {
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::MediaInfo {}
 impl flutter_rust_bridge::IntoIntoDart<crate::types::MediaInfo> for crate::types::MediaInfo {
     fn into_into_dart(self) -> crate::types::MediaInfo {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::OutputProfile {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::types::OutputProfile::ProgressiveMp4 { fast_start } => {
+                [0.into_dart(), fast_start.into_into_dart().into_dart()].into_dart()
+            }
+            crate::types::OutputProfile::FragmentedMp4 {
+                fragment_duration_ms,
+            } => [
+                1.into_dart(),
+                fragment_duration_ms.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::types::OutputProfile::Hls {
+                segment_duration_ms,
+                master_playlist,
+                hls_version,
+            } => [
+                2.into_dart(),
+                segment_duration_ms.into_into_dart().into_dart(),
+                master_playlist.into_into_dart().into_dart(),
+                hls_version.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::OutputProfile {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::OutputProfile>
+    for crate::types::OutputProfile
+{
+    fn into_into_dart(self) -> crate::types::OutputProfile {
         self
     }
 }
@@ -2900,6 +3075,7 @@ impl SseEncode for crate::types::CompressOptions {
         <bool>::sse_encode(self.include_audio, serializer);
         <bool>::sse_encode(self.fast_start, serializer);
         <bool>::sse_encode(self.fragmented_mp4, serializer);
+        <Option<crate::types::OutputProfile>>::sse_encode(self.output_profile, serializer);
         <bool>::sse_encode(self.prefer_hardware_encoder, serializer);
         <Option<u64>>::sse_encode(self.start_ms, serializer);
         <Option<u64>>::sse_encode(self.end_ms, serializer);
@@ -3078,6 +3254,16 @@ impl SseEncode for Option<f32> {
     }
 }
 
+impl SseEncode for Option<crate::types::OutputProfile> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::types::OutputProfile>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::types::PreviewFramePixelBuffer> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3134,6 +3320,37 @@ impl SseEncode for Option<Vec<String>> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <Vec<String>>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::types::OutputProfile {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::types::OutputProfile::ProgressiveMp4 { fast_start } => {
+                <i32>::sse_encode(0, serializer);
+                <bool>::sse_encode(fast_start, serializer);
+            }
+            crate::types::OutputProfile::FragmentedMp4 {
+                fragment_duration_ms,
+            } => {
+                <i32>::sse_encode(1, serializer);
+                <u32>::sse_encode(fragment_duration_ms, serializer);
+            }
+            crate::types::OutputProfile::Hls {
+                segment_duration_ms,
+                master_playlist,
+                hls_version,
+            } => {
+                <i32>::sse_encode(2, serializer);
+                <u32>::sse_encode(segment_duration_ms, serializer);
+                <bool>::sse_encode(master_playlist, serializer);
+                <u8>::sse_encode(hls_version, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
         }
     }
 }

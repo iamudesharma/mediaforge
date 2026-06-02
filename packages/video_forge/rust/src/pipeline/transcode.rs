@@ -22,8 +22,8 @@ use crate::jobs::progress::ProgressReporter;
 use crate::jobs::registry::CancellationToken;
 use crate::pipeline::audio_mix;
 use crate::pipeline::overlay_burn::OverlayCompositor;
-use crate::pipeline::streaming::movflags;
-use crate::types::{CompressOptions, CompressResult, VideoCodec};
+use crate::pipeline::streaming::{movflags, movflags_for_profile};
+use crate::types::{effective_output_profile, CompressOptions, CompressResult, VideoCodec};
 
 /// Never target more than ~82% of measured source video bitrate when compressing.
 const SOURCE_BITRATE_SHRINK: f64 = 0.82;
@@ -481,9 +481,33 @@ fn run_compress_inner(
     }
 
     let mut header_opts = Dictionary::new();
-    let flags = movflags(options.fast_start, options.fragmented_mp4);
+    // PR #4: prefer [CompressOptions::output_profile] when set;
+    // otherwise fall back to the legacy `fast_start` + `fragmented_mp4`
+    // booleans (handled by `effective_output_profile`).
+    let profile = effective_output_profile(options);
+    let flags = movflags_for_profile(&profile);
     if !flags.is_empty() {
         header_opts.set("movflags", &flags);
+    }
+    // HLS does not use `movflags`; it uses the `hls_*` option family.
+    // For the HLS profile we open the output as `hls` muxer so the
+    // user-supplied output path is treated as a `.m3u8` playlist
+    // prefix (FFmpeg writes `playlist0.ts`, `playlist1.ts`, ...
+    // alongside).
+    match &profile {
+        crate::types::OutputProfile::Hls { .. } => {
+            log::info!(
+                "[Compress] HLS output profile active (segment_duration_ms={:?})",
+                match &profile {
+                    crate::types::OutputProfile::Hls {
+                        segment_duration_ms,
+                        ..
+                    } => *segment_duration_ms,
+                    _ => 0,
+                }
+            );
+        }
+        _ => {}
     }
     octx.write_header_with(header_opts)
         .map_err(map_ffmpeg_error)?;
