@@ -7,6 +7,8 @@ import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'types.dart';
 
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`
+
 /// Initialize the native video processor (call once at app startup).
 Future<void> initialize() => RustLib.instance.api.crateApiInitialize();
 
@@ -20,6 +22,39 @@ String prefetchRemoteInput({required String url, required String destDir}) =>
       url: url,
       destDir: destDir,
     );
+
+/// PR #4: download a byte range of a remote URL to a local file.
+/// Currently performs a full stream copy (Range-aware follow-up is
+/// tracked separately). See [crate::ffmpeg::prefetch::prefetch_remote_input_range].
+String prefetchRemoteInputRange({
+  required String url,
+  required BigInt startBytes,
+  required BigInt endBytes,
+  required String destDir,
+}) => RustLib.instance.api.crateApiPrefetchRemoteInputRange(
+  url: url,
+  startBytes: startBytes,
+  endBytes: endBytes,
+  destDir: destDir,
+);
+
+/// PR #4: stream-copy a remote URL to a local file asynchronously,
+/// reporting progress events through [progress]. Returns a `job_id`
+/// that can be polled with [wait_for_job] or cancelled via
+/// [cancel_job]. Reuses the same [JobRegistry] as compression so the
+/// kit's existing job-orchestration code can manage the lifecycle.
+///
+/// The non-async [prefetch_remote_input] is preserved for callers
+/// that want a single blocking call. New code should prefer this
+/// async variant for any non-trivial file (the existing one blocks
+/// the Dart isolate for the full download).
+Stream<ProgressEvent> startPrefetchRemoteInput({
+  required String url,
+  required String destDir,
+}) => RustLib.instance.api.crateApiStartPrefetchRemoteInput(
+  url: url,
+  destDir: destDir,
+);
 
 /// Start compression in the background; returns job id immediately.
 Stream<ProgressEvent> startCompress({required CompressOptions options}) =>
@@ -62,6 +97,20 @@ Future<PreviewFrameRgba> decodePreviewFrameRgba({
   maxEdge: maxEdge,
 );
 
+/// PR #5: same as [decode_preview_frame_rgba] but returns a
+/// `PreviewFrameRgbaBuf` paired with a `release_token` so the Dart
+/// side can return the underlying buffer to the pool via its
+/// `Finalizer` (no manual `bufferPoolRelease` required).
+Future<PreviewFrameRgbaBuf> decodePreviewFrameRgbaBuf({
+  required String inputPath,
+  required BigInt positionMs,
+  int? maxEdge,
+}) => RustLib.instance.api.crateApiDecodePreviewFrameRgbaBuf(
+  inputPath: inputPath,
+  positionMs: positionMs,
+  maxEdge: maxEdge,
+);
+
 /// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
 Future<PreviewFramePixelBuffer> decodePreviewFramePixelBuffer({
   required String inputPath,
@@ -90,10 +139,75 @@ Future<void> cleanupJob({required String jobId}) =>
 void bufferPoolRelease({required List<int> buf}) =>
     RustLib.instance.api.crateApiBufferPoolRelease(buf: buf);
 
+/// PR #5: release a buffer by its token. Called by the Dart-side
+/// `Finalizer` on a `ReleaseToken` when the corresponding frame
+/// object is garbage-collected. The token `0` is a no-op (reserved
+/// for "no token").
+void bufferPoolReleaseByToken({required BigInt token}) =>
+    RustLib.instance.api.crateApiBufferPoolReleaseByToken(token: token);
+
 /// Acquires a buffer from the video processor's native pool with a minimum capacity.
 Uint8List bufferPoolAcquire({required int minCapacity}) =>
     RustLib.instance.api.crateApiBufferPoolAcquire(minCapacity: minCapacity);
 
+/// PR #5: acquire a buffer + return a stable token. The token can
+/// be passed back to [buffer_pool_release_by_token] when the
+/// consumer (e.g. a Dart `ReleaseToken` finalizer) is done with the
+/// buffer. The token is also useful for diagnostics ("5
+/// PreviewFrameRgba in flight").
+(Uint8List, BigInt) bufferPoolAcquireWithToken({required int minCapacity}) =>
+    RustLib.instance.api.crateApiBufferPoolAcquireWithToken(
+      minCapacity: minCapacity,
+    );
+
 /// Returns the current statistics of the video processor's buffer pool (count, total bytes).
 (BigInt, BigInt) bufferPoolStats() =>
     RustLib.instance.api.crateApiBufferPoolStats();
+
+/// Drop all cached demuxer/decoder pairs and return the number of entries
+/// dropped. Use for tests, low-memory warnings, or after a project is
+/// closed (so the next call for a new project does not see stale
+/// state from a previous one).
+BigInt clearDecoderCache() => RustLib.instance.api.crateApiClearDecoderCache();
+
+/// Snapshot of the demuxer/decoder cache state. Cheap; takes the cache
+/// lock briefly. Use for telemetry, memory pressure warnings, and
+/// integration tests.
+DecoderCacheStatsDto decoderCacheStats() =>
+    RustLib.instance.api.crateApiDecoderCacheStats();
+
+/// Public stats DTO. Fields mirror [crate::cache::CacheStatsSnapshot].
+class DecoderCacheStatsDto {
+  final BigInt hits;
+  final BigInt misses;
+  final BigInt evictions;
+  final int entries;
+  final BigInt workingSetBytes;
+
+  const DecoderCacheStatsDto({
+    required this.hits,
+    required this.misses,
+    required this.evictions,
+    required this.entries,
+    required this.workingSetBytes,
+  });
+
+  @override
+  int get hashCode =>
+      hits.hashCode ^
+      misses.hashCode ^
+      evictions.hashCode ^
+      entries.hashCode ^
+      workingSetBytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DecoderCacheStatsDto &&
+          runtimeType == other.runtimeType &&
+          hits == other.hits &&
+          misses == other.misses &&
+          evictions == other.evictions &&
+          entries == other.entries &&
+          workingSetBytes == other.workingSetBytes;
+}

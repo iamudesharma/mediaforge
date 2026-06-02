@@ -33,6 +33,79 @@ pub fn prefetch_remote_input(url: String, dest_dir: String) -> Result<String> {
     crate::ffmpeg::prefetch_remote_input(&url, Path::new(dest_dir.trim()))
 }
 
+/// PR #4: download a byte range of a remote URL to a local file.
+/// Currently performs a full stream copy (Range-aware follow-up is
+/// tracked separately). See [crate::ffmpeg::prefetch::prefetch_remote_input_range].
+#[frb(sync)]
+pub fn prefetch_remote_input_range(
+    url: String,
+    start_bytes: u64,
+    end_bytes: u64,
+    dest_dir: String,
+) -> Result<String> {
+    use std::path::Path;
+    crate::ffmpeg::prefetch_remote_input_range(
+        &url,
+        start_bytes,
+        end_bytes,
+        Path::new(dest_dir.trim()),
+    )
+}
+
+/// PR #4: stream-copy a remote URL to a local file asynchronously,
+/// reporting progress events through [progress]. Returns a `job_id`
+/// that can be polled with [wait_for_job] or cancelled via
+/// [cancel_job]. Reuses the same [JobRegistry] as compression so the
+/// kit's existing job-orchestration code can manage the lifecycle.
+///
+/// The non-async [prefetch_remote_input] is preserved for callers
+/// that want a single blocking call. New code should prefer this
+/// async variant for any non-trivial file (the existing one blocks
+/// the Dart isolate for the full download).
+#[frb]
+pub async fn start_prefetch_remote_input(
+    url: String,
+    dest_dir: String,
+    progress: StreamSink<ProgressEvent>,
+) -> Result<String> {
+    let reg = registry();
+    let _permit = reg.acquire_permit().await?;
+    let (job_id, token) = reg.register();
+
+    let jid = job_id.clone();
+    let mut reporter = ProgressReporter::new(job_id.clone(), progress);
+    reporter.emit(ProcessingPhase::Probing, 0.0, 0, 0.0, 0, true);
+
+    let handle = tokio::task::spawn_blocking(move || {
+        use std::path::Path;
+        let result = crate::ffmpeg::prefetch_remote_input(&url, Path::new(dest_dir.trim()));
+        match &result {
+            Ok(path) => {
+                reporter.emit(ProcessingPhase::Done, 1.0, 0, 0.0, 0, true);
+                reg.complete(&jid, Ok(JobResult::Empty));
+                log::info!("[Prefetch] async done job={} path={}", jid, path);
+            }
+            Err(VideoForgeError::Cancelled) => {
+                reporter.cancelled();
+                reg.complete(&jid, Err(VideoForgeError::Cancelled));
+            }
+            Err(e) => {
+                reporter.failed();
+                reg.complete(&jid, Err(e.clone()));
+            }
+        }
+        drop(_permit);
+        result
+    });
+
+    // Detach; result retrieved via wait_for_job.
+    tokio::spawn(async move {
+        let _ = handle.await;
+    });
+
+    Ok(job_id)
+}
+
 /// Start compression in the background; returns job id immediately.
 #[frb]
 pub async fn start_compress(
@@ -157,6 +230,23 @@ pub async fn decode_preview_frame_rgba(
     .map_err(|e| VideoForgeError::Internal(e.to_string()))?
 }
 
+/// PR #5: same as [decode_preview_frame_rgba] but returns a
+/// `PreviewFrameRgbaBuf` paired with a `release_token` so the Dart
+/// side can return the underlying buffer to the pool via its
+/// `Finalizer` (no manual `bufferPoolRelease` required).
+#[frb]
+pub async fn decode_preview_frame_rgba_buf(
+    input_path: String,
+    position_ms: u64,
+    max_edge: Option<u32>,
+) -> Result<PreviewFrameRgbaBuf> {
+    tokio::task::spawn_blocking(move || {
+        pipeline::decode_preview_frame_rgba_buf(&input_path, position_ms, max_edge)
+    })
+    .await
+    .map_err(|e| VideoForgeError::Internal(e.to_string()))?
+}
+
 /// Decode one preview frame as a BGRA `CVPixelBuffer` (Apple VideoToolbox — V1.4).
 #[frb]
 pub async fn decode_preview_frame_pixel_buffer(
@@ -265,15 +355,69 @@ pub fn buffer_pool_release(buf: Vec<u8>) {
     crate::pool::release_buffer(buf);
 }
 
+/// PR #5: release a buffer by its token. Called by the Dart-side
+/// `Finalizer` on a `ReleaseToken` when the corresponding frame
+/// object is garbage-collected. The token `0` is a no-op (reserved
+/// for "no token").
+#[frb(sync)]
+pub fn buffer_pool_release_by_token(token: u64) {
+    crate::pool::release_buffer_by_token(token);
+}
+
 /// Acquires a buffer from the video processor's native pool with a minimum capacity.
 #[frb(sync)]
 pub fn buffer_pool_acquire(min_capacity: u32) -> Vec<u8> {
     crate::pool::acquire_buffer(min_capacity as usize)
 }
 
+/// PR #5: acquire a buffer + return a stable token. The token can
+/// be passed back to [buffer_pool_release_by_token] when the
+/// consumer (e.g. a Dart `ReleaseToken` finalizer) is done with the
+/// buffer. The token is also useful for diagnostics ("5
+/// PreviewFrameRgba in flight").
+#[frb(sync)]
+pub fn buffer_pool_acquire_with_token(min_capacity: u32) -> (Vec<u8>, u64) {
+    crate::pool::acquire_buffer_with_token(min_capacity as usize)
+}
+
 /// Returns the current statistics of the video processor's buffer pool (count, total bytes).
 #[frb(sync)]
 pub fn buffer_pool_stats() -> (usize, usize) {
     crate::pool::pool_stats()
+}
+
+/// Drop all cached demuxer/decoder pairs and return the number of entries
+/// dropped. Use for tests, low-memory warnings, or after a project is
+/// closed (so the next call for a new project does not see stale
+/// state from a previous one).
+#[frb(sync)]
+pub fn clear_decoder_cache() -> usize {
+    crate::cache::clear()
+}
+
+/// Snapshot of the demuxer/decoder cache state. Cheap; takes the cache
+/// lock briefly. Use for telemetry, memory pressure warnings, and
+/// integration tests.
+#[frb(sync)]
+pub fn decoder_cache_stats() -> DecoderCacheStatsDto {
+    let s = crate::cache::stats();
+    DecoderCacheStatsDto {
+        hits: s.hits,
+        misses: s.misses,
+        evictions: s.evictions,
+        entries: s.entries as u32,
+        working_set_bytes: s.working_set_bytes,
+    }
+}
+
+/// Public stats DTO. Fields mirror [crate::cache::CacheStatsSnapshot].
+#[frb]
+#[derive(Clone, Copy, Debug)]
+pub struct DecoderCacheStatsDto {
+    pub hits: u64,
+    pub misses: u64,
+    pub evictions: u64,
+    pub entries: u32,
+    pub working_set_bytes: u64,
 }
 

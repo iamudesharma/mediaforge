@@ -56,12 +56,16 @@ class BatchThumbnailBytesOptions {
   final int? height;
   final ThumbnailFormat format;
 
+  /// PR #3 (opt-in): see [BatchThumbnailOptions::parallel_decoder_count].
+  final int? parallelDecoderCount;
+
   const BatchThumbnailBytesOptions({
     required this.inputPath,
     required this.positionsMs,
     this.width,
     this.height,
     required this.format,
+    this.parallelDecoderCount,
   });
 
   @override
@@ -70,7 +74,8 @@ class BatchThumbnailBytesOptions {
       positionsMs.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      format.hashCode;
+      format.hashCode ^
+      parallelDecoderCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -81,23 +86,32 @@ class BatchThumbnailBytesOptions {
           positionsMs == other.positionsMs &&
           width == other.width &&
           height == other.height &&
-          format == other.format;
+          format == other.format &&
+          parallelDecoderCount == other.parallelDecoderCount;
 }
 
 class BatchThumbnailBytesResult {
   final List<Uint8List> frames;
 
-  const BatchThumbnailBytesResult({required this.frames});
+  /// PR #3: per-position decode status. Same length as
+  /// `positions_ms` in the request.
+  final List<ThumbnailDecodeStatus> decodedStatus;
+
+  const BatchThumbnailBytesResult({
+    required this.frames,
+    required this.decodedStatus,
+  });
 
   @override
-  int get hashCode => frames.hashCode;
+  int get hashCode => frames.hashCode ^ decodedStatus.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BatchThumbnailBytesResult &&
           runtimeType == other.runtimeType &&
-          frames == other.frames;
+          frames == other.frames &&
+          decodedStatus == other.decodedStatus;
 }
 
 class BatchThumbnailOptions {
@@ -112,6 +126,14 @@ class BatchThumbnailOptions {
   final int? height;
   final ThumbnailFormat format;
 
+  /// PR #3 (opt-in): when `Some(n) > 0`, the batch opens up to `n`
+  /// parallel demuxer instances and shards the positions across them
+  /// (decode stays single-threaded per demuxer; encode is already
+  /// parallel via rayon). Default 0 = single-demuxer. Useful for
+  /// filmstrip batches on long-GOP iPhone HEVC where the demuxer
+  /// open + first-frame-decode is the bottleneck.
+  final int? parallelDecoderCount;
+
   const BatchThumbnailOptions({
     required this.inputPath,
     required this.outputDir,
@@ -120,6 +142,7 @@ class BatchThumbnailOptions {
     this.width,
     this.height,
     required this.format,
+    this.parallelDecoderCount,
   });
 
   @override
@@ -130,7 +153,8 @@ class BatchThumbnailOptions {
       positionsMs.hashCode ^
       width.hashCode ^
       height.hashCode ^
-      format.hashCode;
+      format.hashCode ^
+      parallelDecoderCount.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -143,23 +167,33 @@ class BatchThumbnailOptions {
           positionsMs == other.positionsMs &&
           width == other.width &&
           height == other.height &&
-          format == other.format;
+          format == other.format &&
+          parallelDecoderCount == other.parallelDecoderCount;
 }
 
 class BatchThumbnailResult {
   final List<String> paths;
 
-  const BatchThumbnailResult({required this.paths});
+  /// PR #3: per-position decode status. Same length as
+  /// `positions_ms` in the request. Use this to flag approximate
+  /// thumbnails in a UI filmstrip.
+  final List<ThumbnailDecodeStatus> decodedStatus;
+
+  const BatchThumbnailResult({
+    required this.paths,
+    required this.decodedStatus,
+  });
 
   @override
-  int get hashCode => paths.hashCode;
+  int get hashCode => paths.hashCode ^ decodedStatus.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BatchThumbnailResult &&
           runtimeType == other.runtimeType &&
-          paths == other.paths;
+          paths == other.paths &&
+          decodedStatus == other.decodedStatus;
 }
 
 /// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
@@ -221,8 +255,20 @@ class CompressOptions {
   final int? maxHeight;
   final double? maxFps;
   final bool includeAudio;
+
+  /// PR #4 (deprecated): use [output_profile] instead. Retained for
+  /// one release so existing 2.x callers keep compiling.
+  /// `true` + `fragmented_mp4 = false` -> `ProgressiveMp4 { fast_start: true }`.
+  /// `fragmented_mp4 = true` (regardless of fast_start) -> `FragmentedMp4 { fragment_duration_ms: 2000 }`.
   final bool fastStart;
+
+  /// PR #4 (deprecated): see [output_profile].
   final bool fragmentedMp4;
+
+  /// PR #4: output container profile. When `None`, the deprecated
+  /// `fast_start` + `fragmented_mp4` booleans are used. When `Some`,
+  /// `output_profile` wins. New code should always set this.
+  final OutputProfile? outputProfile;
   final bool preferHardwareEncoder;
 
   /// Inclusive clip start in milliseconds (0 = beginning).
@@ -253,6 +299,7 @@ class CompressOptions {
     required this.includeAudio,
     required this.fastStart,
     required this.fragmentedMp4,
+    this.outputProfile,
     required this.preferHardwareEncoder,
     this.startMs,
     this.endMs,
@@ -275,6 +322,7 @@ class CompressOptions {
       includeAudio.hashCode ^
       fastStart.hashCode ^
       fragmentedMp4.hashCode ^
+      outputProfile.hashCode ^
       preferHardwareEncoder.hashCode ^
       startMs.hashCode ^
       endMs.hashCode ^
@@ -299,6 +347,7 @@ class CompressOptions {
           includeAudio == other.includeAudio &&
           fastStart == other.fastStart &&
           fragmentedMp4 == other.fragmentedMp4 &&
+          outputProfile == other.outputProfile &&
           preferHardwareEncoder == other.preferHardwareEncoder &&
           startMs == other.startMs &&
           endMs == other.endMs &&
@@ -420,6 +469,54 @@ class MediaInfo {
 }
 
 @freezed
+sealed class OutputProfile with _$OutputProfile {
+  const OutputProfile._();
+
+  /// Single progressive MP4. `fast_start: true` (default) moves the
+  /// moov atom to the front of the file so the asset can play before
+  /// the download completes. Equivalent to the old
+  /// `fast_start: true, fragmented_mp4: false`.
+  const factory OutputProfile.progressiveMp4({
+    /// Move the moov atom to the front of the file so playback
+    /// can start before the download completes. Default: `true`.
+    required bool fastStart,
+  }) = OutputProfile_ProgressiveMp4;
+
+  /// Fragmented MP4 (CMAF-style). Each fragment is independently
+  /// decodable, so the asset is seekable as soon as the first
+  /// fragment is downloaded. Pair with HLS / DASH for adaptive
+  /// streaming or with social-media uploads that expect fMP4 input.
+  /// `fragment_duration_ms` controls the target fragment length
+  /// (FFmpeg `movflags=+frag_keyframe+frag_duration_ms=N`).
+  const factory OutputProfile.fragmentedMp4({
+    /// Target fragment length in milliseconds. Default: `2000`
+    /// (matches the HLS default segment length).
+    required int fragmentDurationMs,
+  }) = OutputProfile_FragmentedMp4;
+
+  /// HTTP Live Streaming (HLS, m3u8 + .ts segments). The output
+  /// directory must already exist; FFmpeg writes
+  /// `playlist.m3u8` + `segment_NNN.ts` alongside the output path
+  /// (the output path is used as a prefix — e.g. `/out/playlist.m3u8`
+  /// produces segments at `/out/playlistN.ts`).
+  const factory OutputProfile.hls({
+    /// Target segment length in milliseconds. Default: `6000`
+    /// (Apple's recommended HLS segment length).
+    required int segmentDurationMs,
+
+    /// When `true`, FFmpeg also writes a `master.m3u8` with
+    /// `#EXT-X-STREAM-INF` tags for adaptive bitrate ladders.
+    /// Currently a single rendition is emitted; the master
+    /// playlist is correct in shape but lists only one variant.
+    required bool masterPlaylist,
+
+    /// HLS protocol version. Default: `6` (HLSv6, supports
+    /// fMP4 / CMAF segments). Use `3` for legacy clients.
+    required int hlsVersion,
+  }) = OutputProfile_Hls;
+}
+
+@freezed
 sealed class PlaybackFrame with _$PlaybackFrame {
   const PlaybackFrame._();
 
@@ -490,6 +587,50 @@ class PreviewFrameRgba {
           width == other.width &&
           height == other.height &&
           rgba == other.rgba;
+}
+
+/// PR #5: preview frame paired with a `ReleaseToken` so the Dart
+/// side can hand the underlying buffer back to the Rust pool via a
+/// `Finalizer` (no manual `bufferPoolRelease` call required from
+/// app code). New code should prefer this struct; the bare
+/// [PreviewFrameRgba] is kept for back-compat.
+class PreviewFrameRgbaBuf {
+  final BigInt ptsMs;
+  final int width;
+  final int height;
+  final Uint8List rgba;
+
+  /// Stable token for [crate::pool::release_buffer_by_token]. The
+  /// value `0` means "no token" (the buffer will be released by
+  /// the explicit `bufferPoolRelease` path instead).
+  final BigInt releaseToken;
+
+  const PreviewFrameRgbaBuf({
+    required this.ptsMs,
+    required this.width,
+    required this.height,
+    required this.rgba,
+    required this.releaseToken,
+  });
+
+  @override
+  int get hashCode =>
+      ptsMs.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      rgba.hashCode ^
+      releaseToken.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PreviewFrameRgbaBuf &&
+          runtimeType == other.runtimeType &&
+          ptsMs == other.ptsMs &&
+          width == other.width &&
+          height == other.height &&
+          rgba == other.rgba &&
+          releaseToken == other.releaseToken;
 }
 
 enum ProcessingPhase {
@@ -576,6 +717,17 @@ class ThumbnailBytesOptions {
           width == other.width &&
           height == other.height &&
           format == other.format;
+}
+
+/// PR #3: per-position status surfaced from the Rust decode pipeline.
+enum ThumbnailDecodeStatus {
+  /// Frame decoded at or after the requested position. Most common.
+  exact,
+
+  /// The demuxer ran out of packets before reaching the requested
+  /// position. The thumbnail is the closest decoded keyframe; the
+  /// UI should flag it as approximate.
+  nearestKeyframe,
 }
 
 enum ThumbnailFormat { jpeg, webp }

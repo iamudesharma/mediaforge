@@ -102,6 +102,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_32(dynamic raw);
 
   @protected
+  OutputProfile dco_decode_box_autoadd_output_profile(dynamic raw);
+
+  @protected
   PreviewFramePixelBuffer dco_decode_box_autoadd_preview_frame_pixel_buffer(
     dynamic raw,
   );
@@ -139,6 +142,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CompressResult dco_decode_compress_result(dynamic raw);
 
   @protected
+  DecoderCacheStatsDto dco_decode_decoder_cache_stats_dto(dynamic raw);
+
+  @protected
   double dco_decode_f_32(dynamic raw);
 
   @protected
@@ -172,6 +178,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<ThumbnailDecodeStatus> dco_decode_list_thumbnail_decode_status(
+    dynamic raw,
+  );
+
+  @protected
   MediaInfo dco_decode_media_info(dynamic raw);
 
   @protected
@@ -179,6 +190,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? dco_decode_opt_box_autoadd_f_32(dynamic raw);
+
+  @protected
+  OutputProfile? dco_decode_opt_box_autoadd_output_profile(dynamic raw);
 
   @protected
   PreviewFramePixelBuffer?
@@ -200,6 +214,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String>? dco_decode_opt_list_String(dynamic raw);
 
   @protected
+  OutputProfile dco_decode_output_profile(dynamic raw);
+
+  @protected
   PlaybackFrame dco_decode_playback_frame(dynamic raw);
 
   @protected
@@ -209,16 +226,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PreviewFrameRgba dco_decode_preview_frame_rgba(dynamic raw);
 
   @protected
+  PreviewFrameRgbaBuf dco_decode_preview_frame_rgba_buf(dynamic raw);
+
+  @protected
   ProcessingPhase dco_decode_processing_phase(dynamic raw);
 
   @protected
   ProgressEvent dco_decode_progress_event(dynamic raw);
 
   @protected
+  (Uint8List, BigInt) dco_decode_record_list_prim_u_8_strict_u_64(dynamic raw);
+
+  @protected
   (BigInt, BigInt) dco_decode_record_usize_usize(dynamic raw);
 
   @protected
   ThumbnailBytesOptions dco_decode_thumbnail_bytes_options(dynamic raw);
+
+  @protected
+  ThumbnailDecodeStatus dco_decode_thumbnail_decode_status(dynamic raw);
 
   @protected
   ThumbnailFormat dco_decode_thumbnail_format(dynamic raw);
@@ -335,6 +361,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_box_autoadd_f_32(SseDeserializer deserializer);
 
   @protected
+  OutputProfile sse_decode_box_autoadd_output_profile(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PreviewFramePixelBuffer sse_decode_box_autoadd_preview_frame_pixel_buffer(
     SseDeserializer deserializer,
   );
@@ -378,6 +409,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CompressResult sse_decode_compress_result(SseDeserializer deserializer);
 
   @protected
+  DecoderCacheStatsDto sse_decode_decoder_cache_stats_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   double sse_decode_f_32(SseDeserializer deserializer);
 
   @protected
@@ -417,6 +453,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<ThumbnailDecodeStatus> sse_decode_list_thumbnail_decode_status(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MediaInfo sse_decode_media_info(SseDeserializer deserializer);
 
   @protected
@@ -424,6 +465,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   double? sse_decode_opt_box_autoadd_f_32(SseDeserializer deserializer);
+
+  @protected
+  OutputProfile? sse_decode_opt_box_autoadd_output_profile(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PreviewFramePixelBuffer?
@@ -449,6 +495,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<String>? sse_decode_opt_list_String(SseDeserializer deserializer);
 
   @protected
+  OutputProfile sse_decode_output_profile(SseDeserializer deserializer);
+
+  @protected
   PlaybackFrame sse_decode_playback_frame(SseDeserializer deserializer);
 
   @protected
@@ -460,16 +509,31 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PreviewFrameRgba sse_decode_preview_frame_rgba(SseDeserializer deserializer);
 
   @protected
+  PreviewFrameRgbaBuf sse_decode_preview_frame_rgba_buf(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ProcessingPhase sse_decode_processing_phase(SseDeserializer deserializer);
 
   @protected
   ProgressEvent sse_decode_progress_event(SseDeserializer deserializer);
 
   @protected
+  (Uint8List, BigInt) sse_decode_record_list_prim_u_8_strict_u_64(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   (BigInt, BigInt) sse_decode_record_usize_usize(SseDeserializer deserializer);
 
   @protected
   ThumbnailBytesOptions sse_decode_thumbnail_bytes_options(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ThumbnailDecodeStatus sse_decode_thumbnail_decode_status(
     SseDeserializer deserializer,
   );
 
@@ -606,6 +670,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_output_profile(
+    OutputProfile self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_preview_frame_pixel_buffer(
     PreviewFramePixelBuffer self,
     SseSerializer serializer,
@@ -660,6 +730,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_decoder_cache_stats_dto(
+    DecoderCacheStatsDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_f_32(double self, SseSerializer serializer);
 
   @protected
@@ -708,6 +784,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_thumbnail_decode_status(
+    List<ThumbnailDecodeStatus> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_media_info(MediaInfo self, SseSerializer serializer);
 
   @protected
@@ -715,6 +797,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_f_32(double? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_output_profile(
+    OutputProfile? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_preview_frame_pixel_buffer(
@@ -741,6 +829,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_list_String(List<String>? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_output_profile(OutputProfile self, SseSerializer serializer);
+
+  @protected
   void sse_encode_playback_frame(PlaybackFrame self, SseSerializer serializer);
 
   @protected
@@ -756,6 +847,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_preview_frame_rgba_buf(
+    PreviewFrameRgbaBuf self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_processing_phase(
     ProcessingPhase self,
     SseSerializer serializer,
@@ -763,6 +860,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_progress_event(ProgressEvent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_list_prim_u_8_strict_u_64(
+    (Uint8List, BigInt) self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_record_usize_usize(
@@ -773,6 +876,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_thumbnail_bytes_options(
     ThumbnailBytesOptions self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_thumbnail_decode_status(
+    ThumbnailDecodeStatus self,
     SseSerializer serializer,
   );
 

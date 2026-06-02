@@ -90,8 +90,14 @@ void main() {
   group('BatchThumbnailBytesResult', () {
     test('construction and equality', () {
       final frames = [Uint8List(100), Uint8List(200)];
-      final a = BatchThumbnailBytesResult(frames: frames);
-      final b = BatchThumbnailBytesResult(frames: frames);
+      final a = BatchThumbnailBytesResult(
+        frames: frames,
+        decodedStatus: const [ThumbnailDecodeStatus.exact, ThumbnailDecodeStatus.exact],
+      );
+      final b = BatchThumbnailBytesResult(
+        frames: frames,
+        decodedStatus: const [ThumbnailDecodeStatus.exact, ThumbnailDecodeStatus.exact],
+      );
 
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
@@ -134,12 +140,49 @@ void main() {
   group('BatchThumbnailResult', () {
     test('construction and equality', () {
       final paths = ['/a.jpg', '/b.jpg'];
-      final a = BatchThumbnailResult(paths: paths);
-      final b = BatchThumbnailResult(paths: paths);
+      final a = BatchThumbnailResult(
+        paths: paths,
+        decodedStatus: const [ThumbnailDecodeStatus.exact, ThumbnailDecodeStatus.exact],
+      );
+      final b = BatchThumbnailResult(
+        paths: paths,
+        decodedStatus: const [ThumbnailDecodeStatus.exact, ThumbnailDecodeStatus.exact],
+      );
 
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
       expect(a.paths, hasLength(2));
+    });
+
+    test('decodedStatus round-trips per-position', () {
+      // PR #3 graceful-degrade: a batch whose positions are mostly
+      // exact but one is past the last PTS should report
+      // NearestKeyframe for the trailing positions.
+      final a = BatchThumbnailResult(
+        paths: ['/a.jpg', '/b.jpg', '/c.jpg'],
+        decodedStatus: const [
+          ThumbnailDecodeStatus.exact,
+          ThumbnailDecodeStatus.exact,
+          ThumbnailDecodeStatus.nearestKeyframe,
+        ],
+      );
+      expect(a.decodedStatus, hasLength(3));
+      expect(a.decodedStatus[0], ThumbnailDecodeStatus.exact);
+      expect(a.decodedStatus[2], ThumbnailDecodeStatus.nearestKeyframe);
+    });
+  });
+
+  group('ThumbnailDecodeStatus', () {
+    test('has 2 variants', () {
+      expect(ThumbnailDecodeStatus.values, hasLength(2));
+    });
+
+    test('variants are exact and nearestKeyframe', () {
+      expect(ThumbnailDecodeStatus.exact, isA<ThumbnailDecodeStatus>());
+      expect(
+        ThumbnailDecodeStatus.nearestKeyframe,
+        isA<ThumbnailDecodeStatus>(),
+      );
     });
   });
 

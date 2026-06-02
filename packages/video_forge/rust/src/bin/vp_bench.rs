@@ -371,6 +371,7 @@ fn time_batch_thumbnails(
         width: Some(320),
         height: None,
         format: ThumbnailFormat::Jpeg,
+        parallel_decoder_count: None,
     };
 
     let t0 = Instant::now();

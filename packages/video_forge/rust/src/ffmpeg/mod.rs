@@ -31,13 +31,14 @@ pub use vt_pipeline::VtScaler;
 pub use init::{ensure_ffmpeg_initialized, map_ffmpeg_error};
 pub use input::{
     ensure_input_accessible, is_remote_input, normalize_remote_input, open_input,
-    open_input_for_preview, output_stem_from_input,
+    open_input_for_preview, output_stem_from_input, remote_dictionary_public,
 };
 pub use packet_pool::PacketPool;
-pub use prefetch::prefetch_remote_input;
+pub use prefetch::{prefetch_remote_input, prefetch_remote_input_range};
 pub use probe_cache::{get as probe_cache_get, insert as probe_cache_insert};
 pub use interrupt::InterruptContext;
 pub use thumbnail_seek::{
-    flush_video_decoder, input_duration_ms, ms_to_stream_ts, seek_stream_backward,
-    use_segmented_thumbnail_seek,
+    flush_video_decoder, input_duration_ms, ms_to_stream_ts, seek_stream_any,
+    seek_stream_backward, seek_stream_two_tier, use_segmented_thumbnail_seek,
+    SeekOutcome,
 };

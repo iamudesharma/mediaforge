@@ -106,6 +106,20 @@ fn local_probe_dictionary(input: &str) -> Dictionary<'static> {
     dict
 }
 
+/// FFmpeg options applied when opening a remote (HTTP/HTTPS/RTMP/...)
+/// input. PR #4 adds:
+/// - `seekable=1` so the demuxer can do byte-range seeks
+///   (required for the two-tier seek to be useful on remote inputs).
+/// - `tcp_nodelay=1` to disable Nagle's algorithm on the
+///   underlying TCP socket — saves ~40 ms per RTT on small packets
+///   which matters for thumbnail scrub.
+/// - `send_buffer_size` / `recv_buffer_size` to widen the kernel
+///   socket buffers (defaults of 8 KB / 8 KB cap throughput on
+///   long-fat links).
+/// - `icy=0` to skip ICY (shoutcast) metadata polling on non-radio
+///   streams.
+/// - `listen_timeout=10_000_000` (10s) to fail fast on a stalled
+///   server instead of waiting the default 5 minutes.
 fn remote_input_dictionary() -> Dictionary<'static> {
     let mut dict = Dictionary::new();
     dict.set("user_agent", USER_AGENT);
@@ -114,7 +128,21 @@ fn remote_input_dictionary() -> Dictionary<'static> {
     dict.set("reconnect_delay_max", "5");
     dict.set("multiple_requests", "1");
     dict.set("rw_timeout", "15000000"); // 15s microseconds
+    // PR #4 additions:
+    dict.set("seekable", "1");
+    dict.set("tcp_nodelay", "1");
+    dict.set("send_buffer_size", "65536");
+    dict.set("recv_buffer_size", "131072");
+    dict.set("icy", "0");
+    dict.set("listen_timeout", "10000000"); // 10s microseconds
     dict
+}
+
+/// Public accessor for the remote input dictionary, useful for tests
+/// and for `prefetch_remote_input_range` callers that want to apply
+/// the same option set.
+pub fn remote_dictionary_public() -> Dictionary<'static> {
+    remote_input_dictionary()
 }
 
 /// Safe file stem for output naming (local path or URL last segment).

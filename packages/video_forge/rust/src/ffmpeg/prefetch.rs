@@ -36,6 +36,71 @@ pub fn prefetch_remote_input(url: &str, dest_dir: &Path) -> Result<String> {
     Ok(dest.to_string_lossy().into_owned())
 }
 
+/// PR #4: download a byte range of a remote URL to a local file.
+///
+/// Currently performs a **full** stream copy of the resource and
+/// records the requested `[start_bytes, end_bytes]` bounds in the
+/// destination filename. This is intentional: a proper byte-range
+/// HTTP `Range` request requires either a custom `AVIO` callback
+/// (which ffmpeg-next does not yet expose) or a HEAD-then-partial
+/// fetch via `reqwest` (which would duplicate FFmpeg's HTTP stack).
+///
+/// What this helper *does* buy you today:
+/// - Validates `start_bytes <= end_bytes` and the URL is remote.
+/// - Records the requested bounds in the destination filename so a
+///   follow-up cache layer can dedupe.
+/// - Logs the bounds so you can grep for them in production.
+///
+/// What it does *not* yet do:
+/// - Partial byte fetch (Range header).
+/// - Moov-aware concatenation (joining head + tail prefetches into
+///   a single input).
+///
+/// Until the follow-up lands, callers that just want the asset
+/// locally should call [prefetch_remote_input] (full stream copy,
+/// no Range negotiation overhead).
+pub fn prefetch_remote_input_range(
+    url: &str,
+    start_bytes: u64,
+    end_bytes: u64,
+    dest_dir: &Path,
+) -> Result<String> {
+    ensure_ffmpeg_initialized()?;
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err(VideoForgeError::InvalidInput("empty URL".into()));
+    }
+    if !is_remote_input(trimmed) {
+        return Err(VideoForgeError::InvalidInput(
+            "prefetch_remote_input_range requires an http(s) or streaming URL".into(),
+        ));
+    }
+    if end_bytes < start_bytes {
+        return Err(VideoForgeError::InvalidInput(format!(
+            "prefetch_remote_input_range: end_bytes ({end_bytes}) < start_bytes ({start_bytes})"
+        )));
+    }
+
+    std::fs::create_dir_all(dest_dir).map_err(|e| VideoForgeError::IoError(e.to_string()))?;
+    let dest = dest_dir.join(format!(
+        "{}_prefetch_range_{}_{}.mp4",
+        Uuid::new_v4(),
+        start_bytes,
+        end_bytes
+    ));
+    if dest.exists() {
+        let _ = std::fs::remove_file(&dest);
+    }
+
+    // Placeholder: fall back to the full stream copy. Once the
+    // byte-range AVIO shim lands, this becomes a true Range fetch.
+    log::info!(
+        "[Prefetch] range {start_bytes}-{end_bytes} for {trimmed} — falling back to full stream copy"
+    );
+    remux_stream_copy(trimmed, &dest)?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
 fn remux_stream_copy(input: &str, output: &Path) -> Result<()> {
     let mut ictx = open_input(input)?;
     let mut octx = format::output(output).map_err(map_ffmpeg_error)?;
@@ -116,5 +181,41 @@ mod tests {
     fn rejects_local_path() {
         let err = prefetch_remote_input("/tmp/x.mp4", Path::new("/tmp")).unwrap_err();
         assert!(matches!(err, VideoForgeError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_empty_url() {
+        let err = prefetch_remote_input("", Path::new("/tmp")).unwrap_err();
+        assert!(matches!(err, VideoForgeError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn range_rejects_local_path() {
+        let err =
+            prefetch_remote_input_range("/tmp/x.mp4", 0, 1024, Path::new("/tmp")).unwrap_err();
+        assert!(matches!(err, VideoForgeError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn range_rejects_empty_url() {
+        let err = prefetch_remote_input_range("", 0, 1024, Path::new("/tmp")).unwrap_err();
+        assert!(matches!(err, VideoForgeError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn range_rejects_end_before_start() {
+        let err = prefetch_remote_input_range(
+            "https://example.com/v.mp4",
+            1024,
+            512,
+            Path::new("/tmp"),
+        )
+        .unwrap_err();
+        match err {
+            VideoForgeError::InvalidInput(msg) => {
+                assert!(msg.contains("end_bytes (512) < start_bytes (1024)"), "got: {msg}");
+            }
+            other => panic!("expected InvalidInput, got {other:?}"),
+        }
     }
 }
