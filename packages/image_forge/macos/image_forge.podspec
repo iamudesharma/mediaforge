@@ -4,14 +4,14 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'image_forge'
-  s.version          = '0.0.1'
-  s.summary          = 'A new Flutter FFI plugin project.'
+  s.version          = '1.0.0'
+  s.summary          = 'Full-featured GPU-accelerated Rust image processing engine for Flutter (filters, face beauty, layer composition, presets, multi-format encoding).'
   s.description      = <<-DESC
-A new Flutter FFI plugin project.
+Full-featured GPU-accelerated Rust image processing engine for Flutter. Supports filters, face beauty, layer composition, presets, LUT, swipe looks, and multi-format encoding (JPEG, PNG, WebP, AVIF). Headless engine — no UI widgets. No editor.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/iamudesharma/mediaforge'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'MediaForge' => 'https://github.com/iamudesharma/mediaforge/issues' }
   s.module_name      = 'image_forge'
 
   # This will ensure the source files in Classes/ are included in the native

@@ -1,0 +1,21 @@
+# Exclude Rust build artifacts and cargo locks
+rust/target/
+rust/Cargo.lock
+Cargo.lock
+
+# Exclude prebuilt heavy binaries
+ios/Prebuilt/
+macos/Prebuilt/
+ios/Frameworks/
+
+# Exclude Dart/Flutter build/dependency files
+.dart_tool/
+build/
+.kiro/
+.opencode/
+.idea/
+*.iml
+*.lock
+
+# Build hook outputs
+hook/build/

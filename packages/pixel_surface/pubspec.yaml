@@ -3,9 +3,20 @@ resolution: workspace
 description: >
   Flutter GPU texture runtime — TextureRegistry bridge, CVPixelBuffer /
   SurfaceTexture upload, and GpuTextureView. No editor, filters, or beauty.
-version: 1.1.0
+version: 1.0.0
+license: Apache-2.0
 homepage: https://github.com/iamudesharma/mediaforge
 repository: https://github.com/iamudesharma/mediaforge
+issue_tracker: https://github.com/iamudesharma/mediaforge/issues
+
+topics:
+  - gpu
+  - texture
+  - video
+  - flutter
+  - ffi
+  - cvpixelbuffer
+  - surface-texture
 
 environment:
   sdk: ^3.12.0

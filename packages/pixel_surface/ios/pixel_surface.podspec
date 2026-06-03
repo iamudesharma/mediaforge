@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'pixel_surface'
-  s.version          = '1.1.0'
+  s.version          = '1.0.0'
   s.summary          = 'Flutter GPU Texture bridge for rust_image workspace'
   s.description      = 'CVPixelBuffer-backed Flutter Texture (no Rust FFI).'
   s.homepage         = 'https://github.com/iamudesharma/rust_image'

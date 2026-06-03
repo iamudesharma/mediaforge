@@ -1,0 +1,12 @@
+# Exclude Rust build artifacts and cargo locks
+rust/target/
+rust/Cargo.lock
+
+# Exclude Dart/Flutter build/dependency files
+.dart_tool/
+build/
+.kiro/
+.opencode/
+.idea/
+*.iml
+*.lock

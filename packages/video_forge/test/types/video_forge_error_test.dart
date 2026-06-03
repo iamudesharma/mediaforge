@@ -116,6 +116,8 @@ void main() {
           ffmpegError: (_) => 'ffmpegError',
           queueFull: () => 'queueFull',
           internal: (_) => 'internal',
+          cooldownActive: (msg, _) => 'cooldownActive:$msg',
+          recoveryBudgetExhausted: (msg) => 'recoveryBudgetExhausted:$msg',
         );
         expect(result, 'cancelled');
       });
@@ -132,6 +134,8 @@ void main() {
           ffmpegError: (_) => 'fe',
           queueFull: () => 'qf',
           internal: (_) => 'i',
+          cooldownActive: (msg, _) => 'ca:$msg',
+          recoveryBudgetExhausted: (msg) => 'rbe:$msg',
         );
         expect(result, 'fn');
       });
@@ -149,6 +153,8 @@ void main() {
         ffmpegError: (_) => 'FE',
         queueFull: (_) => 'QF',
         internal: (_) => 'I',
+        cooldownActive: (e) => 'CA:${e.field0}',
+        recoveryBudgetExhausted: (e) => 'RBE:${e.field0}',
       );
       expect(result, 'FE');
     });
