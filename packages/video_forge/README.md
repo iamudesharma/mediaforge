@@ -1,7 +1,7 @@
 # video_forge
 
-[![pub package](https://img.shields.io/pub/v/video_forge.svg)](https://pub.dev/packages/video_forge)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[pub package](https://pub.dev/packages/video_forge)
+[License](LICENSE)
 
 > Open-source project maintained by the community. Found a bug or want to contribute? [PRs and issues are welcome](https://github.com/iamudesharma/mediaforge/issues).
 
@@ -14,14 +14,16 @@ High-performance Rust video processing engine for Flutter — hardware-accelerat
 
 ## Platform Support
 
-| Platform | Status |
-|---|---|
-| Android | Tested (SDK 24+, MediaCodec) |
-| iOS | Tested (13.0+, VideoToolbox) |
-| macOS | Tested (10.15+, VideoToolbox) |
-| Windows | In progress |
-| Linux | In progress |
-| Web | Not supported |
+
+| Platform | Status                        |
+| -------- | ----------------------------- |
+| Android  | Tested (SDK 24+, MediaCodec)  |
+| iOS      | Tested (13.0+, VideoToolbox)  |
+| macOS    | Tested (10.15+, VideoToolbox) |
+| Windows  | In progress                   |
+| Linux    | In progress                   |
+| Web      | Not supported                 |
+
 
 ---
 
@@ -73,14 +75,16 @@ For the full API, see the [Dart API reference](https://pub.dev/documentation/vid
 
 ## Pros & Cons
 
-| Pros | Cons |
-|---|---|
-| Hardware-accelerated video processing | No web support |
-| Async jobs with progress updates | FFmpeg libraries add significant app size |
-| Android, iOS, macOS (Windows & Linux in progress) | FFmpeg setup can be involved (especially macOS VT) |
-| Frame-accurate previews without temp files | FFmpeg is LGPL — requires license notice in your app |
-| Built-in audio mixing for timeline editors | Needs native build toolchain, not pure Dart |
-| Fast thumbnail and filmstrip generation | Large binary from bundled video codecs |
+
+| Pros                                              | Cons                                                 |
+| ------------------------------------------------- | ---------------------------------------------------- |
+| Hardware-accelerated video processing             | No web support                                       |
+| Async jobs with progress updates                  | FFmpeg libraries add significant app size            |
+| Android, iOS, macOS (Windows & Linux in progress) | FFmpeg setup can be involved (especially macOS VT)   |
+| Frame-accurate previews without temp files        | FFmpeg is LGPL — requires license notice in your app |
+| Built-in audio mixing for timeline editors        | Needs native build toolchain, not pure Dart          |
+| Fast thumbnail and filmstrip generation           | Large binary from bundled video codecs               |
+
 
 ---
 
@@ -88,11 +92,13 @@ For the full API, see the [Dart API reference](https://pub.dev/documentation/vid
 
 The package includes native Rust code plus external FFmpeg libraries:
 
-| Component | Est. Size |
-|---|---|
-| Rust engine (transcoding, preview, thumbnails, audio mix) | **~5–8 MB** |
+
+| Component                                                           | Est. Size     |
+| ------------------------------------------------------------------- | ------------- |
+| Rust engine (transcoding, preview, thumbnails, audio mix)           | **~5–8 MB**   |
 | FFmpeg libraries (libavcodec, libavformat, libavfilter, libswscale) | **~15–30 MB** |
-| **Total** | **~20–38 MB** |
+| **Total**                                                           | **~20–38 MB** |
+
 
 FFmpeg is the dominant cost. The Rust engine itself is modest — most of the weight comes from video/audio codec libraries. Android uses App Bundles, so users only download their device's ABI.
 
@@ -120,6 +126,7 @@ flutter pub add video_forge
 ## More Examples
 
 ### Batch thumbnails (filmstrip)
+
 ```dart
 final result = await batchThumbnails(options: BatchThumbnailOptions(
   inputPath: '/path/to/video.mp4',
@@ -135,6 +142,7 @@ final frames = await batchThumbnailBytes(options: BatchThumbnailBytesOptions(
 ```
 
 ### Frame-accurate preview decode
+
 ```dart
 final frame = await decodePreviewFrameRgba(
   inputPath: '/path/to/video.mp4',
@@ -145,25 +153,11 @@ final frame = await decodePreviewFrameRgba(
 ```
 
 ### Cancel a running job
+
 ```dart
 final jobId = /* from startCompress */;
 await cancelJob(jobId: jobId);
 print('Active jobs: ${await activeJobCount()}');
-```
-
----
-
-## Build & Test
-
-```bash
-# Rust unit tests
-cd packages/video_forge && cargo test -p video_forge
-
-# Dart analyzer
-dart run melos exec --scope=video_forge -- flutter analyze
-
-# Run example app
-cd packages/video_forge/example && flutter run -d macos
 ```
 
 ---
@@ -178,3 +172,4 @@ This package is part of the [MediaForge monorepo](https://github.com/iamudesharm
 
 - [GitHub Repository](https://github.com/iamudesharma/mediaforge)
 - [Issue Tracker](https://github.com/iamudesharma/mediaforge/issues)
+

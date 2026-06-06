@@ -1,27 +1,26 @@
 # image_forge
 
-[![pub package](https://img.shields.io/pub/v/image_forge.svg)](https://pub.dev/packages/image_forge)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[pub package](https://pub.dev/packages/image_forge)
+[License](LICENSE)
 
 > Open-source project maintained by the community. Found a bug or want to contribute? [PRs and issues are welcome](https://github.com/iamudesharma/mediaforge/issues).
 
 Full-featured Rust image processing engine for Flutter — GPU-accelerated filters, face beauty, layer composition, multi-format encoding, mood/swipe presets, LUT support, and GPU preview surface. Runs native Rust on device with SIMD and WGSL compute shaders.
 
-> [!NOTE]
-> This is a **headless engine** — no UI widgets. It provides the full image processing pipeline: filters, face beauty, layer composition, LUTs, and multi-format encoding.
-
 ---
 
 ## Platform Support
 
-| Platform | Status |
-|---|---|
-| Android | Tested (API 21+) |
-| iOS | Tested (15.0+) |
-| macOS | Tested (12+) |
-| Windows | In progress |
-| Linux | In progress |
-| Web | Not supported |
+
+| Platform | Status           |
+| -------- | ---------------- |
+| Android  | Tested (API 21+) |
+| iOS      | Tested (15.0+)   |
+| macOS    | Tested (12+)     |
+| Windows  | In progress      |
+| Linux    | In progress      |
+| Web      | Not supported    |
+
 
 ---
 
@@ -77,13 +76,15 @@ For the full API, see the [Dart API reference](https://pub.dev/documentation/ima
 
 ## Pros & Cons
 
-| Pros | Cons |
-|---|---|
-| Much faster than pure-Dart image processing | No web support |
-| GPU acceleration on supported devices | Increases app size (bundles native Rust) |
-| Android, iOS, macOS (Windows & Linux in progress) | Developer needs Rust toolchain installed |
-| Multi-format: JPEG, PNG, WebP, AVIF | First Android build is slow (4 ABI compiles) |
-| Free and open source (Apache 2.0) | More setup than a pure-Dart image package |
+
+| Pros                                              | Cons                                         |
+| ------------------------------------------------- | -------------------------------------------- |
+| Much faster than pure-Dart image processing       | No web support                               |
+| GPU acceleration on supported devices             | Increases app size (bundles native Rust)     |
+| Android, iOS, macOS (Windows & Linux in progress) | Developer needs Rust toolchain installed     |
+| Multi-format: JPEG, PNG, WebP, AVIF               | First Android build is slow (4 ABI compiles) |
+| Free and open source (Apache 2.0)                 | More setup than a pure-Dart image package    |
+
 
 ---
 
@@ -91,14 +92,14 @@ For the full API, see the [Dart API reference](https://pub.dev/documentation/ima
 
 The package bundles native Rust libraries per platform. Size impact by component:
 
-| Component | Est. Size | What you lose if removed |
-|---|---|---|
-| Core engine (resize, crop, rotate, compress, EXIF, filters, drawing) | **~7–9 MB** | — |
-| GPU compute (wgpu — Metal/Vulkan) | **+4–6 MB** | Hardware-accelerated resize, blur, sharpen, brightness/contrast/saturation/hue |
-| AVIF encode/decode (rav1e) | **+1–2 MB** | AVIF format support |
-| Face beauty engine (skin smooth, eye brighten, lip tint, presets) | **+~100 KB** | Face retouching features |
 
-The beauty engine is tiny (~100 KB) — it's pure Rust without external ML dependencies. The GPU stack and AVIF encoder are the real size drivers.
+| Component                                                            | Est. Size    | What you lose if removed                                                       |
+| -------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------ |
+| Core engine (resize, crop, rotate, compress, EXIF, filters, drawing) | **~7–9 MB**  | —                                                                              |
+| GPU compute (wgpu — Metal/Vulkan)                                    | **+4–6 MB**  | Hardware-accelerated resize, blur, sharpen, brightness/contrast/saturation/hue |
+| AVIF encode/decode (rav1e)                                           | **+1–2 MB**  | AVIF format support                                                            |
+| Face beauty engine (skin smooth, eye brighten, lip tint, presets)    | **+~100 KB** | Face retouching features                                                       |
+
 
 ---
 
@@ -109,6 +110,7 @@ flutter pub add image_forge
 ```
 
 **Prerequisites:** A [Rust toolchain](https://rustup.rs) on your development machine. For Android:
+
 ```bash
 rustup target add aarch64-linux-android armv7-linux-androideabi \
   x86_64-linux-android i686-linux-android
@@ -119,6 +121,7 @@ rustup target add aarch64-linux-android armv7-linux-androideabi \
 ## More Examples
 
 ### Crop & rotate
+
 ```dart
 final cropped = cropImage(
   bytes: bytes, x: 100, y: 100, width: 400, height: 300,
@@ -132,6 +135,7 @@ final rotated = rotateImage(
 ```
 
 ### Overlay with blend mode
+
 ```dart
 final composed = overlayImage(
   baseBytes: photo, overlayBytes: logo,
@@ -141,6 +145,7 @@ final composed = overlayImage(
 ```
 
 ### Progressive decode (low-res preview + full buffer)
+
 ```dart
 final result = decodeProgressiveImage(bytes, previewMaxEdge: 128, fixExif: true);
 // Show result.previewBytes immediately for instant feedback
@@ -148,6 +153,7 @@ final result = decodeProgressiveImage(bytes, previewMaxEdge: 128, fixExif: true)
 ```
 
 ### GPU detection
+
 ```dart
 final gpu = gpuComputeInfo();
 if (gpu != null) print('GPU: ${gpu.deviceName} (${gpu.backend})');
@@ -164,22 +170,6 @@ final thumb = resizeImage(
 
 ---
 
-## Build & Test
-
-```bash
-# Rust unit tests
-cd packages/image_forge/rust && cargo test --features gpu,blurhash
-
-# Run example app
-cd packages/image_forge/example && flutter run -d macos
-
-# CLI benchmarks
-cd packages/image_forge/rust
-cargo run --release --features gpu --bin rust_image_benchmark -- --synthetic -n 5
-```
-
----
-
 ## Contributing
 
 This package is part of the [MediaForge monorepo](https://github.com/iamudesharma/mediaforge). Issues and pull requests are welcome on [GitHub](https://github.com/iamudesharma/mediaforge/issues).
@@ -190,3 +180,4 @@ This package is part of the [MediaForge monorepo](https://github.com/iamudesharm
 
 - [GitHub Repository](https://github.com/iamudesharma/mediaforge)
 - [Issue Tracker](https://github.com/iamudesharma/mediaforge/issues)
+
