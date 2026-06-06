@@ -8,7 +8,7 @@
 Full-featured Rust image processing engine for Flutter — GPU-accelerated filters, face beauty, layer composition, multi-format encoding, mood/swipe presets, LUT support, and GPU preview surface. Runs native Rust on device with SIMD and WGSL compute shaders.
 
 > [!NOTE]
-> This is a **headless engine** (no UI widgets). For the full editor with crop, filters panel, draw, layers, and export UI, use [`image_forge_editor`](../image_forge_editor/). For GPU texture display, see [`pixel_surface`](../pixel_surface/). For lightweight image operations (resize, crop, compress, thumbnails), see [`image_forge_core`](../image_forge_core/) — a smaller version without face beauty or mood/swipe presets.
+> This is a **headless engine** — no UI widgets. It provides the full image processing pipeline: filters, face beauty, layer composition, LUTs, and multi-format encoding.
 
 ---
 
@@ -100,11 +100,6 @@ The package bundles native Rust libraries per platform. Size impact by component
 
 The beauty engine is tiny (~100 KB) — it's pure Rust without external ML dependencies. The GPU stack and AVIF encoder are the real size drivers.
 
-**Package split available:**
-- [`image_forge_core`](../image_forge_core/) — Core ops + filters + drawing (~8-12 MB)
-- `image_forge` — Core + face beauty + mood/swipe presets + LUT + layers + GPU preview surface (~14-18 MB)
-- These are independently versioned. Use `image_forge_core` if you only need image processing without beauty/filter presets.
-
 ---
 
 ## Installation
@@ -195,6 +190,3 @@ This package is part of the [MediaForge monorepo](https://github.com/iamudesharm
 
 - [GitHub Repository](https://github.com/iamudesharma/mediaforge)
 - [Issue Tracker](https://github.com/iamudesharma/mediaforge/issues)
-- [Editor UI Package](../image_forge_editor/)
-- [GPU Texture Bridge](../pixel_surface/)
-- [Live Camera SDK](../image_forge_camera/)

@@ -5,7 +5,7 @@
 
 Flutter GPU **Texture** runtime — register a platform texture, upload RGBA / BGRA frames, and display with `GpuTextureView`. Includes a `PixelBufferPool` for texture recycling and automatic memory-pressure handling on iOS, macOS, and Android.
 
-**No** editor, filters, beauty, or `image_forge`. Use for camera apps, custom renderers, AI preview, or as the display layer for `image_forge_editor`.
+**No** editor, filters, or beauty. Use for camera apps, custom renderers, AI preview, or as a GPU display layer.
 
 ---
 

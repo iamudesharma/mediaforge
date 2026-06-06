@@ -8,7 +8,7 @@
 High-performance Rust video processing engine for Flutter — hardware-accelerated transcoding, frame-accurate previews, audio mixing, and fast thumbnail generation. Powered by native FFmpeg with platform codecs (MediaCodec, VideoToolbox).
 
 > [!NOTE]
-> This is a **low-level engine** (raw FFI bindings). For the developer-friendly SDK with job queues, presets, and cached thumbnails, use [`video_forge_kit`](../video_forge_kit/). See also [`video_forge_cache`](../video_forge_cache/) for optional disk cache.
+> This is a **low-level engine** — raw FFI bindings to Rust + FFmpeg. Provides hardware-accelerated transcoding, frame-accurate previews, audio mixing, and thumbnail generation.
 
 ---
 
@@ -178,5 +178,3 @@ This package is part of the [MediaForge monorepo](https://github.com/iamudesharm
 
 - [GitHub Repository](https://github.com/iamudesharma/mediaforge)
 - [Issue Tracker](https://github.com/iamudesharma/mediaforge/issues)
-- [Developer SDK (video_forge_kit)](../video_forge_kit/)
-- [Disk Cache (video_forge_cache)](../video_forge_cache/)
