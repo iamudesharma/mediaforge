@@ -73,7 +73,7 @@ cd packages/media_forge/rust && cargo test
 cd packages/media_forge && flutter test
 ```
 
-See `docs/ACCEPTANCE.md` for the manual macOS checklist.
+See `../doc/ACCEPTANCE.md` for the manual macOS checklist.
 
 ### FFmpeg with VideoToolbox (required for iPhone 4K HEVC)
 

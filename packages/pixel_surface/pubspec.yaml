@@ -12,8 +12,6 @@ issue_tracker: https://github.com/iamudesharma/mediaforge/issues
 topics:
   - gpu
   - texture
-  - video
-  - flutter
   - ffi
   - cvpixelbuffer
   - surface-texture
