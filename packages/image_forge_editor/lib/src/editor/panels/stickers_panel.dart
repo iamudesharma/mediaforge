@@ -267,47 +267,20 @@ class _StickersPanelState extends State<StickersPanel> {
   }
 
   Widget _tabRow() {
-    return Row(
-      children: [
-        _tabChip(0, 'Emoji'),
-        const SizedBox(width: 8),
-        _tabChip(1, 'Stickers'),
-        const SizedBox(width: 8),
-        _tabChip(2, 'Text'),
+    return SegmentedButton<int>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: 0, label: Text('Emoji'), icon: Icon(Icons.emoji_emotions_outlined, size: 16)),
+        ButtonSegment(value: 1, label: Text('Stickers'), icon: Icon(Icons.sticky_note_2_outlined, size: 16)),
+        ButtonSegment(value: 2, label: Text('Text'), icon: Icon(Icons.text_fields_rounded, size: 16)),
       ],
+      selected: {_tab},
+      onSelectionChanged: (s) => _selectTab(s.first),
     );
   }
 
   void _selectTab(int i) {
     widget.onTabChanged?.call(i);
-  }
-
-  Widget _tabChip(int i, String label) {
-    final selected = _tab == i;
-    return Expanded(
-      child: Material(
-        color: selected
-            ? LuminaTokens.primary.withValues(alpha: 0.2)
-            : LuminaTokens.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
-        child: InkWell(
-          onTap: () => _selectTab(i),
-          borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: selected ? LuminaTokens.primary : LuminaTokens.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   List<Widget> _tabBodyChildren(BuildContext context) {
@@ -386,63 +359,78 @@ class _StickersPanelState extends State<StickersPanel> {
   }
 
   Widget _emojiGrid(BuildContext context) {
-    final cell = _gridCellSize(context);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (var i = 0; i < StickerCatalog.emojis.length; i++)
-          SizedBox(
-            width: cell,
-            height: cell,
-            child: InkWell(
-              onTap: s.hasImage ? () => _addEmoji(StickerCatalog.emojis[i]) : null,
-              child: Center(
-                child: Text(
-                  StickerCatalog.emojis[i],
-                  style: const TextStyle(fontSize: 28, shadows: []),
-                ),
+    final cols = _gridColumns(context);
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        mainAxisSpacing: LuminaTokens.space2,
+        crossAxisSpacing: LuminaTokens.space2,
+      ),
+      itemCount: StickerCatalog.emojis.length,
+      itemBuilder: (context, i) {
+        final glyph = StickerCatalog.emojis[i];
+        return Material(
+          color: LuminaTokens.surfaceContainerHigh.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
+          child: InkWell(
+            onTap: s.hasImage ? () => _addEmoji(glyph) : null,
+            borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
+            child: Center(
+              child: Text(
+                glyph,
+                style: const TextStyle(fontSize: 28, shadows: []),
               ),
             ),
           ),
-      ],
+        );
+      },
     );
   }
 
   Widget _stickerGrid(BuildContext context) {
-    final cell = _gridCellSize(context);
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final (key, _) in StickerCatalog.builtinStickers)
-          SizedBox(
-            width: cell,
-            height: cell,
-            child: InkWell(
-              onTap: s.hasImage ? () => _addBuiltinSticker(key) : null,
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Image.asset(
-                  StickerCatalog.assetPath(key),
-                  package: StickerCatalog.assetPackage,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Icon(
-                    Icons.image_not_supported,
-                    color: LuminaTokens.onSurfaceVariant,
-                  ),
+    final cols = _gridColumns(context);
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        mainAxisSpacing: LuminaTokens.space2,
+        crossAxisSpacing: LuminaTokens.space2,
+        childAspectRatio: 1.0,
+      ),
+      itemCount: StickerCatalog.builtinStickers.length,
+      itemBuilder: (context, i) {
+        final (key, _) = StickerCatalog.builtinStickers[i];
+        return Material(
+          color: LuminaTokens.surfaceContainerHigh.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
+          child: InkWell(
+            onTap: s.hasImage ? () => _addBuiltinSticker(key) : null,
+            borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
+            child: Padding(
+              padding: const EdgeInsets.all(LuminaTokens.space2),
+              child: Image.asset(
+                StickerCatalog.assetPath(key),
+                package: StickerCatalog.assetPackage,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.image_not_supported,
+                  color: LuminaTokens.onSurfaceVariant,
                 ),
               ),
             ),
           ),
-      ],
+        );
+      },
     );
   }
 
-  double _gridCellSize(BuildContext context) {
-    const cols = 6;
-    const spacing = 8.0;
+  int _gridColumns(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
-    return ((w - spacing * (cols - 1)) / cols).clamp(44.0, 72.0);
+    if (w >= 400) return 6;
+    if (w >= 320) return 5;
+    return 4;
   }
 }

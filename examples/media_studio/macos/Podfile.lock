@@ -1,12 +1,12 @@
 PODS:
   - FlutterMacOS (1.0.0)
-  - image_forge (0.0.1):
+  - image_forge (1.0.0):
     - FlutterMacOS
   - media_forge (0.1.0):
     - FlutterMacOS
-  - pixel_surface (1.1.0):
+  - pixel_surface (1.0.0):
     - FlutterMacOS
-  - video_forge (2.3.0):
+  - video_forge (1.0.0):
     - FlutterMacOS
 
 DEPENDENCIES:
@@ -30,10 +30,10 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  image_forge: da26087afee3d46a0fa0def1638e0f4aa03504d7
+  image_forge: 6eb0c8d64d0a68bfa6bc01629f472c83095f6501
   media_forge: 040fd1b0605fb909fded6c789625287e402811f0
-  pixel_surface: 8db9295d88b142073a9f28bb10931e7fb2ae40a1
-  video_forge: 5a941e46f73e3aa30de743d5af852ba1517b9f3e
+  pixel_surface: 415771ab34c2e234ad2f521d5b2e33c0899f54a2
+  video_forge: 6d922efdb9e6dcfc4c6ab230fc602feb453fd4c5
 
 PODFILE CHECKSUM: b8c7280e313b6fb858f9a7520a29ad42f76f5c91
 

@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../panels/tool_panels.dart';
-import '../theme/app_typography.dart';
 import '../theme/lumina_tokens.dart';
 
 /// Scroll padding for tool panels inside the mobile bottom sheet.
 EdgeInsets mobileToolSheetContentPadding({bool compact = true}) {
   return EdgeInsets.fromLTRB(
-    compact ? 16 : LuminaTokens.padMd,
-    compact ? 4 : 8,
-    compact ? 16 : LuminaTokens.padMd,
-    compact ? 24 : LuminaTokens.padMd,
+    compact ? LuminaTokens.space4 : LuminaTokens.space4,
+    compact ? LuminaTokens.space1 : LuminaTokens.space2,
+    compact ? LuminaTokens.space4 : LuminaTokens.space4,
+    compact ? LuminaTokens.space6 : LuminaTokens.space4,
   );
 }
 
-/// Lumina mobile tool sheet — fixed header/strip, independently scrollable panel body.
-class MobileToolSheet extends StatefulWidget {
+/// Legacy helper widget preserved for back-compat. The live mobile layout
+/// uses [_MobileEditorLayoutState] which builds its own draggable sheet
+/// host. This class still exists so older host apps embedding it directly
+/// keep working.
+class MobileToolSheet extends StatelessWidget {
   const MobileToolSheet({
     super.key,
     required this.tool,
@@ -36,32 +38,8 @@ class MobileToolSheet extends StatefulWidget {
   final double maxSheetFraction;
 
   @override
-  State<MobileToolSheet> createState() => _MobileToolSheetState();
-}
-
-class _MobileToolSheetState extends State<MobileToolSheet> {
-  final _panelScroll = ScrollController();
-
-  @override
-  void dispose() {
-    _panelScroll.dispose();
-    super.dispose();
-  }
-
-  void _onSheetDrag(DragUpdateDetails details) {
-    final ctrl = widget.sheetController;
-    if (ctrl == null || !ctrl.isAttached) return;
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || box.size.height <= 0) return;
-    final delta = -details.delta.dy / box.size.height;
-    ctrl.jumpTo(
-      (ctrl.size + delta).clamp(widget.minSheetFraction, widget.maxSheetFraction),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final hasStrip = widget.contextStrip != null;
+    final hasStrip = contextStrip != null;
     final pad = mobileToolSheetContentPadding();
     final bottomSafe = MediaQuery.paddingOf(context).bottom;
 
@@ -75,20 +53,40 @@ class _MobileToolSheetState extends State<MobileToolSheet> {
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            onVerticalDragUpdate: _onSheetDrag,
-            behavior: HitTestBehavior.translucent,
-            child: _SheetDragHeader(
-              tool: widget.tool,
-              onClose: widget.onClose,
-              showTitle: !hasStrip,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+                Center(
+                  child: Container(
+                    width: LuminaTokens.sheetGrabberWidth,
+                    height: LuminaTokens.sheetGrabberHeight,
+                    decoration: BoxDecoration(
+                      color: LuminaTokens.outline.withValues(alpha: 0.45),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Collapse',
+                    onPressed: onClose,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
+                ),
+              ],
             ),
           ),
           if (hasStrip) ...[
             Flexible(
               child: SingleChildScrollView(
-                child: widget.contextStrip!,
+                child: contextStrip!,
               ),
             ),
             const Divider(
@@ -97,70 +95,11 @@ class _MobileToolSheetState extends State<MobileToolSheet> {
               color: LuminaTokens.outlineVariant,
             ),
           ],
-          Expanded(
-            child: ListView(
-              controller: _panelScroll,
-              primary: false,
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: ClampingScrollPhysics(),
-              ),
+          Flexible(
+            child: SingleChildScrollView(
               padding: pad.copyWith(bottom: pad.bottom + bottomSafe),
-              children: [widget.child],
+              child: child,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SheetDragHeader extends StatelessWidget {
-  const _SheetDragHeader({
-    required this.tool,
-    required this.onClose,
-    required this.showTitle,
-  });
-
-  final EditorTool tool;
-  final VoidCallback onClose;
-  final bool showTitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 0, 0, 4),
-      child: Column(
-        children: [
-          const SizedBox(height: 8),
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: LuminaTokens.outline.withValues(alpha: 0.45),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              if (showTitle) ...[
-                Icon(tool.navIcon, size: 18, color: LuminaTokens.primary),
-                const SizedBox(width: 8),
-                Text(
-                  tool.mobileNavLabel.toUpperCase(),
-                  style: AppTypography.sectionCaps(context),
-                ),
-              ],
-              const Spacer(),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: 'Collapse',
-                onPressed: onClose,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-              ),
-            ],
           ),
         ],
       ),

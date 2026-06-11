@@ -1,25 +1,26 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:image_forge_editor/src/image_forge_editor.dart';
+import 'package:image_forge/image_forge.dart';
 
-import '../crop_controller.dart';
 import '../editor_session.dart';
 import '../panels/tool_panels.dart';
 import '../services/filter_descriptor.dart';
 import '../services/mood_filter_names.dart';
-import '../services/rust_worker.dart';
 import '../theme/lumina_tokens.dart';
+import '../widgets/chip_pill.dart';
 import '../widgets/control_widgets.dart';
 import '../widgets/lumina_color_picker.dart';
+import '../widgets/value_chip_slider.dart';
 
-/// Primary tool controls shown above the bottom nav (Instagram-style strip).
+/// Per-tool context strip — only used for tools whose controls are short
+/// enough to fit above the bottom nav without a full sheet (Filters and
+/// Paint, today).
 class ToolContextStrip extends StatelessWidget {
   const ToolContextStrip({
     super.key,
     required this.tool,
     required this.session,
-    this.cropController,
     this.stickersTabIndex = 0,
     this.onStickersTabChanged,
     this.adjustKind = AdjustControlKind.brightness,
@@ -28,7 +29,6 @@ class ToolContextStrip extends StatelessWidget {
 
   final EditorTool tool;
   final EditorSession session;
-  final CropController? cropController;
   final int stickersTabIndex;
   final ValueChanged<int>? onStickersTabChanged;
   final AdjustControlKind adjustKind;
@@ -37,19 +37,13 @@ class ToolContextStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (tool) {
-        EditorTool.filters => _FiltersStrip(session: session),
-        EditorTool.adjust => _AdjustStrip(
-            selected: adjustKind,
-            onSelected: onAdjustKindChanged,
-          ),
-        EditorTool.transform when cropController != null =>
-          _TransformStrip(session: session, crop: cropController!),
-        EditorTool.paint => _PaintColorStrip(session: session),
-        EditorTool.stickers => _StickersTabStrip(
-            tabIndex: stickersTabIndex,
-            onTabChanged: onStickersTabChanged,
-          ),
-        _ => const SizedBox.shrink(),
+      EditorTool.filters => _FiltersStrip(session: session),
+      EditorTool.paint => _PaintColorStrip(session: session),
+      EditorTool.stickers => _StickersTabStrip(
+          tabIndex: stickersTabIndex,
+          onTabChanged: onStickersTabChanged,
+        ),
+      _ => const SizedBox.shrink(),
     };
   }
 }
@@ -97,15 +91,13 @@ class _FiltersStripState extends State<_FiltersStrip> {
     final moodLabels = ['Original', ..._moods.map(moodFilterDisplayName)];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: LuminaTokens.space3,
+        vertical: LuminaTokens.space2,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Presets',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 4),
           LuminaFilterStrip(
             labels: presetLabels,
             selectedIndex: _selectedPreset,
@@ -122,12 +114,45 @@ class _FiltersStripState extends State<_FiltersStrip> {
               );
             },
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Mood grades',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 4),
+          if (_selectedPreset > 0) ...[
+            const SizedBox(height: LuminaTokens.space3),
+            ValueChipSlider(
+              label: 'Intensity',
+              value: _presetStrength,
+              min: 0,
+              max: 100,
+              divisions: 20,
+              formatter: (v) => '${v.round()}%',
+              onChanged: session.hasImage && !session.busy
+                  ? (v) {
+                      setState(() => _presetStrength = v);
+                      final d = _activePresetDescriptor;
+                      if (d == null) return;
+                      session.applyFilter(
+                        label: 'Preview',
+                        descriptor: d,
+                        livePreview: true,
+                        fromBase: true,
+                      );
+                    }
+                  : null,
+              onChangeEnd: session.hasImage && !session.busy
+                  ? (_) {
+                      final d = _activePresetDescriptor;
+                      if (d == null) return;
+                      session.cancelDebounced();
+                      session.applyFilter(
+                        label: 'Preset',
+                        descriptor: d,
+                        saveUndo: true,
+                        fromBase: true,
+                      );
+                    }
+                  : null,
+              enabled: session.hasImage && !session.busy,
+            ),
+          ],
+          const SizedBox(height: LuminaTokens.space3),
           LuminaFilterStrip(
             labels: moodLabels,
             selectedIndex: _selectedMood,
@@ -143,101 +168,47 @@ class _FiltersStripState extends State<_FiltersStrip> {
               );
             },
           ),
+          if (_selectedMood > 0) ...[
+            const SizedBox(height: LuminaTokens.space3),
+            ValueChipSlider(
+              label: 'Intensity',
+              value: _moodStrength,
+              min: 0,
+              max: 100,
+              divisions: 20,
+              formatter: (v) => '${v.round()}%',
+              onChanged: session.hasImage && !session.busy
+                  ? (v) {
+                      setState(() => _moodStrength = v);
+                      final p = _activeMoodPreset;
+                      if (p == null) return;
+                      unawaited(
+                        session.setMoodFilter(
+                          preset: p,
+                          strength: _moodStrength / 100,
+                          livePreview: true,
+                        ),
+                      );
+                    }
+                  : null,
+              onChangeEnd: session.hasImage && !session.busy
+                  ? (_) {
+                      final p = _activeMoodPreset;
+                      if (p == null) return;
+                      unawaited(
+                        session.setMoodFilter(
+                          preset: p,
+                          strength: _moodStrength / 100,
+                          commit: true,
+                        ),
+                      );
+                    }
+                  : null,
+              enabled: session.hasImage && !session.busy,
+            ),
+          ],
         ],
       ),
-    );
-  }
-}
-
-class _AdjustStrip extends StatelessWidget {
-  const _AdjustStrip({
-    required this.selected,
-    this.onSelected,
-  });
-
-  final AdjustControlKind selected;
-  final ValueChanged<AdjustControlKind>? onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: ActionChipRow<AdjustControlKind>(
-        horizontal: true,
-        items: AdjustControlKind.values,
-        label: (k) => k.stripLabel,
-        selected: selected,
-        onSelected: onSelected ?? (_) {},
-      ),
-    );
-  }
-}
-
-class _TransformStrip extends StatelessWidget {
-  const _TransformStrip({required this.session, required this.crop});
-
-  final EditorSession session;
-  final CropController crop;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: crop,
-      builder: (context, _) {
-        final s = session;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: ActionChipRow<CropAspect>(
-                  horizontal: true,
-                  items: CropAspect.values,
-                  label: (a) => a.label,
-                  selected: crop.aspect,
-                  onSelected: s.busy ? (_) {} : crop.setAspect,
-                ),
-              ),
-              IconButton(
-                tooltip: 'Rotate 90° CCW',
-                onPressed: s.hasImage && !s.busy
-                    ? () => s.runBytes(
-                          'Rotate',
-                          (input) => RustWorker.bytesTransform(
-                            bytes: input,
-                            op: 'rotate',
-                            params: {
-                              'rotation': Rotation.rotate270.index,
-                              'format': s.outputFormat.index,
-                              'quality': s.quality,
-                            },
-                          ),
-                        )
-                    : null,
-                icon: const Icon(Icons.rotate_left, size: 22),
-              ),
-              IconButton(
-                tooltip: 'Rotate 90° CW',
-                onPressed: s.hasImage && !s.busy
-                    ? () => s.runBytes(
-                          'Rotate',
-                          (input) => RustWorker.bytesTransform(
-                            bytes: input,
-                            op: 'rotate',
-                            params: {
-                              'rotation': Rotation.rotate90.index,
-                              'format': s.outputFormat.index,
-                              'quality': s.quality,
-                            },
-                          ),
-                        )
-                    : null,
-                icon: const Icon(Icons.rotate_right, size: 22),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
@@ -257,7 +228,10 @@ class _PaintColorStripState extends State<_PaintColorStrip> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: LuminaTokens.space3,
+        vertical: LuminaTokens.space2,
+      ),
       child: LuminaColorSwatchRow(
         swatchSize: 28,
         selected: s.paintColor,
@@ -283,22 +257,17 @@ class _StickersTabStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          for (final e in [(0, 'Emoji'), (1, 'Stickers'), (2, 'Text')])
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(e.$2),
-                selected: tabIndex == e.$1,
-                onSelected: onTabChanged == null
-                    ? null
-                    : (_) => onTabChanged!(e.$1),
-              ),
-            ),
-        ],
+      padding: const EdgeInsets.symmetric(
+        horizontal: LuminaTokens.space3,
+        vertical: LuminaTokens.space2,
+      ),
+      child: ChipPillRow<int>(
+        items: const [0, 1, 2],
+        label: (i) => ['Emoji', 'Stickers', 'Text'][i],
+        selected: tabIndex,
+        onSelected: onTabChanged,
       ),
     );
   }
 }
+

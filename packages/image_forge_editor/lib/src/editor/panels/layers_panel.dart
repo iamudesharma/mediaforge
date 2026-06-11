@@ -53,11 +53,35 @@ class LayersPanel extends StatelessWidget {
       builder: (context, _) {
         final stack = s.layerStack;
         if (stack.isEmpty) {
-          return Text(
-            'No layers yet. Add stickers, text, or paint from other tools.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+          return Container(
+            padding: const EdgeInsets.symmetric(vertical: LuminaTokens.space6),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.layers_outlined,
+                  size: 32,
+                  color: LuminaTokens.onSurfaceMuted,
                 ),
+                const SizedBox(height: LuminaTokens.space3),
+                Text(
+                  'No layers yet',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: LuminaTokens.onSurface,
+                  ),
+                ),
+                const SizedBox(height: LuminaTokens.space1),
+                Text(
+                  'Add stickers, text, or paint from other tools.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: LuminaTokens.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
           );
         }
 
@@ -157,17 +181,10 @@ class LayersPanel extends StatelessWidget {
               },
             ),
             if (!compact) ...[
-              const SizedBox(height: LuminaTokens.padMd),
-              const SectionHeader(
-                'Watermark',
-                subtitle: 'Legacy second-image overlay',
-              ),
-              Text(
-                'Use the Overlay tool tab for watermark placement on the base image.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
+              const SizedBox(height: LuminaTokens.space4),
+              // Note: the legacy "Watermark" stub was removed in the Phase 6
+              // cleanup — watermark placement now lives in the Overlay tool
+              // (EditorTool.overlay → OverlayPanel).
             ],
           ],
         );

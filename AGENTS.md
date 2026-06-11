@@ -287,6 +287,69 @@ If audio sequence appears but source audio is silent while overlay plays, check 
 - **media_forge needs FFmpeg with VideoToolbox** for HW decode on macOS. Run `bash scripts/build-ffmpeg-macos-vt.sh` first, then `bash scripts/run-rust-media-macos.sh`. Homebrew FFmpeg works for SW decode but lacks `hevc_videotoolbox` HW accel.
 - **media_forge is not yet in CI** — `.github/workflows/ci.yml` does not include `media_forge` analyze/test steps. Run them manually: `cd packages/media_forge && flutter analyze --no-fatal-infos` and `cd packages/media_forge/rust && cargo test`.
 
+## **image_forge_editor UI conventions**
+
+The Lumina Darkroom editor (`packages/image_forge_editor/`) is a **dark-only, single-accent (mint `#4EDEA3`) editor**. Use these conventions when adding or refactoring UI:
+
+### Design tokens (`lib/src/editor/theme/lumina_tokens.dart`)
+
+| Use | Read from | Don't |
+| --- | --- | --- |
+| Surface color | `LuminaTokens.surfaceContainerLow` (chrome) / `surfaceContainer` (panels) / `surfaceContainerHigh` (chips) / `canvas` (scaffold) | hardcode `Color(0xFF…)` |
+| Foreground | `LuminaTokens.onSurface` / `onSurfaceVariant` / `onSurfaceMuted` | `Colors.white`, `Colors.white70` |
+| Accent | `LuminaTokens.accent` (mint) / `accentContainer` (selected) | the legacy `primary` (kept as an alias) |
+| Spacing | `LuminaTokens.space1`..`space8` (4-pt scale) | ad-hoc integers |
+| Radius | `LuminaTokens.radiusXs`..`radius2xl` | `BorderRadius.circular(8)` |
+| Touch target | `LuminaTokens.touchTarget = 44` for tool buttons | `IconButton` without explicit size |
+| Breakpoints | `LuminaTokens.breakpointPhone` (600) / `breakpointTablet` (900) / `breakpointDesktop` (1100) / `breakpointLarge` (1440) | scattered `width >= 900` checks |
+
+### Reusable widgets (exported from `image_forge_editor`)
+
+| Widget | Use for | Notes |
+| --- | --- | --- |
+| `ValueChipSlider` | All sliders (Adjust, Beauty, Paint, Shapes, Overlay, Transform) | CapCut-style value bubble, double-tap reset, center detent haptic. |
+| `ChipPill` / `ChipPillRow` / `ChipPillWrap` | Choice-of-N selections | 32-px tall, accent fill when selected. |
+| `ToolButton` | Mobile bottom nav + "More" sheet + desktop rail | 44-pt hit target, filled/outlined icon swap. |
+| `FrostedBar` | Mobile top/bottom bars, desktop inspector header, desktop top bar | `BackdropFilter` blur over translucent surface. |
+| `InspectorPanel` | Desktop right-side properties panel | Titled header (tool name + Reset/Done), scroll-fade body, status footer. |
+| `CategorizedToolRail` | Desktop left rail with Edit / Decorate / Manage sections | Built atop `NavigationRail` styling but as a custom scrollable column. |
+| `FilterThumbnail` | Filter strip cells | Real thumbnails cached in `FilterThumbnailCache` (LRU 32). |
+| `AdjustPageViewPanel` | The Adjust tool | Horizontal `PageView` of 12 adjustments (Brightness, Contrast, Saturation, Warmth, Hue, Fade, Vignette, Highlights, Shadows, Sharpen, Structure, Grain). |
+
+### Selected state vocabulary
+- **Filled vs. outlined icon**: use `EditorIcons.filled(tool)` for selected, `EditorIcons.outlined(tool)` for unselected. The accent color is `LuminaTokens.accent` for filled, `onSurfaceVariant` for outlined.
+- **Underline** at the bottom of mobile tool buttons (2 px, 16 px wide, accent).
+- **Container fill** in the desktop rail and chip pills.
+- **Border** in cards and inspector panel sections.
+
+### Typography
+- `AppTypography.toolName` (17 pt w600) for the active tool name in the title bar and inspector header — **sentence case** (no `.toUpperCase()` for buttons or titles).
+- `AppTypography.sectionCaps` (11 pt w600, +0.4 letter-spacing) for inspector section labels only.
+- `AppTypography.numericValue` / `sliderValueBubble` (mono 12 pt) for slider values, accent color.
+- `AppTypography.navLabel` (11 pt w500) for tool palette labels.
+
+### Motion
+- `EditorMotion.fast` (150 ms) for icon swaps, chip selection.
+- `EditorMotion.medium` (250 ms) for panel cross-fade.
+- `EditorMotion.slow` (400 ms) for sheet enter.
+- All durations use `Curves.fastOutSlowIn` (Material 3 standard).
+
+### Layout
+- **Mobile (< 900 dp)**: 5 curated primary tools in the bottom nav + a "More" overflow sheet. Frosted top bar with the active tool name. Draggable tool sheet with grabber.
+- **Desktop (≥ 900 dp)**: `CategorizedToolRail` on the left, `LivePreview` in the center, `InspectorPanel` on the right (widens to 480 px at ≥ 1440 dp). Grouped top bar with `[title] | [status] | [history] | [compare] | [export]`.
+- **Always** route layout decisions through `LuminaTokens.breakpoint*` constants — no scattered `width >= 900` checks.
+
+### New log tags
+In addition to the tags in the Logging section above, the editor adds:
+
+| Tag | File | Log after |
+| --- | --- | --- |
+| `[EditorChrome]` | `lib/src/editor/layout/mobile_editor_chrome.dart` and `editor_screen.dart` | Tool selection, sheet open/close, layout mode choice. |
+| `[AdjustStrip]` | `lib/src/editor/panels/adjust_pageview_panel.dart` | Page change, `Auto` pressed, Reset pressed. |
+| `[FilterThumb]` | `lib/src/editor/widgets/filter_thumbnail.dart` | Bake start, cache hit, cache miss + decode done, decode fail. |
+
+Use `debugPrint('[Tag] event key=value')` style for these.
+
 ## **CI**
 
 `.github/workflows/ci.yml` runs on `ubuntu-latest`: melos bootstrap → per-package analyze → per-package test → Rust video test. No native build step in CI (Dart-only checks).

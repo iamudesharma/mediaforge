@@ -21,14 +21,17 @@ import 'panels/tool_panels.dart';
 import 'image_forge_editor_config.dart';
 import 'models/beauty_params.dart';
 import 'services/beauty_look_names.dart';
+import 'theme/app_typography.dart';
 import 'theme/editor_motion.dart';
 import 'theme/lumina_tokens.dart';
+import 'widgets/categorized_tool_rail.dart';
 import 'widgets/compare_hold_button.dart';
+import 'widgets/frosted_bar.dart';
+import 'widgets/inspector_panel.dart';
 import 'services/face_analysis_service.dart';
 import 'package:image_forge_camera/image_forge_camera.dart';
 import 'services/sticker_image_import.dart';
 import 'services/paint_hit_test.dart';
-import 'widgets/editor_tool_rail.dart';
 import 'widgets/live_preview.dart';
 
 /// Full-screen editor layout (preview + tool rail). Prefer [RustImageEditorWidget] for drop-in use.
@@ -93,7 +96,7 @@ class _RustImageEditorViewState extends ConsumerState<RustImageEditorView> {
     final mode = widget.config.layoutMode;
     if (mode == EditorLayoutMode.sidebar) return true;
     if (mode == EditorLayoutMode.immersive) return false;
-    return MediaQuery.sizeOf(context).width >= 900;
+    return MediaQuery.sizeOf(context).width >= LuminaTokens.breakpointTablet;
   }
 
   @override
@@ -240,25 +243,162 @@ class _RustImageEditorViewState extends ConsumerState<RustImageEditorView> {
   }
 
   Widget _buildWide(BuildContext context) {
-    final extended = MediaQuery.sizeOf(context).width >= 1100;
-    return Row(
+    final width = MediaQuery.sizeOf(context).width;
+    final sections = defaultToolSections(_tools);
+    return Column(
       children: [
-        EditorToolRail(
-          tools: _tools,
-          selectedTool: _tool,
-          extended: extended,
-          onSelected: (t) => setState(() => _tool = t),
-        ),
-        const VerticalDivider(width: 1),
-        Expanded(flex: 3, child: _buildPreviewColumn(context, immersive: false)),
+        _buildDesktopTopBar(context),
+        const Divider(height: 1),
         Expanded(
-          flex: 2,
-          child: ColoredBox(
-            color: LuminaTokens.surfaceContainerLow,
-            child: _toolPanelHost(compact: false),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              CategorizedToolRail(
+                tools: _tools,
+                selectedTool: _tool,
+                sections: sections,
+                onSelected: (t) => setState(() => _tool = t),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                child: ColoredBox(
+                  color: LuminaTokens.canvas,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: _previewListenableBuilder(
+                              (context) => _buildPreview(
+                                context,
+                                immersive: false,
+                                overlayBottomInset: 0,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _MetaChips(
+                            session: _session,
+                            statusListenable:
+                                ref.watch(editorStatusListenableProvider),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              InspectorPanel(
+                tool: _tool,
+                onReset: _session.hasImage
+                    ? () {
+                        _session.resetToSource();
+                      }
+                    : null,
+                onDone: _tool == EditorTool.transform && _session.hasImage
+                    ? () => _session.applyCrop(crop: _cropController)
+                    : null,
+                statusText: _session.status,
+                width: width >= LuminaTokens.breakpointLarge
+                    ? LuminaTokens.desktopInspectorMaxWidth
+                    : LuminaTokens.desktopInspectorWidth,
+                child: _toolPanelHost(compact: false),
+              ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDesktopTopBar(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return FrostedBar(
+      height: 48,
+      borderBottom: true,
+      color: LuminaTokens.surfaceContainerLow.withValues(alpha: 0.85),
+      padding: const EdgeInsets.symmetric(horizontal: LuminaTokens.space4),
+      child: Row(
+        children: [
+          Text(
+            widget.config.title,
+            style: AppTypography.toolName(context).copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (width >= LuminaTokens.breakpointDesktop) ...[
+            const SizedBox(width: LuminaTokens.space4),
+            _DesktopBarSeparator(),
+            const SizedBox(width: LuminaTokens.space4),
+            Expanded(
+              child: ListenableBuilder(
+                listenable: ref.watch(editorStatusListenableProvider),
+                builder: (context, _) {
+                  return AnimatedSwitcher(
+                    duration: EditorMotion.fast,
+                    child: Text(
+                      _session.status,
+                      key: ValueKey(_session.status),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: LuminaTokens.onSurfaceVariant,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ] else
+            const Spacer(),
+          const _DesktopBarSeparator(),
+          const SizedBox(width: LuminaTokens.space2),
+          IconButton(
+            tooltip: 'Undo',
+            onPressed: _session.canUndo && !_session.busy
+                ? () => unawaited(_session.undo())
+                : null,
+            icon: const Icon(Icons.undo_rounded, size: 20),
+          ),
+          IconButton(
+            tooltip: 'Redo',
+            onPressed: _session.canRedo && !_session.busy
+                ? () => unawaited(_session.redo())
+                : null,
+            icon: const Icon(Icons.redo_rounded, size: 20),
+          ),
+          if (widget.config.showCompare) ...[
+            const SizedBox(width: 4),
+            CompareHoldButton(
+              enabled: _session.hasImage,
+              active: _compareHeld,
+              onHoldStart: _startCompareHold,
+              onHoldEnd: _endCompareHold,
+            ),
+          ],
+          if (_session.hasImage) ...[
+            const SizedBox(width: LuminaTokens.space2),
+            FilledButton.icon(
+              onPressed: _session.busy
+                  ? null
+                  : () async {
+                      final messenger = ScaffoldMessenger.maybeOf(context);
+                      final msg = await _session.exportAndSave(
+                        customSave: widget.config.onExport,
+                      );
+                      if (!context.mounted) return;
+                      messenger?.showSnackBar(SnackBar(content: Text(msg)));
+                    },
+              icon: const Icon(Icons.save_alt_rounded, size: 18),
+              label: const Text('Export'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -284,11 +424,8 @@ class _RustImageEditorViewState extends ConsumerState<RustImageEditorView> {
       contextStripBuilder: (tool) => ToolContextStrip(
         tool: tool,
         session: _session,
-        cropController: _cropController,
         stickersTabIndex: _stickersTab,
         onStickersTabChanged: (i) => setState(() => _stickersTab = i),
-        adjustKind: _adjustKind,
-        onAdjustKindChanged: (k) => setState(() => _adjustKind = k),
       ),
       overlay: _overlay.kind != EditorOverlayKind.none
           ? EditorOverlayPanel(
@@ -340,30 +477,7 @@ class _RustImageEditorViewState extends ConsumerState<RustImageEditorView> {
     );
   }
 
-  Widget _buildPreviewColumn(BuildContext context, {required bool immersive}) {
-    return Padding(
-      padding: immersive ? EdgeInsets.zero : const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!immersive) ...[
-            _buildTopBar(context),
-            _MetaChips(session: _session, statusListenable: ref.watch(editorStatusListenableProvider)),
-            const SizedBox(height: 8),
-          ],
-          Expanded(
-            child: _previewListenableBuilder(
-              (context) => _buildPreview(
-                context,
-                immersive: immersive,
-                overlayBottomInset: 0,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildPreview(
     BuildContext context, {
@@ -537,84 +651,12 @@ class _RustImageEditorViewState extends ConsumerState<RustImageEditorView> {
           : _session.liveCameraActive
               ? 'Waiting for camera…'
               : immersive
-                  ? 'Tap Import to open a photo'
-                  : 'No image selected',
+                  ? 'Tap the + button to open a photo'
+                  : 'Open a photo to start editing',
     );
   }
 
-  Widget _buildTopBar(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.config.title.toUpperCase(),
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                ListenableBuilder(
-                  listenable: ref.watch(editorStatusListenableProvider),
-                  builder: (context, _) {
-                    return AnimatedSwitcher(
-                      duration: EditorMotion.fast,
-                      child: Text(
-                        _session.status,
-                        key: ValueKey(_session.status),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          if (_session.hasUncommittedLayers)
-            FilledButton.tonal(
-              onPressed: _session.busy
-                  ? null
-                  : () => unawaited(_session.commitLayersToCanvas()),
-              child: const Text('Apply'),
-            ),
-          if (_tool == EditorTool.transform && _session.hasImage)
-            FilledButton(
-              onPressed: _session.busy
-                  ? null
-                  : () => _session.applyCrop(crop: _cropController),
-              child: const Text('Done'),
-            ),
-          IconButton(
-            tooltip: 'Undo',
-            onPressed: _session.canUndo && !_session.busy
-                ? () => unawaited(_session.undo())
-                : null,
-            icon: const Icon(Icons.undo),
-          ),
-          IconButton(
-            tooltip: 'Redo',
-            onPressed: _session.canRedo && !_session.busy
-                ? () => unawaited(_session.redo())
-                : null,
-            icon: const Icon(Icons.redo),
-          ),
-          if (widget.config.showCompare)
-            CompareHoldButton(
-              enabled: _session.hasImage,
-              active: _compareHeld,
-              onHoldStart: _startCompareHold,
-              onHoldEnd: _endCompareHold,
-            ),
-        ],
-      ),
-    );
-  }
+
 }
 
 class _MetaChips extends StatelessWidget {
@@ -726,6 +768,19 @@ class _AnimatedChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DesktopBarSeparator extends StatelessWidget {
+  const _DesktopBarSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 20,
+      color: LuminaTokens.outlineVariant,
     );
   }
 }

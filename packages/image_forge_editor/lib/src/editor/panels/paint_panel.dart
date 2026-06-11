@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../editor_session.dart';
 import '../models/overlay_layer.dart';
 import '../theme/lumina_tokens.dart';
+import '../widgets/chip_pill.dart';
 import '../widgets/control_widgets.dart';
 import '../widgets/lumina_color_picker.dart';
 
@@ -156,46 +157,36 @@ class _PaintPanelState extends State<PaintPanel> {
       const SectionHeader('Tools', subtitle: 'Utility paint operations'),
       Row(
         children: [
-          ChoiceChip(
-            label: const Text('Eraser'),
+          ChipPill(
+            label: 'Eraser',
             selected: _brush == PaintBrushKind.eraser,
-            onSelected: (selected) {
-              if (selected) {
-                setState(() {
-                  _brush = PaintBrushKind.eraser;
-                  _applyToSession();
-                });
-              }
+            onTap: () {
+              setState(() {
+                _brush = PaintBrushKind.eraser;
+                _applyToSession();
+              });
             },
           ),
           if (_brush == PaintBrushKind.eraser) ...[
-            const SizedBox(width: LuminaTokens.padMd),
-            Text('Mode:', style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(width: 8),
-            ToggleButtons(
-              constraints: const BoxConstraints(minHeight: 32, minWidth: 70),
-              borderRadius: BorderRadius.circular(8),
-              isSelected: [
-                _eraserMode == EraserMode.partial,
-                _eraserMode == EraserMode.object,
+            const SizedBox(width: LuminaTokens.space2),
+            SegmentedButton<EraserMode>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: EraserMode.partial, label: Text('Partial')),
+                ButtonSegment(value: EraserMode.object, label: Text('Object')),
               ],
-              onPressed: (index) {
-                setState(() {
-                  _eraserMode = index == 0 ? EraserMode.partial : EraserMode.object;
-                });
+              selected: {_eraserMode},
+              onSelectionChanged: (sel) {
+                setState(() => _eraserMode = sel.first);
               },
-              children: const [
-                Text('Partial'),
-                Text('Object'),
-              ],
             ),
           ],
         ],
       ),
       if (showFilledToggle) ...[
-        const SizedBox(height: LuminaTokens.padMd),
-        SwitchListTile(
-          title: const Text('Fill Shape'),
+        const SizedBox(height: LuminaTokens.space3),
+        SwitchListTile.adaptive(
+          title: const Text('Fill shape'),
           subtitle: const Text('Render as a solid color fill instead of outline'),
           value: _filled,
           contentPadding: EdgeInsets.zero,

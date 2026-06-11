@@ -132,12 +132,6 @@ class RustImageEditorConfig {
   /// Strength multiplier for the swipe combo looks (0.0 to 1.0).
   final double swipeLookStrength;
 
-  @Deprecated('Use enableSwipeLooks')
-  bool get enableSwipeMoodFilters => enableSwipeLooks;
-
-  @Deprecated('Use swipeLookStrength')
-  double get swipeMoodFilterStrength => swipeLookStrength;
-
   /// Swipe left/right inside the beauty tab for tap looks.
   final bool enableSwipeBeautyLooks;
 

@@ -90,6 +90,9 @@ class _PhotoEditorFlowState extends State<PhotoEditorFlow> {
               try {
                 // 2. Save a local temp copy so the Home Hub has a file path to preview
                 final tempDir = await getTemporaryDirectory();
+                if (!await tempDir.exists()) {
+                  await tempDir.create(recursive: true);
+                }
                 final file = File('${tempDir.path}/edited_${DateTime.now().millisecondsSinceEpoch}.jpg');
                 await file.writeAsBytes(bytes);
                 path = file.path;

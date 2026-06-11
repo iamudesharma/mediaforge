@@ -9,9 +9,11 @@ Flutter media editing toolkit — high-performance image and video processing po
 | Package | Role |
 |---------|------|
 | [`pixel_surface`](packages/pixel_surface/) | GPU `Texture` bridge only |
-| [`image_forge`](packages/image_forge/) | Rust engine + FRB |
+| [`image_forge`](packages/image_forge/) | Rust engine + FRB (full feature set with face/GPU/presets) |
+| [`image_forge_core`](packages/image_forge_core/) | Lightweight Rust image processing engine (no UI/presets) |
 | [`image_forge_editor`](packages/image_forge_editor/) | Editor UI |
 | [`image_forge_camera`](packages/image_forge_camera/) | Live camera (mobile) |
+| [`media_forge`](packages/media_forge/) | Media playback runtime (decode, clock, texture, audio mixing) |
 | [`video_forge`](packages/video_forge/) | Video Rust engine + FRB + FFmpeg |
 | [`video_forge_kit`](packages/video_forge_kit/) | Video compress / thumbnails SDK |
 | [`video_forge_cache`](packages/video_forge_cache/) | Optional disk thumbnail cache |
@@ -142,21 +144,25 @@ flutter_rust_bridge_codegen generate
 
 ```
 packages/
-├── image_forge/      # Rust core + FRB
+├── image_forge/      # Rust core + FRB (full features, face/GPU/presets)
 │   └── rust/src/
 │       ├── api/          # FRB exports
 │       ├── resize.rs
 │       ├── filters.rs
 │       ├── exif.rs
 │       └── ...
+├── image_forge_core/  # Lightweight Rust image processing engine (no UI/presets)
+│   └── rust/src/
+│       ├── api/          # FRB exports
+│       └── ...
 ├── image_forge_editor/    # Editor UI (Riverpod)
 │   └── lib/
 │       └── ...
 ├── pixel_surface/     # GPU Texture bridge
 ├── image_forge_camera/  # Live camera YUV stream
+├── media_forge/   # Media playback runtime (real-time audio mixer)
 ├── video_forge/ # Video Rust engine + FFmpeg
 ├── video_forge_kit/ # Video compress/thumbnails SDK
-├── media_forge/   # Media playback runtime
 └── video_forge_cache/ # Optional disk cache
 
 examples/

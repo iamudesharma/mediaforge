@@ -4,9 +4,11 @@
 |---------|------|------|---------|
 | `pixel_surface` | [`pixel_surface/`](pixel_surface/) | GPU Flutter `Texture` bridge (P0.2) | [example/](pixel_surface/example/) |
 | `image_forge` | [`image_forge/`](image_forge/) | Rust engine + FRB + face native (P0.3) | [example/](image_forge/example/) |
+| `image_forge_core` | [`image_forge_core/`](image_forge_core/) | Lightweight Rust image processing engine | [example/](image_forge_core/example/) |
 | `image_forge_editor` | [`image_forge_editor/`](image_forge_editor/) | Editor UI + assets (P0.4) | [mediaforge/example/](../mediaforge/example/) |
 | `image_forge_camera` | [`image_forge_camera/`](image_forge_camera/) | Live camera stream (P0.5) | Editor Beauty → Live camera |
 | `image_forge_editor` (shim) | [`../mediaforge/`](../mediaforge/) | Re-exports `image_forge_editor` | Same as editor |
+| `media_forge` | [`media_forge/`](media_forge/) | Media playback runtime (real-time audio mixing) | [example/](media_forge/example/) |
 | `video_forge` | [`video_forge/`](video_forge/) | Video Rust engine + FRB + FFmpeg hook | [example/](video_forge/example/) |
 | `video_forge_kit` | [`video_forge_kit/`](video_forge_kit/) | Video compress / thumbnails SDK | [example/](video_forge_kit/example/) |
 | `video_forge_cache` | [`video_forge_cache/`](video_forge_cache/) | Disk LRU thumbnail cache (optional) | — |

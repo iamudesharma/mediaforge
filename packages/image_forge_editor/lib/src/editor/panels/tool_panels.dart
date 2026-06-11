@@ -16,9 +16,9 @@ import '../services/mood_filter_names.dart';
 import '../services/image_source_picker.dart';
 import '../services/rust_worker.dart';
 import '../theme/lumina_tokens.dart';
-import '../layout/mobile_tool_sheet.dart';
 import '../widgets/control_widgets.dart';
 import '../widgets/editor_animations.dart';
+import 'adjust_pageview_panel.dart';
 import 'blank_canvas_sheet.dart';
 import 'layers_panel.dart';
 import 'paint_panel.dart';
@@ -176,12 +176,7 @@ class ToolPanelHost extends StatelessWidget {
             session: session,
             stripHostedExternally: stripHostedExternally,
           ),
-        EditorTool.adjust => AdjustPanel(
-            session: session,
-            selectedKind: selectedAdjustKind,
-            onSelectedKindChanged: onAdjustKindChanged,
-            compactStripMode: stripHostedExternally,
-          ),
+        EditorTool.adjust => AdjustPageViewPanel(session: session),
         EditorTool.paint => PaintPanel(
             session: session,
             scrollController: scrollController,

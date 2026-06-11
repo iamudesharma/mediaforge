@@ -4,7 +4,7 @@ import 'package:flutter/material.dart' hide ImageInfo;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_forge_editor/src/editor/editor_screen.dart';
 import 'package:image_forge_editor/src/editor/widgets/live_preview.dart';
-import 'package:image_forge_editor/src/editor/widgets/editor_tool_rail.dart';
+import 'package:image_forge_editor/src/editor/widgets/categorized_tool_rail.dart';
 import 'package:image_forge_editor/src/editor/editor_session.dart';
 import 'package:image_forge_editor/src/editor/layout/editor_layout.dart';
 import 'package:image_forge_editor/src/editor/models/layer_transform.dart';
@@ -47,8 +47,8 @@ void main() {
     session.notifyPreviewChanged();
     await tester.pump();
 
-    // Open stickers tool (bottom nav).
-    await tester.tap(find.text('Stickers'));
+    // Open stickers tool (bottom nav, icon-only ToolButton). Use the tooltip.
+    await tester.tap(find.byTooltip('Stickers'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -92,23 +92,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
-    expect(find.text('Import'), findsOneWidget);
+    // Import is no longer in the primary mobile bottom nav (curated 5),
+    // so don't assert it here.
 
-    await tester.tap(find.text('Filters'));
+    await tester.tap(find.byTooltip('Filters'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
     expect(find.text('Original'), findsWidgets);
 
-    await tester.tap(find.text('Filters'));
+    // Dismiss the sheet via the "Cancel" button so the bottom nav becomes
+    // accessible again (in the new mobile layout the bottom nav is hidden
+    // while a tool sheet is open).
+    await tester.tap(find.text('Cancel'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    // Re-tap same tool collapses/expands sheet — preview still present.
-    expect(find.byKey(LivePreview.widgetKey), findsOneWidget);
-
-    await tester.tap(find.text('Adjust'));
+    // Re-open via a different tool to confirm sheet swaps without leaking
+    // the bottom nav.
+    await tester.tap(find.byTooltip('Adjust'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
@@ -141,6 +144,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(tester.takeException(), isNull);
-    expect(find.byKey(EditorToolRail.railKey), findsOneWidget);
+    expect(find.byType(CategorizedToolRail), findsOneWidget);
   });
 }

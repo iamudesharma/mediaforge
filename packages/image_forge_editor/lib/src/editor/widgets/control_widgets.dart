@@ -3,41 +3,56 @@ import 'package:flutter/material.dart';
 import '../theme/app_typography.dart';
 import '../theme/editor_motion.dart';
 import '../theme/lumina_tokens.dart';
+import 'value_chip_slider.dart';
 
+/// Header for a logical group of controls inside the inspector.
+///
+/// Uses VSCO-style 11 pt caps with 0.4 letter-spacing.
 class SectionHeader extends StatelessWidget {
-  const SectionHeader(this.title, {super.key, this.subtitle});
+  const SectionHeader(this.title, {super.key, this.subtitle, this.trailing});
 
   final String title;
   final String? subtitle;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(
-        bottom: LuminaTokens.gutterTool,
-        top: LuminaTokens.padXs,
+        bottom: LuminaTokens.space3,
+        top: LuminaTokens.space4,
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title.toUpperCase(),
-            style: AppTypography.sectionCaps(context),
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle!,
-              style: Theme.of(context).textTheme.bodySmall,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: AppTypography.sectionCaps(context),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
+          if (trailing != null) trailing!,
         ],
       ),
     );
   }
 }
 
-class LabeledSlider extends StatefulWidget {
+/// Legacy slider used by some panels (Paint, Beauty, Shapes, Overlay, etc.).
+/// Internally uses the [ValueChipSlider] widget so all sliders feel uniform.
+class LabeledSlider extends StatelessWidget {
   const LabeledSlider({
     super.key,
     required this.label,
@@ -48,6 +63,12 @@ class LabeledSlider extends StatefulWidget {
     required this.display,
     this.onChanged,
     this.onChangeEnd,
+    this.onReset,
+    this.resetValue = 0,
+    this.bipolar = false,
+    this.leading,
+    this.trailing,
+    this.enabled = true,
   });
 
   final String label;
@@ -58,73 +79,53 @@ class LabeledSlider extends StatefulWidget {
   final String display;
   final ValueChanged<double>? onChanged;
   final ValueChanged<double>? onChangeEnd;
-
-  @override
-  State<LabeledSlider> createState() => _LabeledSliderState();
-}
-
-class _LabeledSliderState extends State<LabeledSlider> {
-  int _displayRevision = 0;
-
-  @override
-  void didUpdateWidget(LabeledSlider oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.display != widget.display ||
-        oldWidget.value != widget.value) {
-      _displayRevision++;
-    }
-  }
+  final VoidCallback? onReset;
+  final double resetValue;
+  final bool bipolar;
+  final Widget? leading;
+  final Widget? trailing;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: LuminaTokens.gutterTool),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ValueChipSlider(
+      label: label,
+      value: value,
+      min: min,
+      max: max,
+      divisions: divisions,
+      onChanged: onChanged,
+      onChangeEnd: onChangeEnd,
+      onReset: onReset,
+      resetValue: resetValue,
+      bipolar: bipolar,
+      leading: leading,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  widget.label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: LuminaTokens.onSurface,
-                      ),
-                ),
-              ),
-              SizedBox(
-                width: 72,
-                child: AnimatedSwitcher(
-                  duration: EditorMotion.fast,
-                  child: Text(
-                    widget.display,
-                    key: ValueKey(
-                      '${widget.label}|${widget.display}|$_displayRevision',
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: AppTypography.numericValue(context),
-                  ),
-                ),
-              ),
-            ],
+          Container(
+            constraints: const BoxConstraints(minWidth: 56),
+            alignment: Alignment.centerRight,
+            child: Text(
+              display,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.numericValue(context),
+            ),
           ),
-          const SizedBox(height: LuminaTokens.padSm),
-          Slider(
-            value: widget.value.clamp(widget.min, widget.max),
-            min: widget.min,
-            max: widget.max,
-            divisions: widget.divisions,
-            onChanged: widget.onChanged,
-            onChangeEnd: widget.onChangeEnd,
-          ),
+          if (trailing != null) ...[
+            const SizedBox(width: LuminaTokens.space2),
+            trailing!,
+          ],
         ],
       ),
+      enabled: enabled,
     );
   }
 }
 
+/// Horizontal wrapping of [ChipPill]s. Backwards-compatible shim around
+/// [ChipPillWrap] from `chip_pill.dart` for the existing call sites.
 class ActionChipRow<T> extends StatelessWidget {
   const ActionChipRow({
     super.key,
@@ -133,6 +134,7 @@ class ActionChipRow<T> extends StatelessWidget {
     required this.selected,
     required this.onSelected,
     this.horizontal = false,
+    this.dense = false,
   });
 
   final List<T> items;
@@ -140,6 +142,40 @@ class ActionChipRow<T> extends StatelessWidget {
   final T selected;
   final ValueChanged<T> onSelected;
   final bool horizontal;
+  final bool dense;
+
+  @override
+  Widget build(BuildContext context) {
+    // Re-export to keep call sites compiling; the actual UI is in
+    // [chip_pill.dart]. (Importing here would create a cycle; callers
+    // should migrate to ChipPillRow / ChipPillWrap directly.)
+    return _LegacyChipRow<T>(
+      items: items,
+      label: label,
+      selected: selected,
+      onSelected: onSelected,
+      horizontal: horizontal,
+      dense: dense,
+    );
+  }
+}
+
+class _LegacyChipRow<T> extends StatelessWidget {
+  const _LegacyChipRow({
+    required this.items,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    required this.horizontal,
+    required this.dense,
+  });
+
+  final List<T> items;
+  final String Function(T) label;
+  final T selected;
+  final ValueChanged<T> onSelected;
+  final bool horizontal;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +187,7 @@ class ActionChipRow<T> extends StatelessWidget {
           shrinkWrap: true,
           physics: const ClampingScrollPhysics(),
           itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(width: LuminaTokens.padSm),
+          separatorBuilder: (_, _) => const SizedBox(width: LuminaTokens.space2),
           itemBuilder: (context, i) {
             final item = items[i];
             return _LuminaChip(
@@ -164,8 +200,8 @@ class ActionChipRow<T> extends StatelessWidget {
       );
     }
     return Wrap(
-      spacing: LuminaTokens.padSm,
-      runSpacing: LuminaTokens.padSm,
+      spacing: LuminaTokens.space2,
+      runSpacing: LuminaTokens.space2,
       children: [
         for (final item in items)
           _LuminaChip(
@@ -199,17 +235,20 @@ class _LuminaChip extends StatelessWidget {
         child: AnimatedContainer(
           duration: EditorMotion.fast,
           curve: EditorMotion.spring,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: LuminaTokens.space4,
+            vertical: LuminaTokens.space2,
+          ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(LuminaTokens.radiusLg),
             color: selected
-                ? LuminaTokens.primary.withValues(alpha: 0.2)
-                : LuminaTokens.surfaceContainerHigh,
+                ? LuminaTokens.accentContainer
+                : LuminaTokens.surfaceContainerHigh.withValues(alpha: 0.7),
             border: Border.all(
               color: selected
-                  ? LuminaTokens.primary.withValues(alpha: 0.7)
+                  ? LuminaTokens.accent.withValues(alpha: 0.4)
                   : LuminaTokens.outlineVariant,
-              width: selected ? 2 : 1,
+              width: selected ? 1.0 : 0.8,
             ),
           ),
           child: Text(
@@ -218,7 +257,9 @@ class _LuminaChip extends StatelessWidget {
               fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               shadows: const [],
-              color: selected ? LuminaTokens.primary : LuminaTokens.onSurface,
+              color: selected
+                  ? LuminaTokens.onAccentContainer
+                  : LuminaTokens.onSurface,
             ),
           ),
         ),
@@ -227,6 +268,7 @@ class _LuminaChip extends StatelessWidget {
   }
 }
 
+/// Primary action button used at the bottom of inspector panels.
 class PrimaryActionButton extends StatelessWidget {
   const PrimaryActionButton({
     super.key,
@@ -260,68 +302,82 @@ class PrimaryActionButton extends StatelessWidget {
   }
 }
 
-/// Horizontal filter preset strip (Lumina Filters screen).
+/// Horizontal filter strip — now powered by a list of [Widget] thumbnails
+/// (built upstream) rather than the static placeholder icon. Falls back
+/// to a labelled placeholder if no thumbnail is provided for an index.
 class LuminaFilterStrip extends StatelessWidget {
   const LuminaFilterStrip({
     super.key,
     required this.labels,
     required this.selectedIndex,
     required this.onSelected,
+    this.thumbnails,
     this.enabled = true,
+    this.height = 72,
   });
 
   final List<String> labels;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final List<Widget>? thumbnails;
   final bool enabled;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
+    final cellWidth = height + 8.0;
+    // Reserve: thumb (height) + 2 px gap + 14 px label line + 8 px vertical
+    // padding inside the ListView + 1.6 px border = height + 25.6.
+    final stripHeight = height + 26;
     return SizedBox(
-      height: 72,
+      height: stripHeight,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: EdgeInsets.zero,
         itemCount: labels.length,
-        separatorBuilder: (_, _) => const SizedBox(width: LuminaTokens.padSm),
+        separatorBuilder: (_, _) => const SizedBox(width: LuminaTokens.space2),
         itemBuilder: (context, i) {
           final selected = i == selectedIndex;
+          final thumb = (thumbnails != null && i < thumbnails!.length)
+              ? thumbnails![i]
+              : _PlaceholderThumb(label: labels[i]);
           return GestureDetector(
             onTap: enabled ? () => onSelected(i) : null,
-            child: AnimatedContainer(
-              duration: EditorMotion.fast,
-              width: 72,
+            child: Container(
+              width: cellWidth,
+              height: stripHeight,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(LuminaTokens.radiusMd),
-                color: LuminaTokens.surfaceContainerHigh,
                 border: Border.all(
                   color: selected
-                      ? LuminaTokens.primary
-                      : LuminaTokens.outlineVariant,
-                  width: selected ? 2 : 1,
+                      ? LuminaTokens.accent
+                      : LuminaTokens.outlineVariant.withValues(alpha: 0.6),
+                  width: selected ? 2.0 : 0.8,
                 ),
               ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    Icons.image_outlined,
-                    color: selected
-                        ? LuminaTokens.primary
-                        : LuminaTokens.onSurfaceVariant,
-                    size: 28,
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(LuminaTokens.radiusSm),
+                    ),
+                    child: SizedBox(
+                      width: cellWidth,
+                      height: height,
+                      child: thumb,
+                    ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 2),
                   Text(
                     labels[i],
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      shadows: const [],
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                       color: selected
-                          ? LuminaTokens.primary
+                          ? LuminaTokens.accent
                           : LuminaTokens.onSurfaceVariant,
                     ),
                   ),
@@ -330,6 +386,35 @@ class LuminaFilterStrip extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _PlaceholderThumb extends StatelessWidget {
+  const _PlaceholderThumb({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            LuminaTokens.surfaceContainerHigh,
+            LuminaTokens.surfaceContainer,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          color: LuminaTokens.onSurfaceMuted,
+          size: 20,
+        ),
       ),
     );
   }
