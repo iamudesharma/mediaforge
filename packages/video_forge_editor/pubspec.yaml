@@ -1,0 +1,35 @@
+name: video_forge_editor
+resolution: workspace
+description: >
+  CapCut-style Flutter video editor UI — timeline, overlays, audio remix, export.
+  Engines: video_forge_kit + media_forge.
+version: 0.1.0
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  video_forge_kit:
+    path: ../video_forge_kit
+  media_forge:
+    path: ../media_forge
+  pixel_surface:
+    path: ../pixel_surface
+  flutter_rust_bridge: 2.12.0
+  file_picker: ^8.3.7
+  path_provider: ^2.1.5
+  path: ^1.9.0
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

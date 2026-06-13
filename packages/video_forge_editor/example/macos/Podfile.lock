@@ -1,0 +1,34 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - media_forge (0.1.0):
+    - FlutterMacOS
+  - pixel_surface (1.0.0):
+    - FlutterMacOS
+  - video_forge (1.0.0):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - media_forge (from `Flutter/ephemeral/.symlinks/plugins/media_forge/macos`)
+  - pixel_surface (from `Flutter/ephemeral/.symlinks/plugins/pixel_surface/macos`)
+  - video_forge (from `Flutter/ephemeral/.symlinks/plugins/video_forge/macos`)
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  media_forge:
+    :path: Flutter/ephemeral/.symlinks/plugins/media_forge/macos
+  pixel_surface:
+    :path: Flutter/ephemeral/.symlinks/plugins/pixel_surface/macos
+  video_forge:
+    :path: Flutter/ephemeral/.symlinks/plugins/video_forge/macos
+
+SPEC CHECKSUMS:
+  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  media_forge: 040fd1b0605fb909fded6c789625287e402811f0
+  pixel_surface: 415771ab34c2e234ad2f521d5b2e33c0899f54a2
+  video_forge: 6d922efdb9e6dcfc4c6ab230fc602feb453fd4c5
+
+PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
+
+COCOAPODS: 1.16.2

@@ -13,6 +13,8 @@ dependencies:
     sdk: flutter
   video_forge_kit:
     path: ../../packages/video_forge_kit
+  video_forge_editor:
+    path: ../../packages/video_forge_editor
   image_forge_editor:
     path: ../../packages/image_forge_editor
   media_forge:

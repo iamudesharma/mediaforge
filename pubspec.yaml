@@ -16,8 +16,8 @@ workspace:
   - packages/image_forge/example
   - packages/video_forge
   - packages/video_forge/example
-  - packages/video_forge_kit
-  - packages/video_forge_kit/example
+  -   packages/video_forge_editor
+  - packages/video_forge_editor/example
   - packages/video_forge_cache
   - packages/media_forge
   - packages/media_forge/example

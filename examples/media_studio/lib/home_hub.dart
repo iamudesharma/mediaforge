@@ -4,11 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 
-import 'services/video_picker.dart';
-import 'services/media_ingest.dart';
+import 'package:video_forge_editor/video_forge_editor.dart';
 import 'widgets/rust_status_player.dart';
 import 'widgets/updates_strip.dart';
-import 'video_creator_flow.dart';
+import 'video_editor_flow.dart';
 import 'photo_editor_flow.dart';
 
 class HomeHub extends StatefulWidget {
@@ -179,7 +178,7 @@ class _HomeHubState extends State<HomeHub> {
     final result = await Navigator.push<VideoExportResult?>(
       context,
       MaterialPageRoute(
-        builder: (context) => VideoCreatorFlow(
+        builder: (context) => VideoEditorFlow(
           initialPath: path,
           displayName: displayName,
         ),

@@ -1,20 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:video_forge_kit/video_forge_kit.dart';
+import 'package:video_forge_editor/video_forge_editor.dart';
 import 'package:image_forge_editor/image_forge_editor.dart';
-import 'package:media_forge/media_forge.dart'
-    as media_runtime show RustLib;
 
 import 'home_hub.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize all native engines: image editor + the Rust media runtime
-  // (single playback path for both timeline preview and the home status player).
   try {
-    await VideoProcessor.initialize();
+    await VideoForgeEditor.ensureInitialized();
     await RustImageEditor.ensureInitialized();
-    await media_runtime.RustLib.init();
   } catch (e) {
     debugPrint('Native engine initialization warning: $e');
   }

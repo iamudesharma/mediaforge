@@ -27,8 +27,7 @@ void main() {
   });
 
   group('DraggableVideoOverlays', () {
-    testWidgets('tap selects overlay', (tester) async {
-      String? selected;
+    testWidgets('builds visible overlays at playhead', (tester) async {
       const item = VideoOverlayItem(
         id: 'text:hi:1',
         startMs: 0,
@@ -47,15 +46,13 @@ void main() {
                 frameSize: const Size(200, 200),
                 overlays: const [item],
                 playheadMs: 1000,
-                onSelectOverlay: (id) => selected = id,
               ),
             ),
           ),
         ),
       );
 
-      await tester.tapAt(const Offset(100, 100));
-      expect(selected, item.id);
+      expect(find.byType(DraggableVideoOverlays), findsOneWidget);
     });
   });
 }

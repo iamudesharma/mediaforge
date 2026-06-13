@@ -8,7 +8,7 @@ Offset clampVideoOverlayAnchor(Offset anchor) {
   return Offset(anchor.dx.clamp(0.0, 1.0), anchor.dy.clamp(0.0, 1.0));
 }
 
-/// Timeline-visible overlays with tap-to-select and drag-to-reposition.
+/// Timeline-visible overlays with double-tap-to-select and drag-to-reposition.
 class DraggableVideoOverlays extends StatelessWidget {
   const DraggableVideoOverlays({
     super.key,
@@ -77,6 +77,7 @@ class _DraggableOverlayLayer extends StatefulWidget {
 
 class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
   Offset? _dragAnchor;
+  bool _dragging = false;
 
   VideoOverlayItem get _item => widget.overlay;
 
@@ -86,8 +87,10 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
       widget.onOverlayChanged != null || widget.onSelectOverlay != null;
 
   void _onPanStart(DragStartDetails details) {
-    widget.onSelectOverlay?.call(_item.id);
-    setState(() => _dragAnchor = _item.anchor);
+    setState(() {
+      _dragging = true;
+      _dragAnchor = _item.anchor;
+    });
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
@@ -108,12 +111,16 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
   }
 
   void _onPanEnd(DragEndDetails details) {
-    setState(() => _dragAnchor = null);
+    setState(() {
+      _dragAnchor = null;
+      _dragging = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final child = widget.selected && _interactive
+    final showChrome = (widget.selected || _dragging) && _interactive;
+    final child = showChrome
         ? DecoratedBox(
             decoration: BoxDecoration(
               border: Border.all(color: const Color(0xFF00D4AA), width: 2),
@@ -136,7 +143,7 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
       opacity: _item.opacityAt(widget.playheadMs),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () => widget.onSelectOverlay?.call(_item.id),
+        onDoubleTap: () => widget.onSelectOverlay?.call(_item.id),
         onPanStart: widget.onOverlayChanged != null ? _onPanStart : null,
         onPanUpdate: widget.onOverlayChanged != null ? _onPanUpdate : null,
         onPanEnd: widget.onOverlayChanged != null ? _onPanEnd : null,

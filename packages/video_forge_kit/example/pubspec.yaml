@@ -13,6 +13,8 @@ dependencies:
     sdk: flutter
   video_forge_kit:
     path: ..
+  video_forge_editor:
+    path: ../../video_forge_editor
   file_picker: ^8.3.7
   path: ^1.9.0
   path_provider: ^2.1.5

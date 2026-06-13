@@ -34,6 +34,8 @@ echo "==> Remove stale native copies (FRB content-hash mismatches)"
 rm -rf "${RUST}/target/rust_hook"
 rm -rf "${REPO_ROOT}/examples/media_studio/build"
 rm -rf "${REPO_ROOT}/examples/media_studio/.dart_tool/flutter_build"
+rm -rf "${REPO_ROOT}/packages/video_forge_editor/example/build"
+rm -rf "${REPO_ROOT}/packages/video_forge_editor/example/.dart_tool/flutter_build"
 # Clean shared hooks_runner and package .dart_tools to force native assets recompilation
 rm -rf "${REPO_ROOT}/.dart_tool/hooks_runner"
 rm -rf "${REPO_ROOT}/packages/video_forge/.dart_tool"
@@ -41,6 +43,16 @@ rm -rf "${REPO_ROOT}/packages/video_forge_kit/.dart_tool"
 rm -rf "${REPO_ROOT}/examples/media_studio/.dart_tool"
 
 echo "==> cargo clean + build --release (video_forge, target=${MACOS_TARGET})"
+FFMPEG_DIR="${FFMPEG_DIR:-${HOME}/.cache/rust_image/ffmpeg-macos-vt}"
+if [[ -f "${FFMPEG_DIR}/include/libavutil/avutil.h" ]]; then
+  export FFMPEG_DIR
+  export PKG_CONFIG_PATH="${FFMPEG_DIR}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+  echo "    FFMPEG_DIR=${FFMPEG_DIR}"
+elif command -v brew >/dev/null 2>&1 && [[ -f "$(brew --prefix ffmpeg 2>/dev/null)/include/libavutil/avutil.h" ]]; then
+  export FFMPEG_DIR="$(brew --prefix ffmpeg)"
+  export PKG_CONFIG_PATH="${FFMPEG_DIR}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
+  echo "    WARN: FFMPEG_DIR=${FFMPEG_DIR} (Homebrew — prefer VT build: scripts/build-ffmpeg-macos-vt.sh)"
+fi
 (cd "${RUST}" && cargo clean && cargo build --release --target "${MACOS_TARGET}")
 
 echo "==> Copy newly built dylib to macOS Frameworks and update install name"
@@ -83,5 +95,5 @@ echo "==> flutter clean (media_studio)"
 
 echo ""
 echo "Done. Native video libs are ready."
-echo "  bash \"${REPO_ROOT}/scripts/run-media-studio-macos.sh\" --no-rebuild   # flutter only"
-echo "  bash \"${REPO_ROOT}/scripts/run-media-studio-macos.sh\"               # rebuild + run"
+echo "  bash \"${REPO_ROOT}/scripts/run-video-editor-macos.sh\" --no-rebuild"
+echo "  bash \"${REPO_ROOT}/scripts/run-media-studio-macos.sh\" --no-rebuild"
