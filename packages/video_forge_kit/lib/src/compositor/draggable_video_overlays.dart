@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../playback/compositor_layout.dart';
 import 'video_overlay_item.dart';
@@ -8,7 +9,7 @@ Offset clampVideoOverlayAnchor(Offset anchor) {
   return Offset(anchor.dx.clamp(0.0, 1.0), anchor.dy.clamp(0.0, 1.0));
 }
 
-/// Timeline-visible overlays with double-tap-to-select and drag-to-reposition.
+/// Timeline-visible overlays with tap-to-style, double-tap-to-edit, drag-to-delete.
 class DraggableVideoOverlays extends StatelessWidget {
   const DraggableVideoOverlays({
     super.key,
@@ -18,6 +19,10 @@ class DraggableVideoOverlays extends StatelessWidget {
     this.selectedOverlayId,
     this.onOverlayChanged,
     this.onSelectOverlay,
+    this.onTapTextOverlay,
+    this.onDoubleTapTextOverlay,
+    this.onDeleteOverlay,
+    this.showDeleteZone = false,
   });
 
   final Size frameSize;
@@ -26,11 +31,17 @@ class DraggableVideoOverlays extends StatelessWidget {
   final String? selectedOverlayId;
   final ValueChanged<VideoOverlayItem>? onOverlayChanged;
   final ValueChanged<String?>? onSelectOverlay;
+  final ValueChanged<VideoOverlayItem>? onTapTextOverlay;
+  final ValueChanged<VideoOverlayItem>? onDoubleTapTextOverlay;
+  final ValueChanged<String>? onDeleteOverlay;
+  final bool showDeleteZone;
+
+  static const double deleteZoneThresholdY = 0.86;
 
   @override
   Widget build(BuildContext context) {
     final visible = overlays.where((o) => o.isVisibleAt(playheadMs)).toList();
-    if (visible.isEmpty) {
+    if (visible.isEmpty && !showDeleteZone) {
       return const SizedBox.shrink();
     }
 
@@ -47,6 +58,45 @@ class DraggableVideoOverlays extends StatelessWidget {
             selected: overlay.id == selectedOverlayId,
             onOverlayChanged: onOverlayChanged,
             onSelectOverlay: onSelectOverlay,
+            onTapTextOverlay: onTapTextOverlay,
+            onDoubleTapTextOverlay: onDoubleTapTextOverlay,
+            onDeleteOverlay: onDeleteOverlay,
+          ),
+        if (showDeleteZone)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: frameSize.height * (1 - deleteZoneThresholdY),
+            child: IgnorePointer(
+              child: Container(
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.red.withValues(alpha: 0.35),
+                    ],
+                  ),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delete_outline, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text(
+                      'Drag here to delete',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
       ],
     );
@@ -62,6 +112,9 @@ class _DraggableOverlayLayer extends StatefulWidget {
     required this.selected,
     this.onOverlayChanged,
     this.onSelectOverlay,
+    this.onTapTextOverlay,
+    this.onDoubleTapTextOverlay,
+    this.onDeleteOverlay,
   });
 
   final VideoOverlayItem overlay;
@@ -70,6 +123,9 @@ class _DraggableOverlayLayer extends StatefulWidget {
   final bool selected;
   final ValueChanged<VideoOverlayItem>? onOverlayChanged;
   final ValueChanged<String?>? onSelectOverlay;
+  final ValueChanged<VideoOverlayItem>? onTapTextOverlay;
+  final ValueChanged<VideoOverlayItem>? onDoubleTapTextOverlay;
+  final ValueChanged<String>? onDeleteOverlay;
 
   @override
   State<_DraggableOverlayLayer> createState() => _DraggableOverlayLayerState();
@@ -87,6 +143,7 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
       widget.onOverlayChanged != null || widget.onSelectOverlay != null;
 
   void _onPanStart(DragStartDetails details) {
+    widget.onSelectOverlay?.call(_item.id);
     setState(() {
       _dragging = true;
       _dragAnchor = _item.anchor;
@@ -111,10 +168,35 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
   }
 
   void _onPanEnd(DragEndDetails details) {
+    final anchor = _dragAnchor ?? _item.anchor;
+    if (anchor.dy >= DraggableVideoOverlays.deleteZoneThresholdY) {
+      HapticFeedback.mediumImpact();
+      widget.onDeleteOverlay?.call(_item.id);
+    }
     setState(() {
       _dragAnchor = null;
       _dragging = false;
     });
+  }
+
+  void _onTap() {
+    if (_item.isTextOverlay) {
+      if (widget.selected) {
+        widget.onTapTextOverlay?.call(_item);
+      } else {
+        widget.onSelectOverlay?.call(_item.id);
+      }
+      return;
+    }
+    widget.onSelectOverlay?.call(_item.id);
+  }
+
+  void _onDoubleTap() {
+    if (_item.isTextOverlay) {
+      widget.onDoubleTapTextOverlay?.call(_item);
+      return;
+    }
+    widget.onSelectOverlay?.call(_item.id);
   }
 
   @override
@@ -123,7 +205,7 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
     final child = showChrome
         ? DecoratedBox(
             decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFF00D4AA), width: 2),
+              border: Border.all(color: const Color(0xFF4EDEA3), width: 2),
               borderRadius: BorderRadius.circular(4),
             ),
             child: _item.child,
@@ -143,7 +225,8 @@ class _DraggableOverlayLayerState extends State<_DraggableOverlayLayer> {
       opacity: _item.opacityAt(widget.playheadMs),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onDoubleTap: () => widget.onSelectOverlay?.call(_item.id),
+        onTap: _onTap,
+        onDoubleTap: _onDoubleTap,
         onPanStart: widget.onOverlayChanged != null ? _onPanStart : null,
         onPanUpdate: widget.onOverlayChanged != null ? _onPanUpdate : null,
         onPanEnd: widget.onOverlayChanged != null ? _onPanEnd : null,

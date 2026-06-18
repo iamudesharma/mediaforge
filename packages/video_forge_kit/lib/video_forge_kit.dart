@@ -13,13 +13,18 @@ export 'src/runtime/video_texture_pool.dart';
 export 'src/compositor/video_compositor_canvas.dart';
 export 'src/compositor/draggable_video_overlays.dart';
 export 'src/compositor/video_overlay_item.dart';
+export 'src/compositor/animated_video_text_overlay_content.dart';
 export 'src/compositor/video_text_overlay_content.dart';
 export 'src/compositor/video_text_overlay_style.dart';
+export 'src/compositor/video_text_presets.dart';
 export 'src/playback/native_playback_controller.dart';
 export 'src/playback/native_playback_platform.dart';
 export 'src/playback/native_playback_trim.dart';
 export 'src/playback/native_video_canvas.dart';
 export 'src/export/overlay_raster_exporter.dart';
+export 'src/export/overlay_transform_tracks.dart';
+export 'src/export/overlay_text_export.dart';
+export 'src/export/overlay_effects_export.dart';
 export 'src/timeline/timeline_controller.dart';
 export 'src/timeline/timeline_models.dart';
 export 'src/timeline/timeline_format.dart';
@@ -31,4 +36,7 @@ export 'src/widgets/timeline/audio_range_scrubber.dart';
 export 'src/widgets/video_preview_surface.dart';
 export 'package:video_forge_cache/video_forge_cache.dart';
 export 'package:video_forge/video_forge.dart'
-    show AudioTrackInput, BurnInOverlay;
+    show AudioTrackInput, BurnInOverlay, OverlayContent, ImageOverlayData,
+        TextOverlayData, TransformTracks, AnimationTrack, TransformProperty,
+        Easing, OverlayEffects, OverlayEffect, OverlayEffectKind,
+        TextContentAnimation;

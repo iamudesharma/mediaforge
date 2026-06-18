@@ -4,16 +4,22 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:video_forge/video_forge.dart';
+import 'package:video_forge/video_forge.dart' as vf;
 
 import '../compositor/video_overlay_item.dart';
+import '../compositor/video_text_presets.dart';
 import '../models/compression_preset.dart';
+import 'overlay_effects_export.dart';
+import 'overlay_text_export.dart';
+import 'overlay_transform_tracks.dart';
 
-/// Rasterizes Flutter [VideoOverlayItem] widgets to PNGs for Rust burn-in export.
+/// Rasterizes Flutter [VideoOverlayItem] widgets for Rust burn-in export.
+///
+/// Text overlays use vector [OverlayContent.text] (v2).
+/// Stickers/emojis use baked PNG [OverlayContent.image].
 class OverlayRasterExporter {
   OverlayRasterExporter._();
 
-  /// Max longest edge used when scaling overlay bake size to match encode output.
   static int maxEncodeEdgeForPreset(CompressionPreset preset) => switch (preset) {
         CompressionPreset.whatsapp => 720,
         CompressionPreset.lowBandwidth => 720,
@@ -43,8 +49,7 @@ class OverlayRasterExporter {
     );
   }
 
-  /// Bakes [overlays] to temp PNGs and returns FRB [BurnInOverlay] descriptors.
-  static Future<List<BurnInOverlay>> rasterizeForExport({
+  static Future<List<vf.BurnInOverlay>> rasterizeForExport({
     required List<VideoOverlayItem> overlays,
     required int sourceWidth,
     required int sourceHeight,
@@ -53,27 +58,89 @@ class OverlayRasterExporter {
     if (overlays.isEmpty) return const [];
 
     final dir = await Directory.systemTemp.createTemp('vfp_overlay_burn_');
-    final baked = <BurnInOverlay>[];
+    final baked = <vf.BurnInOverlay>[];
 
     for (var i = 0; i < overlays.length; i++) {
       final item = overlays[i];
-      final path = '${dir.path}/overlay_$i.png';
-      final png = await _captureOverlayPng(item.child);
-      await File(path).writeAsBytes(png, flush: true);
+      final spec = item.resolvedTextSpec;
+      final transform = spec != null
+          ? OverlayTransformTracks.forOverlay(
+              style: spec.style,
+              fadeInMs: item.fadeInMs,
+              fadeOutMs: item.fadeOutMs,
+              visibleDurationMs: item.durationMs,
+            )
+          : _fadeTracks(item);
+      final effects = spec != null
+          ? OverlayEffectsExport.forStyle(spec.style)
+          : const vf.OverlayEffects(effects: []);
+
+      final vf.OverlayContent content;
+      if (spec != null) {
+        content = vf.OverlayContent.text(
+          OverlayTextExport.fromSpec(
+            label: spec.label,
+            style: spec.style,
+            anchor: item.anchor,
+            videoWidth: sourceWidth,
+            videoHeight: sourceHeight,
+          ),
+        );
+        debugPrint(
+          '[OverlayExport] text id=${item.id} anim=${spec.style.animation} '
+          'content=${spec.style.animation == VideoTextAnimation.typewriter}',
+        );
+      } else {
+        final path = '${dir.path}/overlay_$i.png';
+        final png = await _captureOverlayPng(item.child);
+        await File(path).writeAsBytes(png, flush: true);
+        content = vf.OverlayContent.image(
+          vf.ImageOverlayData(
+            path: path,
+            anchorX: item.anchor.dx,
+            anchorY: item.anchor.dy,
+          ),
+        );
+        debugPrint('[OverlayExport] image id=${item.id} path=$path');
+      }
+
       baked.add(
-        BurnInOverlay(
-          imagePath: path,
+        vf.BurnInOverlay(
+          content: content,
           startMs: BigInt.from(item.startMs),
           endMs: BigInt.from(item.endMs),
-          anchorX: item.anchor.dx,
-          anchorY: item.anchor.dy,
-          fadeInMs: BigInt.from(item.fadeInMs),
-          fadeOutMs: BigInt.from(item.fadeOutMs),
+          transform: transform,
+          effects: effects,
         ),
       );
     }
 
     return baked;
+  }
+
+  static vf.TransformTracks _fadeTracks(VideoOverlayItem item) {
+    return vf.TransformTracks(
+      tracks: [
+        if (item.fadeInMs > 0)
+          vf.AnimationTrack(
+            property: vf.TransformProperty.opacity,
+            from: 0,
+            to: 1,
+            startMs: BigInt.zero,
+            durationMs: BigInt.from(item.fadeInMs),
+            easing: vf.Easing.linear,
+          ),
+        if (item.fadeOutMs > 0 && item.durationMs > item.fadeOutMs)
+          vf.AnimationTrack(
+            property: vf.TransformProperty.opacity,
+            from: 1,
+            to: 0,
+            startMs: BigInt.from(item.durationMs - item.fadeOutMs),
+            durationMs: BigInt.from(item.fadeOutMs),
+            easing: vf.Easing.linear,
+          ),
+      ],
+    );
   }
 
   static Future<Uint8List> _captureOverlayPng(Widget child) async {

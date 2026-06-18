@@ -1469,6 +1469,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AnimationTrack dco_decode_animation_track(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return AnimationTrack(
+      property: dco_decode_transform_property(arr[0]),
+      from: dco_decode_f_32(arr[1]),
+      to: dco_decode_f_32(arr[2]),
+      startMs: dco_decode_u_64(arr[3]),
+      durationMs: dco_decode_u_64(arr[4]),
+      easing: dco_decode_easing(arr[5]),
+    );
+  }
+
+  @protected
   AudioTrackInput dco_decode_audio_track_input(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1586,6 +1602,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ImageOverlayData dco_decode_box_autoadd_image_overlay_data(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_image_overlay_data(raw);
+  }
+
+  @protected
   OutputProfile dco_decode_box_autoadd_output_profile(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_output_profile(raw);
@@ -1603,6 +1625,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   PreviewFrameRgba dco_decode_box_autoadd_preview_frame_rgba(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_preview_frame_rgba(raw);
+  }
+
+  @protected
+  TextOverlayData dco_decode_box_autoadd_text_overlay_data(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_text_overlay_data(raw);
   }
 
   @protected
@@ -1647,16 +1675,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   BurnInOverlay dco_decode_burn_in_overlay(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
     return BurnInOverlay(
-      imagePath: dco_decode_String(arr[0]),
+      content: dco_decode_overlay_content(arr[0]),
       startMs: dco_decode_u_64(arr[1]),
       endMs: dco_decode_u_64(arr[2]),
-      anchorX: dco_decode_f_32(arr[3]),
-      anchorY: dco_decode_f_32(arr[4]),
-      fadeInMs: dco_decode_u_64(arr[5]),
-      fadeOutMs: dco_decode_u_64(arr[6]),
+      transform: dco_decode_transform_tracks(arr[3]),
+      effects: dco_decode_overlay_effects(arr[4]),
     );
   }
 
@@ -1721,6 +1747,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Easing dco_decode_easing(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return Easing.values[raw as int];
+  }
+
+  @protected
   double dco_decode_f_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as double;
@@ -1736,6 +1768,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int dco_decode_i_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  ImageOverlayData dco_decode_image_overlay_data(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ImageOverlayData(
+      path: dco_decode_String(arr[0]),
+      anchorX: dco_decode_f_32(arr[1]),
+      anchorY: dco_decode_f_32(arr[2]),
+    );
   }
 
   @protected
@@ -1760,6 +1805,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<AnimationTrack> dco_decode_list_animation_track(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_animation_track).toList();
+  }
+
+  @protected
   List<AudioTrackInput> dco_decode_list_audio_track_input(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_audio_track_input).toList();
@@ -1775,6 +1826,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_list_prim_u_8_strict).toList();
+  }
+
+  @protected
+  List<OverlayEffect> dco_decode_list_overlay_effect(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_overlay_effect).toList();
   }
 
   @protected
@@ -1905,6 +1962,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OverlayContent dco_decode_overlay_content(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return OverlayContent_Image(
+          dco_decode_box_autoadd_image_overlay_data(raw[1]),
+        );
+      case 1:
+        return OverlayContent_Text(
+          dco_decode_box_autoadd_text_overlay_data(raw[1]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  OverlayEffect dco_decode_overlay_effect(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return OverlayEffect(
+      kind: dco_decode_overlay_effect_kind(arr[0]),
+      intensity: dco_decode_f_32(arr[1]),
+      startMs: dco_decode_u_64(arr[2]),
+      durationMs: dco_decode_u_64(arr[3]),
+    );
+  }
+
+  @protected
+  OverlayEffectKind dco_decode_overlay_effect_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return OverlayEffectKind.values[raw as int];
+  }
+
+  @protected
+  OverlayEffects dco_decode_overlay_effects(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return OverlayEffects(effects: dco_decode_list_overlay_effect(arr[0]));
+  }
+
+  @protected
   PlaybackFrame dco_decode_playback_frame(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
@@ -2007,6 +2110,51 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TextAlign dco_decode_text_align(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return TextAlign.values[raw as int];
+  }
+
+  @protected
+  TextContentAnimation dco_decode_text_content_animation(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return TextContentAnimation.values[raw as int];
+  }
+
+  @protected
+  TextOverlayData dco_decode_text_overlay_data(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 23)
+      throw Exception('unexpected arr length: expect 23 but see ${arr.length}');
+    return TextOverlayData(
+      text: dco_decode_String(arr[0]),
+      anchorX: dco_decode_f_32(arr[1]),
+      anchorY: dco_decode_f_32(arr[2]),
+      fontSize: dco_decode_f_32(arr[3]),
+      fontWeight: dco_decode_u_32(arr[4]),
+      italic: dco_decode_bool(arr[5]),
+      colorR: dco_decode_u_8(arr[6]),
+      colorG: dco_decode_u_8(arr[7]),
+      colorB: dco_decode_u_8(arr[8]),
+      colorA: dco_decode_u_8(arr[9]),
+      letterSpacing: dco_decode_f_32(arr[10]),
+      maxWidth: dco_decode_f_32(arr[11]),
+      padding: dco_decode_f_32(arr[12]),
+      cornerRadius: dco_decode_f_32(arr[13]),
+      showBackground: dco_decode_bool(arr[14]),
+      backgroundR: dco_decode_u_8(arr[15]),
+      backgroundG: dco_decode_u_8(arr[16]),
+      backgroundB: dco_decode_u_8(arr[17]),
+      backgroundA: dco_decode_u_8(arr[18]),
+      glowIntensity: dco_decode_f_32(arr[19]),
+      textAlign: dco_decode_text_align(arr[20]),
+      contentAnimation: dco_decode_text_content_animation(arr[21]),
+      contentAnimationDurationMs: dco_decode_u_64(arr[22]),
+    );
+  }
+
+  @protected
   ThumbnailBytesOptions dco_decode_thumbnail_bytes_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2047,6 +2195,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       height: dco_decode_opt_box_autoadd_u_32(arr[4]),
       format: dco_decode_thumbnail_format(arr[5]),
     );
+  }
+
+  @protected
+  TransformProperty dco_decode_transform_property(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return TransformProperty.values[raw as int];
+  }
+
+  @protected
+  TransformTracks dco_decode_transform_tracks(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 1)
+      throw Exception('unexpected arr length: expect 1 but see ${arr.length}');
+    return TransformTracks(tracks: dco_decode_list_animation_track(arr[0]));
   }
 
   @protected
@@ -2194,6 +2357,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AnimationTrack sse_decode_animation_track(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_property = sse_decode_transform_property(deserializer);
+    var var_from = sse_decode_f_32(deserializer);
+    var var_to = sse_decode_f_32(deserializer);
+    var var_startMs = sse_decode_u_64(deserializer);
+    var var_durationMs = sse_decode_u_64(deserializer);
+    var var_easing = sse_decode_easing(deserializer);
+    return AnimationTrack(
+      property: var_property,
+      from: var_from,
+      to: var_to,
+      startMs: var_startMs,
+      durationMs: var_durationMs,
+      easing: var_easing,
+    );
+  }
+
+  @protected
   AudioTrackInput sse_decode_audio_track_input(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_sourcePath = sse_decode_String(deserializer);
@@ -2334,6 +2516,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ImageOverlayData sse_decode_box_autoadd_image_overlay_data(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_image_overlay_data(deserializer));
+  }
+
+  @protected
   OutputProfile sse_decode_box_autoadd_output_profile(
     SseDeserializer deserializer,
   ) {
@@ -2355,6 +2545,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_preview_frame_rgba(deserializer));
+  }
+
+  @protected
+  TextOverlayData sse_decode_box_autoadd_text_overlay_data(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_text_overlay_data(deserializer));
   }
 
   @protected
@@ -2402,21 +2600,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   BurnInOverlay sse_decode_burn_in_overlay(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    var var_imagePath = sse_decode_String(deserializer);
+    var var_content = sse_decode_overlay_content(deserializer);
     var var_startMs = sse_decode_u_64(deserializer);
     var var_endMs = sse_decode_u_64(deserializer);
-    var var_anchorX = sse_decode_f_32(deserializer);
-    var var_anchorY = sse_decode_f_32(deserializer);
-    var var_fadeInMs = sse_decode_u_64(deserializer);
-    var var_fadeOutMs = sse_decode_u_64(deserializer);
+    var var_transform = sse_decode_transform_tracks(deserializer);
+    var var_effects = sse_decode_overlay_effects(deserializer);
     return BurnInOverlay(
-      imagePath: var_imagePath,
+      content: var_content,
       startMs: var_startMs,
       endMs: var_endMs,
-      anchorX: var_anchorX,
-      anchorY: var_anchorY,
-      fadeInMs: var_fadeInMs,
-      fadeOutMs: var_fadeOutMs,
+      transform: var_transform,
+      effects: var_effects,
     );
   }
 
@@ -2506,6 +2700,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  Easing sse_decode_easing(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return Easing.values[inner];
+  }
+
+  @protected
   double sse_decode_f_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getFloat32();
@@ -2521,6 +2722,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int sse_decode_i_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  ImageOverlayData sse_decode_image_overlay_data(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_anchorX = sse_decode_f_32(deserializer);
+    var var_anchorY = sse_decode_f_32(deserializer);
+    return ImageOverlayData(
+      path: var_path,
+      anchorX: var_anchorX,
+      anchorY: var_anchorY,
+    );
   }
 
   @protected
@@ -2547,6 +2761,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AnimationTrack> sse_decode_list_animation_track(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AnimationTrack>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_animation_track(deserializer));
     }
     return ans_;
   }
@@ -2589,6 +2817,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <Uint8List>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_list_prim_u_8_strict(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<OverlayEffect> sse_decode_list_overlay_effect(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <OverlayEffect>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_overlay_effect(deserializer));
     }
     return ans_;
   }
@@ -2792,6 +3034,56 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  OverlayContent sse_decode_overlay_content(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_field0 = sse_decode_box_autoadd_image_overlay_data(
+          deserializer,
+        );
+        return OverlayContent_Image(var_field0);
+      case 1:
+        var var_field0 = sse_decode_box_autoadd_text_overlay_data(deserializer);
+        return OverlayContent_Text(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  OverlayEffect sse_decode_overlay_effect(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_overlay_effect_kind(deserializer);
+    var var_intensity = sse_decode_f_32(deserializer);
+    var var_startMs = sse_decode_u_64(deserializer);
+    var var_durationMs = sse_decode_u_64(deserializer);
+    return OverlayEffect(
+      kind: var_kind,
+      intensity: var_intensity,
+      startMs: var_startMs,
+      durationMs: var_durationMs,
+    );
+  }
+
+  @protected
+  OverlayEffectKind sse_decode_overlay_effect_kind(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return OverlayEffectKind.values[inner];
+  }
+
+  @protected
+  OverlayEffects sse_decode_overlay_effects(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_effects = sse_decode_list_overlay_effect(deserializer);
+    return OverlayEffects(effects: var_effects);
+  }
+
+  @protected
   PlaybackFrame sse_decode_playback_frame(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2908,6 +3200,75 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  TextAlign sse_decode_text_align(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return TextAlign.values[inner];
+  }
+
+  @protected
+  TextContentAnimation sse_decode_text_content_animation(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return TextContentAnimation.values[inner];
+  }
+
+  @protected
+  TextOverlayData sse_decode_text_overlay_data(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_text = sse_decode_String(deserializer);
+    var var_anchorX = sse_decode_f_32(deserializer);
+    var var_anchorY = sse_decode_f_32(deserializer);
+    var var_fontSize = sse_decode_f_32(deserializer);
+    var var_fontWeight = sse_decode_u_32(deserializer);
+    var var_italic = sse_decode_bool(deserializer);
+    var var_colorR = sse_decode_u_8(deserializer);
+    var var_colorG = sse_decode_u_8(deserializer);
+    var var_colorB = sse_decode_u_8(deserializer);
+    var var_colorA = sse_decode_u_8(deserializer);
+    var var_letterSpacing = sse_decode_f_32(deserializer);
+    var var_maxWidth = sse_decode_f_32(deserializer);
+    var var_padding = sse_decode_f_32(deserializer);
+    var var_cornerRadius = sse_decode_f_32(deserializer);
+    var var_showBackground = sse_decode_bool(deserializer);
+    var var_backgroundR = sse_decode_u_8(deserializer);
+    var var_backgroundG = sse_decode_u_8(deserializer);
+    var var_backgroundB = sse_decode_u_8(deserializer);
+    var var_backgroundA = sse_decode_u_8(deserializer);
+    var var_glowIntensity = sse_decode_f_32(deserializer);
+    var var_textAlign = sse_decode_text_align(deserializer);
+    var var_contentAnimation = sse_decode_text_content_animation(deserializer);
+    var var_contentAnimationDurationMs = sse_decode_u_64(deserializer);
+    return TextOverlayData(
+      text: var_text,
+      anchorX: var_anchorX,
+      anchorY: var_anchorY,
+      fontSize: var_fontSize,
+      fontWeight: var_fontWeight,
+      italic: var_italic,
+      colorR: var_colorR,
+      colorG: var_colorG,
+      colorB: var_colorB,
+      colorA: var_colorA,
+      letterSpacing: var_letterSpacing,
+      maxWidth: var_maxWidth,
+      padding: var_padding,
+      cornerRadius: var_cornerRadius,
+      showBackground: var_showBackground,
+      backgroundR: var_backgroundR,
+      backgroundG: var_backgroundG,
+      backgroundB: var_backgroundB,
+      backgroundA: var_backgroundA,
+      glowIntensity: var_glowIntensity,
+      textAlign: var_textAlign,
+      contentAnimation: var_contentAnimation,
+      contentAnimationDurationMs: var_contentAnimationDurationMs,
+    );
+  }
+
+  @protected
   ThumbnailBytesOptions sse_decode_thumbnail_bytes_options(
     SseDeserializer deserializer,
   ) {
@@ -2959,6 +3320,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       height: var_height,
       format: var_format,
     );
+  }
+
+  @protected
+  TransformProperty sse_decode_transform_property(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return TransformProperty.values[inner];
+  }
+
+  @protected
+  TransformTracks sse_decode_transform_tracks(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_tracks = sse_decode_list_animation_track(deserializer);
+    return TransformTracks(tracks: var_tracks);
   }
 
   @protected
@@ -3136,6 +3513,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_animation_track(
+    AnimationTrack self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_transform_property(self.property, serializer);
+    sse_encode_f_32(self.from, serializer);
+    sse_encode_f_32(self.to, serializer);
+    sse_encode_u_64(self.startMs, serializer);
+    sse_encode_u_64(self.durationMs, serializer);
+    sse_encode_easing(self.easing, serializer);
+  }
+
+  @protected
   void sse_encode_audio_track_input(
     AudioTrackInput self,
     SseSerializer serializer,
@@ -3248,6 +3639,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_image_overlay_data(
+    ImageOverlayData self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_image_overlay_data(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_output_profile(
     OutputProfile self,
     SseSerializer serializer,
@@ -3272,6 +3672,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_preview_frame_rgba(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_text_overlay_data(
+    TextOverlayData self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_text_overlay_data(self, serializer);
   }
 
   @protected
@@ -3325,13 +3734,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_String(self.imagePath, serializer);
+    sse_encode_overlay_content(self.content, serializer);
     sse_encode_u_64(self.startMs, serializer);
     sse_encode_u_64(self.endMs, serializer);
-    sse_encode_f_32(self.anchorX, serializer);
-    sse_encode_f_32(self.anchorY, serializer);
-    sse_encode_u_64(self.fadeInMs, serializer);
-    sse_encode_u_64(self.fadeOutMs, serializer);
+    sse_encode_transform_tracks(self.transform, serializer);
+    sse_encode_overlay_effects(self.effects, serializer);
   }
 
   @protected
@@ -3389,6 +3796,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_easing(Easing self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_f_32(double self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putFloat32(self);
@@ -3404,6 +3817,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_image_overlay_data(
+    ImageOverlayData self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_f_32(self.anchorX, serializer);
+    sse_encode_f_32(self.anchorY, serializer);
   }
 
   @protected
@@ -3424,6 +3848,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_animation_track(
+    List<AnimationTrack> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_animation_track(item, serializer);
     }
   }
 
@@ -3460,6 +3896,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_list_prim_u_8_strict(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_overlay_effect(
+    List<OverlayEffect> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_overlay_effect(item, serializer);
     }
   }
 
@@ -3650,6 +4098,49 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_overlay_content(
+    OverlayContent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case OverlayContent_Image(field0: final field0):
+        sse_encode_i_32(0, serializer);
+        sse_encode_box_autoadd_image_overlay_data(field0, serializer);
+      case OverlayContent_Text(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_box_autoadd_text_overlay_data(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_overlay_effect(OverlayEffect self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_overlay_effect_kind(self.kind, serializer);
+    sse_encode_f_32(self.intensity, serializer);
+    sse_encode_u_64(self.startMs, serializer);
+    sse_encode_u_64(self.durationMs, serializer);
+  }
+
+  @protected
+  void sse_encode_overlay_effect_kind(
+    OverlayEffectKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_overlay_effects(
+    OverlayEffects self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_overlay_effect(self.effects, serializer);
+  }
+
+  @protected
   void sse_encode_playback_frame(PlaybackFrame self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
@@ -3740,6 +4231,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_text_align(TextAlign self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_text_content_animation(
+    TextContentAnimation self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_text_overlay_data(
+    TextOverlayData self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.text, serializer);
+    sse_encode_f_32(self.anchorX, serializer);
+    sse_encode_f_32(self.anchorY, serializer);
+    sse_encode_f_32(self.fontSize, serializer);
+    sse_encode_u_32(self.fontWeight, serializer);
+    sse_encode_bool(self.italic, serializer);
+    sse_encode_u_8(self.colorR, serializer);
+    sse_encode_u_8(self.colorG, serializer);
+    sse_encode_u_8(self.colorB, serializer);
+    sse_encode_u_8(self.colorA, serializer);
+    sse_encode_f_32(self.letterSpacing, serializer);
+    sse_encode_f_32(self.maxWidth, serializer);
+    sse_encode_f_32(self.padding, serializer);
+    sse_encode_f_32(self.cornerRadius, serializer);
+    sse_encode_bool(self.showBackground, serializer);
+    sse_encode_u_8(self.backgroundR, serializer);
+    sse_encode_u_8(self.backgroundG, serializer);
+    sse_encode_u_8(self.backgroundB, serializer);
+    sse_encode_u_8(self.backgroundA, serializer);
+    sse_encode_f_32(self.glowIntensity, serializer);
+    sse_encode_text_align(self.textAlign, serializer);
+    sse_encode_text_content_animation(self.contentAnimation, serializer);
+    sse_encode_u_64(self.contentAnimationDurationMs, serializer);
+  }
+
+  @protected
   void sse_encode_thumbnail_bytes_options(
     ThumbnailBytesOptions self,
     SseSerializer serializer,
@@ -3782,6 +4319,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_u_32(self.width, serializer);
     sse_encode_opt_box_autoadd_u_32(self.height, serializer);
     sse_encode_thumbnail_format(self.format, serializer);
+  }
+
+  @protected
+  void sse_encode_transform_property(
+    TransformProperty self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_transform_tracks(
+    TransformTracks self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_animation_track(self.tracks, serializer);
   }
 
   @protected

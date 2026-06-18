@@ -2,27 +2,54 @@
 
 Instructions for AI agents working in this repository.
 
+## Git workflow (features → PR)
+
+When starting **new feature work** (not read-only questions, not a one-line fix already scoped on the current branch):
+
+1. **Create a feature branch first** — before writing code, branch off `main` with a short, descriptive name:
+   - Pattern: `{type}/{feature-name}` in kebab-case
+   - Types: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`
+   - Examples: `feat/video-forge-editor`, `fix/audio-overlay-preview`, `refactor/media-studio-cleanup`
+2. **Keep all work on that branch** — commits for the feature stay on the branch until it is ready for review.
+3. **Do not commit unless the user asks** — wait for an explicit commit request; then commit on the feature branch.
+4. **Open a PR when done** — push the branch (`git push -u origin HEAD`) and create a PR against `main` when the user asks or when the feature is complete and tested.
+
+### When to skip branching
+
+- Read-only questions, code review, or exploration
+- Continuing work already on an existing feature branch
+- User explicitly says to work on `main` or a named branch
+
+### Agent checklist (start of new feature)
+
+- [ ] Confirm this is new feature work (not a tiny fix on the current branch)
+- [ ] Update `main`: `git checkout main && git pull`
+- [ ] Create branch: `git checkout -b feat/<feature-name>` (or `fix/`, `refactor/`, etc.)
+- [ ] Proceed with implementation; keep commits on this branch until PR
+
 ## Monorepo layout
 
 - **Dart workspace** managed by `melos` (root `pubspec.yaml` has `melos:` config)
-- **Three Rust crates** — not a single Cargo workspace:
+- **Four Rust crates** — not a single Cargo workspace:
   - `packages/image_forge/rust/` — image processing engine (standalone `Cargo.toml`)
+  - `packages/image_forge_core/rust/` — lightweight image engine (standalone `Cargo.toml`)
   - `packages/video_forge/rust/` — video engine (workspace root at `packages/video_forge/Cargo.toml`, member `rust/`)
   - `packages/media_forge/rust/` — media playback engine (standalone `Cargo.toml`; FFmpeg + cpal for real-time video/audio decode and mixing)
 
 ## Package boundaries
 
-
-| Package                   | Role                                        | Depends on                                         |
-| ------------------------- | ------------------------------------------- | -------------------------------------------------- |
-| `pixel_surface`        | GPU Texture bridge only                     | —                                                  |
-| `image_forge`         | Rust engine + FRB APIs                     | `pixel_surface`                                  |
-| `image_forge_editor`       | Editor UI (Riverpod)                       | `image_forge`, `pixel_surface`, `image_forge_camera` |
-| `image_forge_camera`     | Live camera YUV stream                     | —                                                  |
-| `media_forge`      | Media playback runtime (decode, clock, texture, audio) | `pixel_surface`                        |
-| `video_forge`    | Video Rust engine + FFmpeg                  | —                                                  |
-| `video_forge_kit` | Video compress/thumbnails SDK               | `video_forge`, `pixel_surface`, `video_forge_cache` |
-| `video_forge_cache`   | Optional disk cache                         | —                                                  |
+| Package | Role | Depends on |
+| --- | --- | --- |
+| `pixel_surface` | GPU Texture bridge only | — |
+| `image_forge` | Rust image engine + FRB APIs (full features: face/GPU/presets) | `pixel_surface` |
+| `image_forge_core` | Lightweight Rust image processing engine (no UI/presets) | — |
+| `image_forge_editor` | Editor UI (Riverpod) | `image_forge`, `pixel_surface`, `image_forge_camera` |
+| `image_forge_camera` | Live camera YUV stream | — |
+| `media_forge` | Media playback runtime (decode, clock, texture, audio mixing) | `pixel_surface` |
+| `video_forge` | Video Rust engine + FFmpeg | — |
+| `video_forge_editor` | Video editor UI + export | `video_forge`, `media_forge` |
+| `video_forge_kit` | Video compress/thumbnails SDK | `video_forge`, `pixel_surface`, `video_forge_cache` |
+| `video_forge_cache` | Optional disk cache | — |
 
 
 ## Logging & observability (required when writing code)
@@ -93,9 +120,12 @@ Env knobs: `TEST_RUST_FEATURES` (default `gpu,blurhash`), `RUN_INTEGRATION=1`, `
 | **Layer**                      | **Command**                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------------------------------- |
 | Rust image core                | `cd packages/image_forge/rust && cargo test --features gpu,blurhash`                        |
+| Rust image_forge_core          | `cd packages/image_forge_core/rust && cargo test --features gpu,blurhash`                   |
 | Rust video core                | `cd packages/video_forge && cargo test -p video_forge`                        |
 | Rust media runtime             | `cd packages/media_forge/rust && cargo test`                                              |
 | Dart unit tests (editor)       | `cd packages/image_forge_editor && flutter test test/editor/`                                                    |
+| Dart unit tests (image_forge_core) | `cd packages/image_forge_core && flutter test`                                         |
+| Dart unit tests (video_forge)  | `cd packages/video_forge && flutter test`                                                 |
 | Dart unit tests (media runtime) | `cd packages/media_forge && flutter test`                                                |
 | Dart integration               | `cd examples/image_editor && flutter test integration_test/ -d <device>`                           |
 | Dart analyze (all)              | `dart run melos analyze`                                                                        |
@@ -107,6 +137,7 @@ Env knobs: `TEST_RUST_FEATURES` (default `gpu,blurhash`), `RUN_INTEGRATION=1`, `
 dart run melos exec --scope=image_forge_editor -- flutter analyze lib test --no-fatal-infos --no-fatal-warnings
 dart run melos exec --scope=pixel_surface -- flutter analyze --no-fatal-infos
 dart run melos exec --scope=media_forge -- flutter analyze --no-fatal-infos
+dart run melos exec --scope=video_forge -- flutter analyze --no-fatal-infos
 ```
 
 ### **Benchmarks**
@@ -140,6 +171,7 @@ After editing `rust/src/api/*.rs`, regenerate Dart bindings:
 | Package | Command | Output |
 |---------|---------|--------|
 | `image_forge` | `cd packages/image_forge && flutter_rust_bridge_codegen generate` | `lib/src/rust/` |
+| `image_forge_core` | `cd packages/image_forge_core && flutter_rust_bridge_codegen generate` | `lib/src/rust/` |
 | `video_forge` | `cd packages/video_forge && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
 | `media_forge` | `cd packages/media_forge && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
 
@@ -280,7 +312,7 @@ If audio sequence appears but source audio is silent while overlay plays, check 
 
 - **AVIF encoder needs NASM** — builds fail on hosts without it. Use `TEST_RUST_FEATURES=gpu,blurhash` (no avif) unless NASM is installed.
 - **Android builds require** `rustup`, not Homebrew `rustc`. The repo has `rust/rust-toolchain.toml` for auto-installing Android targets. If you see `can't find crate for core`, run `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android i686-linux-android`.
-- **Three Rust crate roots** — `packages/image_forge/rust/` standalone; `packages/video_forge/Cargo.toml` workspace root with `rust/` member; `packages/media_forge/rust/` standalone.
+- **Four Rust crate roots** — `packages/image_forge/rust/` standalone; `packages/image_forge_core/rust/` standalone; `packages/video_forge/Cargo.toml` workspace root with `rust/` member; `packages/media_forge/rust/` standalone.
 - `dart run` **does not work** for FRB-based benchmarks or apps. Always use `flutter run` or `flutter test`.
 - **First Android build** compiles Rust for each ABI — can take several minutes.
 - **Melos bootstrap** required after cloning: `dart pub get && dart run melos bootstrap`.
@@ -352,4 +384,4 @@ Use `debugPrint('[Tag] event key=value')` style for these.
 
 ## **CI**
 
-`.github/workflows/ci.yml` runs on `ubuntu-latest`: melos bootstrap → per-package analyze → per-package test → Rust video test. No native build step in CI (Dart-only checks).
+`.github/workflows/ci.yml` runs on `ubuntu-latest`: melos bootstrap → per-package analyze → per-package test → Rust video test. No native build step in CI (Dart-only checks). `media_forge` is **not in CI** — run it manually: `cd packages/media_forge && flutter analyze --no-fatal-infos` and `cd packages/media_forge/rust && cargo test`.

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'video_text_overlay_style.dart';
+import 'video_text_presets.dart';
 
 /// Builds a [TextStyle] for [VideoTextOverlayContent] (image-editor compatible).
 TextStyle videoTextPaintStyle(
@@ -15,7 +16,24 @@ TextStyle videoTextPaintStyle(
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     fontFamily: style.fontFamily,
-    shadows: const [],
+    letterSpacing: style.letterSpacing,
+    shadows: style.useThreeD
+        ? const [
+            Shadow(color: Color(0xFF1A237E), offset: Offset(3, 3), blurRadius: 0),
+            Shadow(color: Color(0x88000000), offset: Offset(6, 6), blurRadius: 2),
+          ]
+        : style.lookPreset == VideoTextLookPreset.neon
+            ? [
+                Shadow(
+                  color: style.color.withValues(alpha: style.glowIntensity),
+                  blurRadius: 8 + 16 * style.glowIntensity,
+                ),
+                Shadow(
+                  color: style.color.withValues(alpha: 0.35 * style.glowIntensity),
+                  blurRadius: 20 + 12 * style.glowIntensity,
+                ),
+              ]
+            : const [],
   );
 
   if (style.fillMode == VideoTextFillMode.solid) {
@@ -59,24 +77,35 @@ class VideoTextOverlayContent extends StatelessWidget {
             final lh = constraints.maxHeight.isFinite && constraints.maxHeight > 0
                 ? constraints.maxHeight
                 : style.fontSize * 2;
+            final showBox = style.showBackground &&
+                style.backgroundStyle != VideoTextBackgroundStyle.none;
             return Container(
               padding: EdgeInsets.all(style.padding),
-              decoration: style.backgroundStyle == VideoTextBackgroundStyle.none
-                  ? null
-                  : BoxDecoration(
+              decoration: showBox
+                  ? BoxDecoration(
                       color: style.backgroundColor,
                       borderRadius: style.backgroundStyle ==
                               VideoTextBackgroundStyle.rounded
                           ? BorderRadius.circular(style.cornerRadius)
                           : BorderRadius.zero,
-                    ),
-              child: Text(
-                spec.label,
-                textAlign: TextAlign.center,
-                style: videoTextPaintStyle(
-                  style,
-                  layoutWidth: lw,
-                  layoutHeight: lh,
+                    )
+                  : null,
+              child: Transform(
+                alignment: Alignment.center,
+                transform: style.useThreeD
+                    ? (Matrix4.identity()
+                      ..setEntry(3, 2, 0.001)
+                      ..rotateX(-0.12)
+                      ..rotateY(0.08))
+                    : Matrix4.identity(),
+                child: Text(
+                  spec.label,
+                  textAlign: style.textAlign,
+                  style: videoTextPaintStyle(
+                    style,
+                    layoutWidth: lw,
+                    layoutHeight: lh,
+                  ),
                 ),
               ),
             );

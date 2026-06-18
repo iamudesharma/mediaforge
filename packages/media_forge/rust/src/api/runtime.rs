@@ -1044,6 +1044,8 @@ struct AudioPlayerState {
     audio_clock_ms: Arc<AtomicU64>,
     /// When true, the cpal callback writes silence instead of decoded samples.
     is_muted: Arc<AtomicBool>,
+    /// When true, source video audio is silenced but overlay tracks still play.
+    source_muted: Arc<AtomicBool>,
     /// Trim end in ms — when audio clock reaches this, playback ends.
     trim_end_ms: Arc<AtomicU64>,
     /// Set by the cpal callback when audio clock >= trim_end_ms.
@@ -1075,6 +1077,8 @@ pub struct AudioRuntime {
     seek_generation: Arc<AtomicU64>,
     /// Mute flag — when true, cpal writes silence while keeping the clock running.
     is_muted: Arc<AtomicBool>,
+    /// Source-only mute — silences embedded video audio while overlays keep playing.
+    source_muted: Arc<AtomicBool>,
     /// Trim end in ms — set by MediaPlaybackEngine, read by cpal callback.
     trim_end_ms: Arc<AtomicU64>,
     /// Set by cpal callback when audio clock >= trim_end_ms.
@@ -1120,6 +1124,7 @@ impl AudioRuntime {
             seek_was_playing,
             seek_generation,
             is_muted: Arc::new(AtomicBool::new(false)),
+            source_muted: Arc::new(AtomicBool::new(false)),
             trim_end_ms: Arc::new(AtomicU64::new(u64::MAX)),
             trim_end_reached: Arc::new(AtomicBool::new(false)),
             overlay_tracks: Mutex::new(Vec::new()),
@@ -1157,6 +1162,7 @@ impl AudioRuntime {
 
                 let audio_clock_ms_arc = self.audio_clock_ms.clone();
                 let is_muted_arc = self.is_muted.clone();
+                let source_muted_arc = self.source_muted.clone();
                 let trim_end_ms_arc = self.trim_end_ms.clone();
                 let trim_end_reached_arc = self.trim_end_reached.clone();
                 // Pass the shared Arc — cpal callback will lock it each buffer,
@@ -1170,6 +1176,7 @@ impl AudioRuntime {
                     waveform: self.waveform.clone(),
                     audio_clock_ms: audio_clock_ms_arc,
                     is_muted: is_muted_arc,
+                    source_muted: source_muted_arc,
                     trim_end_ms: trim_end_ms_arc,
                     trim_end_reached: trim_end_reached_arc,
                     overlay_states: overlay_states_shared,
@@ -1185,6 +1192,11 @@ impl AudioRuntime {
                         let is_playing = state.clock.get_state() == PlaybackState::Playing;
                         let is_seeking = state.clock.get_state() == PlaybackState::Seeking;
                         let muted = state.is_muted.load(Ordering::Relaxed);
+                        let source_gain = if state.source_muted.load(Ordering::Relaxed) {
+                            0.0f32
+                        } else {
+                            1.0f32
+                        };
 
                         // Update sample-accurate audio master clock once per buffer.
                         // Formula: frame_pts + samples_consumed_in_frame / (sample_rate * channels)
@@ -1337,7 +1349,7 @@ let mut max_amplitude = 0.0f32;
                             let mut mixed = 0.0f32;
                             if let Some(frame) = &state.current_frame {
                                 if state.current_sample_idx < frame.samples.len() {
-                                    mixed += frame.samples[state.current_sample_idx];
+                                    mixed += frame.samples[state.current_sample_idx] * source_gain;
                                     state.current_sample_idx += 1;
                                     sample_count += 1;
                                 } else {
@@ -1347,7 +1359,7 @@ let mut max_amplitude = 0.0f32;
                                         state.current_sample_idx = 0;
                                         if let Some(ref f) = state.current_frame {
                                             if f.samples.len() > 0 && state.current_sample_idx < f.samples.len() {
-                                                mixed += f.samples[state.current_sample_idx];
+                                                mixed += f.samples[state.current_sample_idx] * source_gain;
                                                 state.current_sample_idx += 1;
                                                 sample_count += 1;
                                                 break;
@@ -1365,7 +1377,7 @@ let mut max_amplitude = 0.0f32;
                                     state.current_sample_idx = 0;
                                     if let Some(ref f) = state.current_frame {
                                         if f.samples.len() > 0 && state.current_sample_idx < f.samples.len() {
-                                            mixed += f.samples[state.current_sample_idx];
+                                            mixed += f.samples[state.current_sample_idx] * source_gain;
                                             state.current_sample_idx += 1;
                                             sample_count += 1;
                                             break;
@@ -1691,6 +1703,12 @@ let mut max_amplitude = 0.0f32;
     pub fn set_muted(&self, muted: bool) {
         self.is_muted.store(muted, Ordering::Relaxed);
         runtime_log!("[AudioRuntime] Muted={}", muted);
+    }
+
+    /// Mute only the source (embedded video) audio lane. Overlay tracks keep playing.
+    pub fn set_source_muted(&self, muted: bool) {
+        self.source_muted.store(muted, Ordering::Relaxed);
+        runtime_log!("[AudioRuntime] SourceMuted={}", muted);
     }
 
     /// Set the trim end point in ms. The cpal callback monitors the audio
@@ -2676,6 +2694,11 @@ impl MediaPlaybackEngine {
 
     pub fn set_muted(&self, muted: bool) {
         self.audio_runtime.set_muted(muted);
+    }
+
+    /// Mute only embedded source audio during preview (overlay BGM keeps playing).
+    pub fn set_source_muted(&self, muted: bool) {
+        self.audio_runtime.set_source_muted(muted);
     }
 
     /// Set the trim range in ms. Packets outside this range are skipped by

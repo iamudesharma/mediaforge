@@ -28,7 +28,7 @@ void main() {
       ),
     );
     expect(updated.textSpec?.label, 'Hi');
-    expect(updated.child, isA<VideoTextOverlayContent>());
+    expect(updated.child, isA<AnimatedVideoTextOverlayContent>());
   });
 
   test('resolvedTextSpec parses legacy id', () {

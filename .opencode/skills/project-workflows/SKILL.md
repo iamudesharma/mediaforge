@@ -5,6 +5,25 @@ description: Use when the user asks how to run any example in the repo, regenera
 
 # Project Workflows
 
+## Git workflow (new features → PR)
+
+When starting **new feature work**, create a branch before coding so work is trackable and ready for PR.
+
+```bash
+git checkout main && git pull
+git checkout -b feat/<feature-name>   # or fix/, refactor/, docs/, chore/
+# … implement …
+git push -u origin HEAD             # when ready for review
+```
+
+- **Naming:** `{type}/{feature-name}` in kebab-case (e.g. `feat/video-forge-editor`)
+- **Commits:** only when the user explicitly asks
+- **PR:** against `main` when the feature is complete
+
+See root `AGENTS.md` for full agent checklist and when to skip branching.
+
+---
+
 ## FRB codegen — regenerate Dart bindings after editing `rust/src/api/*.rs`
 
 | Package | Command |

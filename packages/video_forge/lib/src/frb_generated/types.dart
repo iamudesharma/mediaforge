@@ -8,6 +8,46 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'types.freezed.dart';
 
+/// One animated scalar property over a time window (relative to overlay [start_ms]).
+class AnimationTrack {
+  final TransformProperty property;
+  final double from;
+  final double to;
+  final BigInt startMs;
+  final BigInt durationMs;
+  final Easing easing;
+
+  const AnimationTrack({
+    required this.property,
+    required this.from,
+    required this.to,
+    required this.startMs,
+    required this.durationMs,
+    required this.easing,
+  });
+
+  @override
+  int get hashCode =>
+      property.hashCode ^
+      from.hashCode ^
+      to.hashCode ^
+      startMs.hashCode ^
+      durationMs.hashCode ^
+      easing.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AnimationTrack &&
+          runtimeType == other.runtimeType &&
+          property == other.property &&
+          from == other.from &&
+          to == other.to &&
+          startMs == other.startMs &&
+          durationMs == other.durationMs &&
+          easing == other.easing;
+}
+
 /// Background audio lane for export mux (paths must be local FFmpeg-readable files).
 class AudioTrackInput {
   final String sourcePath;
@@ -196,52 +236,42 @@ class BatchThumbnailResult {
           decodedStatus == other.decodedStatus;
 }
 
-/// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
+/// One overlay layer for export burn-in (image PNG v1; text vector v2).
 class BurnInOverlay {
-  final String imagePath;
+  final OverlayContent content;
 
   /// Visible on [start_ms, end_ms) in source timeline milliseconds.
   final BigInt startMs;
   final BigInt endMs;
-
-  /// Normalized anchor 0–1 (top-left origin), matches Flutter compositor.
-  final double anchorX;
-  final double anchorY;
-  final BigInt fadeInMs;
-  final BigInt fadeOutMs;
+  final TransformTracks transform;
+  final OverlayEffects effects;
 
   const BurnInOverlay({
-    required this.imagePath,
+    required this.content,
     required this.startMs,
     required this.endMs,
-    required this.anchorX,
-    required this.anchorY,
-    required this.fadeInMs,
-    required this.fadeOutMs,
+    required this.transform,
+    required this.effects,
   });
 
   @override
   int get hashCode =>
-      imagePath.hashCode ^
+      content.hashCode ^
       startMs.hashCode ^
       endMs.hashCode ^
-      anchorX.hashCode ^
-      anchorY.hashCode ^
-      fadeInMs.hashCode ^
-      fadeOutMs.hashCode;
+      transform.hashCode ^
+      effects.hashCode;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is BurnInOverlay &&
           runtimeType == other.runtimeType &&
-          imagePath == other.imagePath &&
+          content == other.content &&
           startMs == other.startMs &&
           endMs == other.endMs &&
-          anchorX == other.anchorX &&
-          anchorY == other.anchorY &&
-          fadeInMs == other.fadeInMs &&
-          fadeOutMs == other.fadeOutMs;
+          transform == other.transform &&
+          effects == other.effects;
 }
 
 class CompressOptions {
@@ -397,6 +427,36 @@ class CompressResult {
           pipelineMode == other.pipelineMode;
 }
 
+/// Easing curve applied to track progress t in [0, 1].
+enum Easing { linear, easeIn, easeOut, easeInOut, overshoot, bounce }
+
+/// Pre-rasterized PNG from Flutter (stickers / legacy bake).
+class ImageOverlayData {
+  final String path;
+
+  /// Normalized anchor 0–1 (top-left origin), matches Flutter compositor.
+  final double anchorX;
+  final double anchorY;
+
+  const ImageOverlayData({
+    required this.path,
+    required this.anchorX,
+    required this.anchorY,
+  });
+
+  @override
+  int get hashCode => path.hashCode ^ anchorX.hashCode ^ anchorY.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ImageOverlayData &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          anchorX == other.anchorX &&
+          anchorY == other.anchorY;
+}
+
 @freezed
 sealed class JobResult with _$JobResult {
   const JobResult._();
@@ -514,6 +574,80 @@ sealed class OutputProfile with _$OutputProfile {
     /// fMP4 / CMAF segments). Use `3` for legacy clients.
     required int hlsVersion,
   }) = OutputProfile_Hls;
+}
+
+@freezed
+sealed class OverlayContent with _$OverlayContent {
+  const OverlayContent._();
+
+  const factory OverlayContent.image(ImageOverlayData field0) =
+      OverlayContent_Image;
+  const factory OverlayContent.text(TextOverlayData field0) =
+      OverlayContent_Text;
+}
+
+class OverlayEffect {
+  final OverlayEffectKind kind;
+
+  /// 0–1 strength.
+  final double intensity;
+
+  /// Ms relative to overlay [start_ms]; 0 = overlay start.
+  final BigInt startMs;
+
+  /// 0 = entire visible duration after [start_ms].
+  final BigInt durationMs;
+
+  const OverlayEffect({
+    required this.kind,
+    required this.intensity,
+    required this.startMs,
+    required this.durationMs,
+  });
+
+  @override
+  int get hashCode =>
+      kind.hashCode ^
+      intensity.hashCode ^
+      startMs.hashCode ^
+      durationMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OverlayEffect &&
+          runtimeType == other.runtimeType &&
+          kind == other.kind &&
+          intensity == other.intensity &&
+          startMs == other.startMs &&
+          durationMs == other.durationMs;
+}
+
+enum OverlayEffectKind {
+  none,
+  glitch,
+  glow,
+  chromaticAberration,
+  rgbSplit,
+  motionBlur,
+  shake,
+}
+
+/// GPU-style overlay post-effects (v3 — CPU implementation during burn-in).
+class OverlayEffects {
+  final List<OverlayEffect> effects;
+
+  const OverlayEffects({required this.effects});
+
+  @override
+  int get hashCode => effects.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is OverlayEffects &&
+          runtimeType == other.runtimeType &&
+          effects == other.effects;
 }
 
 @freezed
@@ -683,6 +817,125 @@ class ProgressEvent {
           etaMs == other.etaMs;
 }
 
+enum TextAlign { left, center, right }
+
+/// Category 2 content animations (glyph/word visibility — not rigid transforms).
+enum TextContentAnimation { none, typewriter, wordReveal, characterStagger }
+
+/// Vector text rendered at export resolution via cosmic-text (Category 2).
+class TextOverlayData {
+  final String text;
+  final double anchorX;
+  final double anchorY;
+
+  /// Logical font size at 1080p reference height; scaled to output resolution.
+  final double fontSize;
+
+  /// CSS-style weight 100–900.
+  final int fontWeight;
+  final bool italic;
+  final int colorR;
+  final int colorG;
+  final int colorB;
+  final int colorA;
+  final double letterSpacing;
+
+  /// Max layout width in normalized frame units (1.0 = full output width).
+  final double maxWidth;
+  final double padding;
+  final double cornerRadius;
+  final bool showBackground;
+  final int backgroundR;
+  final int backgroundG;
+  final int backgroundB;
+  final int backgroundA;
+  final double glowIntensity;
+  final TextAlign textAlign;
+  final TextContentAnimation contentAnimation;
+  final BigInt contentAnimationDurationMs;
+
+  const TextOverlayData({
+    required this.text,
+    required this.anchorX,
+    required this.anchorY,
+    required this.fontSize,
+    required this.fontWeight,
+    required this.italic,
+    required this.colorR,
+    required this.colorG,
+    required this.colorB,
+    required this.colorA,
+    required this.letterSpacing,
+    required this.maxWidth,
+    required this.padding,
+    required this.cornerRadius,
+    required this.showBackground,
+    required this.backgroundR,
+    required this.backgroundG,
+    required this.backgroundB,
+    required this.backgroundA,
+    required this.glowIntensity,
+    required this.textAlign,
+    required this.contentAnimation,
+    required this.contentAnimationDurationMs,
+  });
+
+  @override
+  int get hashCode =>
+      text.hashCode ^
+      anchorX.hashCode ^
+      anchorY.hashCode ^
+      fontSize.hashCode ^
+      fontWeight.hashCode ^
+      italic.hashCode ^
+      colorR.hashCode ^
+      colorG.hashCode ^
+      colorB.hashCode ^
+      colorA.hashCode ^
+      letterSpacing.hashCode ^
+      maxWidth.hashCode ^
+      padding.hashCode ^
+      cornerRadius.hashCode ^
+      showBackground.hashCode ^
+      backgroundR.hashCode ^
+      backgroundG.hashCode ^
+      backgroundB.hashCode ^
+      backgroundA.hashCode ^
+      glowIntensity.hashCode ^
+      textAlign.hashCode ^
+      contentAnimation.hashCode ^
+      contentAnimationDurationMs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TextOverlayData &&
+          runtimeType == other.runtimeType &&
+          text == other.text &&
+          anchorX == other.anchorX &&
+          anchorY == other.anchorY &&
+          fontSize == other.fontSize &&
+          fontWeight == other.fontWeight &&
+          italic == other.italic &&
+          colorR == other.colorR &&
+          colorG == other.colorG &&
+          colorB == other.colorB &&
+          colorA == other.colorA &&
+          letterSpacing == other.letterSpacing &&
+          maxWidth == other.maxWidth &&
+          padding == other.padding &&
+          cornerRadius == other.cornerRadius &&
+          showBackground == other.showBackground &&
+          backgroundR == other.backgroundR &&
+          backgroundG == other.backgroundG &&
+          backgroundB == other.backgroundB &&
+          backgroundA == other.backgroundA &&
+          glowIntensity == other.glowIntensity &&
+          textAlign == other.textAlign &&
+          contentAnimation == other.contentAnimation &&
+          contentAnimationDurationMs == other.contentAnimationDurationMs;
+}
+
 /// In-memory thumbnail (JPEG/WebP bytes) — no filesystem write.
 class ThumbnailBytesOptions {
   final String inputPath;
@@ -769,6 +1022,26 @@ class ThumbnailOptions {
           width == other.width &&
           height == other.height &&
           format == other.format;
+}
+
+/// Transform channel. Translate values are fractions of output frame size (1.0 = full width/height).
+enum TransformProperty { translateX, translateY, scale, rotation, opacity }
+
+/// Sparse transform animation tracks (normalized coordinates).
+class TransformTracks {
+  final List<AnimationTrack> tracks;
+
+  const TransformTracks({required this.tracks});
+
+  @override
+  int get hashCode => tracks.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TransformTracks &&
+          runtimeType == other.runtimeType &&
+          tracks == other.tracks;
 }
 
 enum VideoCodec { h264, hevc }

@@ -1,27 +1,33 @@
 PODS:
   - FlutterMacOS (1.0.0)
-  - rust_gpu_texture (0.1.0):
+  - media_forge (0.1.0):
     - FlutterMacOS
-  - video_processor_core (0.1.0):
+  - pixel_surface (1.0.0):
+    - FlutterMacOS
+  - video_forge (1.0.0):
     - FlutterMacOS
 
 DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
-  - rust_gpu_texture (from `Flutter/ephemeral/.symlinks/plugins/rust_gpu_texture/macos`)
-  - video_processor_core (from `Flutter/ephemeral/.symlinks/plugins/video_processor_core/macos`)
+  - media_forge (from `Flutter/ephemeral/.symlinks/plugins/media_forge/macos`)
+  - pixel_surface (from `Flutter/ephemeral/.symlinks/plugins/pixel_surface/macos`)
+  - video_forge (from `Flutter/ephemeral/.symlinks/plugins/video_forge/macos`)
 
 EXTERNAL SOURCES:
   FlutterMacOS:
     :path: Flutter/ephemeral
-  rust_gpu_texture:
-    :path: Flutter/ephemeral/.symlinks/plugins/rust_gpu_texture/macos
-  video_processor_core:
-    :path: Flutter/ephemeral/.symlinks/plugins/video_processor_core/macos
+  media_forge:
+    :path: Flutter/ephemeral/.symlinks/plugins/media_forge/macos
+  pixel_surface:
+    :path: Flutter/ephemeral/.symlinks/plugins/pixel_surface/macos
+  video_forge:
+    :path: Flutter/ephemeral/.symlinks/plugins/video_forge/macos
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  rust_gpu_texture: 9f133a42cf51e7e65fc9023be5deb1484f936827
-  video_processor_core: 7b9f0414cd5dba842e09a0fb6a1707cd862db9a1
+  media_forge: 040fd1b0605fb909fded6c789625287e402811f0
+  pixel_surface: 415771ab34c2e234ad2f521d5b2e33c0899f54a2
+  video_forge: 6d922efdb9e6dcfc4c6ab230fc602feb453fd4c5
 
 PODFILE CHECKSUM: 13edfb9e70ac3646927b8e6c9a212ad1d0fa29b2
 

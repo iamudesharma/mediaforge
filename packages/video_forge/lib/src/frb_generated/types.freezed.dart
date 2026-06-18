@@ -650,6 +650,298 @@ as int,
 }
 
 /// @nodoc
+mixin _$OverlayContent {
+
+ Object get field0;
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OverlayContent&&const DeepCollectionEquality().equals(other.field0, field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(field0));
+
+@override
+String toString() {
+  return 'OverlayContent(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+class $OverlayContentCopyWith<$Res>  {
+$OverlayContentCopyWith(OverlayContent _, $Res Function(OverlayContent) __);
+}
+
+
+/// Adds pattern-matching-related methods to [OverlayContent].
+extension OverlayContentPatterns on OverlayContent {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( OverlayContent_Image value)?  image,TResult Function( OverlayContent_Text value)?  text,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case OverlayContent_Image() when image != null:
+return image(_that);case OverlayContent_Text() when text != null:
+return text(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( OverlayContent_Image value)  image,required TResult Function( OverlayContent_Text value)  text,}){
+final _that = this;
+switch (_that) {
+case OverlayContent_Image():
+return image(_that);case OverlayContent_Text():
+return text(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( OverlayContent_Image value)?  image,TResult? Function( OverlayContent_Text value)?  text,}){
+final _that = this;
+switch (_that) {
+case OverlayContent_Image() when image != null:
+return image(_that);case OverlayContent_Text() when text != null:
+return text(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( ImageOverlayData field0)?  image,TResult Function( TextOverlayData field0)?  text,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case OverlayContent_Image() when image != null:
+return image(_that.field0);case OverlayContent_Text() when text != null:
+return text(_that.field0);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( ImageOverlayData field0)  image,required TResult Function( TextOverlayData field0)  text,}) {final _that = this;
+switch (_that) {
+case OverlayContent_Image():
+return image(_that.field0);case OverlayContent_Text():
+return text(_that.field0);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( ImageOverlayData field0)?  image,TResult? Function( TextOverlayData field0)?  text,}) {final _that = this;
+switch (_that) {
+case OverlayContent_Image() when image != null:
+return image(_that.field0);case OverlayContent_Text() when text != null:
+return text(_that.field0);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class OverlayContent_Image extends OverlayContent {
+  const OverlayContent_Image(this.field0): super._();
+  
+
+@override final  ImageOverlayData field0;
+
+/// Create a copy of OverlayContent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OverlayContent_ImageCopyWith<OverlayContent_Image> get copyWith => _$OverlayContent_ImageCopyWithImpl<OverlayContent_Image>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OverlayContent_Image&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'OverlayContent.image(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $OverlayContent_ImageCopyWith<$Res> implements $OverlayContentCopyWith<$Res> {
+  factory $OverlayContent_ImageCopyWith(OverlayContent_Image value, $Res Function(OverlayContent_Image) _then) = _$OverlayContent_ImageCopyWithImpl;
+@useResult
+$Res call({
+ ImageOverlayData field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$OverlayContent_ImageCopyWithImpl<$Res>
+    implements $OverlayContent_ImageCopyWith<$Res> {
+  _$OverlayContent_ImageCopyWithImpl(this._self, this._then);
+
+  final OverlayContent_Image _self;
+  final $Res Function(OverlayContent_Image) _then;
+
+/// Create a copy of OverlayContent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(OverlayContent_Image(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as ImageOverlayData,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class OverlayContent_Text extends OverlayContent {
+  const OverlayContent_Text(this.field0): super._();
+  
+
+@override final  TextOverlayData field0;
+
+/// Create a copy of OverlayContent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$OverlayContent_TextCopyWith<OverlayContent_Text> get copyWith => _$OverlayContent_TextCopyWithImpl<OverlayContent_Text>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is OverlayContent_Text&&(identical(other.field0, field0) || other.field0 == field0));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,field0);
+
+@override
+String toString() {
+  return 'OverlayContent.text(field0: $field0)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $OverlayContent_TextCopyWith<$Res> implements $OverlayContentCopyWith<$Res> {
+  factory $OverlayContent_TextCopyWith(OverlayContent_Text value, $Res Function(OverlayContent_Text) _then) = _$OverlayContent_TextCopyWithImpl;
+@useResult
+$Res call({
+ TextOverlayData field0
+});
+
+
+
+
+}
+/// @nodoc
+class _$OverlayContent_TextCopyWithImpl<$Res>
+    implements $OverlayContent_TextCopyWith<$Res> {
+  _$OverlayContent_TextCopyWithImpl(this._self, this._then);
+
+  final OverlayContent_Text _self;
+  final $Res Function(OverlayContent_Text) _then;
+
+/// Create a copy of OverlayContent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? field0 = null,}) {
+  return _then(OverlayContent_Text(
+null == field0 ? _self.field0 : field0 // ignore: cast_nullable_to_non_nullable
+as TextOverlayData,
+  ));
+}
+
+
+}
+
+/// @nodoc
 mixin _$PlaybackFrame {
 
  Object get field0;

@@ -188,23 +188,34 @@ void main() {
 
   group('BurnInOverlay', () {
     test('construction and equality', () {
-      final a = BurnInOverlay(
-        imagePath: '/overlay.png',
-        startMs: BigInt.from(0),
-        endMs: BigInt.from(5000),
+      final image = ImageOverlayData(
+        path: '/overlay.png',
         anchorX: 0.5,
         anchorY: 0.5,
-        fadeInMs: BigInt.from(500),
-        fadeOutMs: BigInt.from(500),
+      );
+      final transform = TransformTracks(tracks: [
+        AnimationTrack(
+          property: TransformProperty.opacity,
+          from: 0,
+          to: 1,
+          startMs: BigInt.zero,
+          durationMs: BigInt.from(500),
+          easing: Easing.linear,
+        ),
+      ]);
+      final a = BurnInOverlay(
+        content: OverlayContent.image(image),
+        startMs: BigInt.from(0),
+        endMs: BigInt.from(5000),
+        transform: transform,
+        effects: const OverlayEffects(effects: []),
       );
       final b = BurnInOverlay(
-        imagePath: '/overlay.png',
+        content: OverlayContent.image(image),
         startMs: BigInt.from(0),
         endMs: BigInt.from(5000),
-        anchorX: 0.5,
-        anchorY: 0.5,
-        fadeInMs: BigInt.from(500),
-        fadeOutMs: BigInt.from(500),
+        transform: transform,
+        effects: const OverlayEffects(effects: []),
       );
 
       expect(a, equals(b));

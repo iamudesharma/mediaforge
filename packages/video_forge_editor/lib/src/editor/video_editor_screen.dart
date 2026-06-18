@@ -2,22 +2,34 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_forge_kit/video_forge_kit.dart';
 import 'package:path/path.dart' as p;
 import 'package:video_forge_editor/src/debug/diagnostics_panel.dart';
+import 'package:video_forge_editor/src/layout/desktop_timeline_layout.dart';
+import 'package:video_forge_editor/src/layout/mobile_stories_layout.dart';
+import 'package:video_forge_editor/src/models/recent_audio_track.dart';
 import 'package:video_forge_editor/src/models/video_export_result.dart';
+import 'package:video_forge_editor/src/panels/inline_text_editor.dart';
+import 'package:video_forge_editor/src/panels/lumina_sticker_panel.dart';
+import 'package:video_forge_editor/src/panels/music_picker_sheet.dart';
+import 'package:video_forge_editor/src/panels/sticker_picker_sheet.dart';
+import 'package:video_forge_editor/src/panels/text_overlay_edit_chrome.dart';
 import 'package:video_forge_editor/src/panels/text_overlay_sheet.dart';
 import 'package:video_forge_editor/src/playback/playback_backend.dart';
 import 'package:video_forge_editor/src/playback/rust_playback_backend.dart';
+import 'package:video_forge_editor/src/services/audio_picker.dart';
 import 'package:video_forge_editor/src/services/editor_output_paths.dart';
 import 'package:video_forge_editor/src/services/media_ingest.dart';
+import 'package:video_forge_editor/src/theme/lumina_tokens.dart';
 import 'package:video_forge_editor/src/widgets/audio_waveform_visualizer.dart';
+import 'package:video_forge_editor/src/widgets/editor_bottom_nav.dart';
 import 'package:video_forge_editor/src/widgets/filmstrip_trimmer.dart';
 import 'package:video_forge_editor/src/widgets/modern_timeline.dart';
+import 'package:video_forge_editor/src/widgets/overlay_timing_tracks_bar.dart';
 import 'package:video_forge_editor/src/widgets/rust_video_canvas.dart';
+import 'video_editor_session.dart';
 import 'video_forge_editor_config.dart';
 
 class VideoEditorScreen extends StatefulWidget {
@@ -47,7 +59,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   double _playbackRate = 1.0;
 
   List<String> _filmstripPaths = [];
-  final TimelineController _timeline = TimelineController();
+  late final TimelineController _timeline;
   bool _loadingFilmstrip = false;
   bool _busy = false;
   String _statusLine = 'Initializing player…';
@@ -69,10 +81,32 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   String? _inspectorOpenedForId;
   double _timelineZoom = 1.0;
   double _inspectorWidth = 380.0;
+  final List<RecentAudioTrack> _recentAudioTracks = [];
+  final Map<String, Future<String?>> _normalizationFutures = {};
+  int _pendingNormalizationCount = 0;
+  VideoEditorSession? _session;
+  final Map<String, int> _textReplayTokens = {};
+  EditorNavTool _activeNavTool = EditorNavTool.media;
+
+  VideoOverlayItem? get _selectedTextOverlay {
+    final overlay = _selectedOverlay();
+    if (overlay == null || !overlay.isTextOverlay) return null;
+    return overlay;
+  }
 
   @override
   void initState() {
     super.initState();
+    _session = widget.config.session;
+    _timeline = _session?.timeline ?? TimelineController();
+    if (_session != null) {
+      _muteOriginalAudio = _session!.muteOriginalAudio;
+      _exportPreset = _session!.exportPreset;
+      _preferHw = _session!.preferHw;
+      _playbackRate = _session!.playbackRate;
+      _session!.backend = _backend;
+    }
+    _showDiagnostics = widget.config.showDiagnostics;
     _timeline.addListener(_onTimelineUpdated);
     final path = widget.config.initialVideoPath;
     if (path != null && path.isNotEmpty) {
@@ -84,9 +118,27 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   void dispose() {
     _progressSub?.cancel();
     _timeline.removeListener(_onTimelineUpdated);
+    if (_session == null) {
+      _timeline.dispose();
+    }
     _playheadNotifier.dispose();
-    _backend?.dispose();
+    if (_session == null) {
+      _backend?.dispose();
+    }
     super.dispose();
+  }
+
+  void _syncSession() {
+    final session = _session;
+    if (session == null) return;
+    session.muteOriginalAudio = _muteOriginalAudio;
+    session.exportPreset = _exportPreset;
+    session.preferHw = _preferHw;
+    session.playbackRate = _playbackRate;
+    session.backend = _backend;
+    session.startSec = _startSec;
+    session.endSec = _endSec;
+    session.playheadSec = _playheadSec;
   }
 
   void _onTimelineUpdated() {
@@ -112,13 +164,21 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     // Only open when the selection ID actually changes — not on every
     // timeline update (which fires for playback, trim, volume, etc).
     if (mounted) {
-      final isNarrow = MediaQuery.sizeOf(context).width < 768;
+      final isNarrow =
+          MediaQuery.sizeOf(context).width < LuminaTokens.breakpointTablet;
       if (isNarrow) {
         final selSig = _currentSelectionSignature;
         final hasSel = selSig != null;
         final isNewSelection = hasSel && selSig != _inspectorOpenedForId;
 
         if (isNewSelection) {
+          final overlay = _selectedOverlay();
+          if (isNarrow && overlay != null && overlay.isTextOverlay) {
+            _inspectorOpenedForId = selSig;
+            debugPrint('[StoriesChrome] text selected id=${overlay.id} inline-edit');
+            return;
+          }
+
           _inspectorOpenedForId = selSig;
           _bottomSheetOpen = true;
           showModalBottomSheet<void>(
@@ -250,6 +310,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       backend.addListener(_onBackendUpdated);
       await backend.open(path);
       await backend.setPlaybackRate(_playbackRate);
+      await backend.setEmbeddedAudioMuted(_muteOriginalAudio);
+      _syncSession();
 
       // Start the engine so the first frame is presented, then pause so the
       // timeline stays in its "loaded but not playing" state.
@@ -473,22 +535,86 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   }
 
   Future<void> _pickAudioTrack() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'flac'],
+    await _showMusicPicker();
+  }
+
+  AudioTimelineClip? get _primaryAudioClip =>
+      _timeline.audioClips.isNotEmpty ? _timeline.audioClips.first : null;
+
+  String? get _primaryAudioDisplayName {
+    final clip = _primaryAudioClip;
+    if (clip == null) return null;
+    for (final recent in _recentAudioTracks) {
+      if (recent.path == clip.sourcePath) return recent.displayName;
+    }
+    return p.basename(clip.sourcePath);
+  }
+
+  bool get _hasPendingNormalization => _pendingNormalizationCount > 0;
+
+  Future<void> _showMusicPicker() async {
+    final clip = _primaryAudioClip;
+    List<double> waveform = const [];
+    final rust = _backend as RustPlaybackBackend?;
+    if (rust != null) {
+      try {
+        final samples = await rust.engine?.getAudioWaveform();
+        if (samples != null) {
+          waveform = samples.map((s) => s.toDouble()).toList();
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+    await MusicPickerSheet.show(
+      context,
+      recentTracks: _recentAudioTracks,
+      selectedClip: clip,
+      muteOriginalAudio: _muteOriginalAudio,
+      waveformSamples: waveform,
+      onMuteOriginalChanged: (v) {
+        setState(() => _muteOriginalAudio = v);
+        _syncSession();
+        _backend?.setEmbeddedAudioMuted(v);
+      },
+      onVolumeChanged: (v) {
+        final current = _primaryAudioClip;
+        if (current == null) return;
+        _timeline.updateAudioClip(current.copyWith(volume: v));
+        setState(() {});
+      },
+      onSourceStartChanged: (ms) {
+        final current = _primaryAudioClip;
+        if (current == null) return;
+        _timeline.updateAudioClip(current.copyWith(sourceStartMs: ms));
+        _playheadSec = current.timelineStartMs / 1000.0;
+        _playheadNotifier.value = _playheadSec;
+        _applySeekFromTimelineMs(current.timelineStartMs);
+        setState(() {});
+      },
+      onRemoveTrack: () {
+        final current = _primaryAudioClip;
+        if (current != null) {
+          _timeline.removeAudioClip(current.id);
+        }
+        setState(() {});
+      },
+      onTrackPicked: _ingestAudioFromPick,
     );
-    if (result == null || result.files.isEmpty) return;
-    final path = result.files.single.path;
-    if (path == null) {
-      if (mounted) {
-        setState(() => _statusLine = 'Audio import failed: no file path');
+  }
+
+  Future<void> _ingestAudioFromPick(AudioPickResult pick) async {
+    final isMobile =
+        MediaQuery.sizeOf(context).width < LuminaTokens.breakpointTablet;
+    if (isMobile) {
+      for (final existing in List<AudioTimelineClip>.from(_timeline.audioClips)) {
+        _timeline.removeAudioClip(existing.id);
       }
-      return;
     }
 
     setState(() => _statusLine = 'Importing audio…');
     final ingested = await MediaIngest.ingestLocalAudio(
-      path,
+      pick.path,
       onStatus: (s) {
         if (mounted) setState(() => _statusLine = s);
       },
@@ -498,40 +624,66 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         ingested.info == null) {
       if (mounted) {
         setState(() => _statusLine = ingested.error ?? 'Audio import failed');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ingested.error ??
+                  'Could not import audio. Try a file from Files instead of DRM-protected tracks.',
+            ),
+          ),
+        );
       }
       return;
     }
 
     final stablePath = ingested.stablePath!;
     final sourceDurationMs = ingested.info!.durationMs.toInt();
-    // Always start audio at timeline 0 — background music should cover the
-    // whole video (like CapCut / Instagram / TikTok).  Using _playheadTimelineMs
-    // would cause clamping to ~1 ms when the playhead is near the end of a
-    // short video.
+    final displayName = pick.displayName ?? p.basename(stablePath);
+
+    _recentAudioTracks.removeWhere((t) => t.path == stablePath);
+    _recentAudioTracks.insert(
+      0,
+      RecentAudioTrack(
+        path: stablePath,
+        displayName: displayName,
+        durationMs: sourceDurationMs,
+        pickedAt: DateTime.now(),
+      ),
+    );
+    if (_recentAudioTracks.length > 12) {
+      _recentAudioTracks.removeRange(12, _recentAudioTracks.length);
+    }
+
     final clip = _timeline.addAudioClip(
       sourcePath: stablePath,
       sourceDurationMs: sourceDurationMs > 0 ? sourceDurationMs : 1000,
       timelineStartMs: 0,
       videoDurationMs: _timeline.videoDurationMs,
     );
+
+    if (!_muteOriginalAudio) {
+      setState(() => _muteOriginalAudio = true);
+      _syncSession();
+      _backend?.setEmbeddedAudioMuted(true);
+    }
+
     if (mounted) {
       setState(() {
         _statusLine =
-            'Audio track added · ${p.basename(stablePath)} '
-            '(${_formatDuration(sourceDurationMs)})';
+            'Music added · $displayName (${_formatDuration(sourceDurationMs)})';
       });
+      debugPrint('[MusicPicker] ready path=$stablePath muteOriginal=$_muteOriginalAudio');
     }
 
-    // If normalization to AAC is running in the background, update the clip's
-    // source path once it completes so export mux gets the AAC file.
     final normFuture = ingested.normalizedPathFuture;
     if (normFuture != null) {
       final clipId = clip.id;
-      normFuture.then((aacPath) {
+      _pendingNormalizationCount++;
+      final tracked = normFuture.then((aacPath) => aacPath);
+      _normalizationFutures[clipId] = tracked;
+      tracked.then((aacPath) {
+        _normalizationFutures.remove(clipId);
         if (!mounted) return;
-        // Re-read the current clip from timeline to preserve user's volume/range
-        // changes. The closure'd `clip` may be stale if user edited before
-        // normalization finished.
         AudioTimelineClip? currentClip;
         for (final c in _timeline.audioClips) {
           if (c.id == clipId) {
@@ -544,9 +696,144 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         }
         debugPrint('[MediaIngest] Audio normalized to AAC: $aacPath');
       }).catchError((e) {
+        _normalizationFutures.remove(clipId);
         debugPrint('[MediaIngest] Background AAC normalization failed: $e');
+      }).whenComplete(() {
+        _pendingNormalizationCount = (_pendingNormalizationCount - 1).clamp(0, 999);
       });
     }
+  }
+
+  void _onNavToolChanged(EditorNavTool tool) {
+    debugPrint('[LuminaChrome] nav=$tool');
+    setState(() => _activeNavTool = tool);
+    switch (tool) {
+      case EditorNavTool.media:
+        break;
+      case EditorNavTool.text:
+        if (_selectedTextOverlay == null) {
+          _addTextOverlay();
+        }
+      case EditorNavTool.sticker:
+        break;
+      case EditorNavTool.music:
+        _showMusicPicker();
+      case EditorNavTool.more:
+        _showMoreSheet();
+    }
+  }
+
+  void _showSoundSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: LuminaTokens.surfaceContainer,
+      showDragHandle: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setBottomSheetState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(LuminaTokens.space4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Sound',
+                  style: TextStyle(
+                    color: LuminaTokens.onSurface,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Mute original video audio',
+                    style: TextStyle(color: LuminaTokens.onSurface),
+                  ),
+                  value: _muteOriginalAudio,
+                  activeThumbColor: LuminaTokens.accent,
+                  onChanged: (v) {
+                    setState(() => _muteOriginalAudio = v);
+                    _syncSession();
+                    _backend?.setEmbeddedAudioMuted(v);
+                    setBottomSheetState(() {});
+                  },
+                ),
+                if (_primaryAudioClip != null) ...[
+                  const SizedBox(height: LuminaTokens.space2),
+                  Row(
+                    children: [
+                      const Text(
+                        'Music volume',
+                        style: TextStyle(color: LuminaTokens.onSurfaceVariant),
+                      ),
+                      Expanded(
+                        child: Slider(
+                          value: _primaryAudioClip!.volume,
+                          activeColor: LuminaTokens.accent,
+                          onChanged: (v) {
+                            _timeline.updateAudioClip(
+                              _primaryAudioClip!.copyWith(volume: v),
+                            );
+                            setState(() {});
+                            setBottomSheetState(() {});
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showMoreSheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: LuminaTokens.surfaceContainer,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.content_cut),
+              title: const Text('Split at playhead'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _splitAtPlayhead();
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.analytics_outlined,
+                color: _showDiagnostics ? LuminaTokens.accent : null,
+              ),
+              title: const Text('Diagnostics'),
+              onTap: () {
+                setState(() => _showDiagnostics = !_showDiagnostics);
+                Navigator.pop(ctx);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Clear overlays'),
+              onTap: () {
+                for (final o in List<VideoOverlayItem>.from(_timeline.overlays)) {
+                  _timeline.removeOverlay(o.id);
+                }
+                Navigator.pop(ctx);
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Re-open the Rust backend on a different file. Used to fall back to the
@@ -656,11 +943,36 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   }
 
   Future<void> _addTextOverlay() async {
-    final spec = await VideoTextOverlayEditSheet.show(
-      context,
-      initialSpec: const VideoTextOverlaySpec(label: ''),
-      title: 'Add text overlay',
-    );
+    final isMobile =
+        MediaQuery.sizeOf(context).width < LuminaTokens.breakpointTablet;
+    VideoTextOverlaySpec? spec;
+
+    if (isMobile) {
+      spec = await showDialog<VideoTextOverlaySpec>(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black26,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: EdgeInsets.zero,
+          child: InlineTextEditorOverlay(
+            initialSpec: VideoTextOverlaySpec(
+              label: '',
+              style: styleForLookPreset(VideoTextLookPreset.modern),
+            ),
+            onDone: (s) => Navigator.pop(ctx, s),
+            onCancel: () => Navigator.pop(ctx),
+          ),
+        ),
+      );
+    } else {
+      spec = await VideoTextOverlayEditSheet.show(
+        context,
+        initialSpec: const VideoTextOverlaySpec(label: ''),
+        title: 'Add text overlay',
+      );
+    }
+
     if (spec == null || !mounted) return;
 
     final duration = _timeline.durationMs;
@@ -673,16 +985,120 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       anchor: const Offset(0.3, 0.4),
       label: spec.label,
       style: spec.style,
+      fadeInMs: 280,
     );
     _timeline.addOverlay(overlay);
+    _timeline.selectOverlay(overlay.id);
     setState(() {});
   }
 
-  void _updateTextOverlay(String id, VideoTextOverlaySpec spec) {
+  void _updateTextOverlay(String id, VideoTextOverlaySpec spec, {int? replayToken}) {
     final i = _timeline.overlays.indexWhere((o) => o.id == id);
     if (i < 0) return;
-    _timeline.updateOverlay(_timeline.overlays[i].withTextSpec(spec));
+    final token = replayToken ?? ((_textReplayTokens[id] ?? 0) + 1);
+    _textReplayTokens[id] = token;
+    _timeline.updateOverlay(
+      _timeline.overlays[i].withTextSpec(spec, replayToken: token),
+    );
   }
+
+  void _cycleTextStyleOnTap(VideoOverlayItem overlay) {
+    final spec = overlay.resolvedTextSpec;
+    if (spec == null) return;
+    final nextColor = nextAccentColor(spec.style.color);
+    final next = spec.copyWith(
+      style: styleForLookPreset(
+        nextLookPreset(spec.style.lookPreset),
+        base: spec.style,
+        accent: nextColor,
+      ).copyWith(color: nextColor),
+    );
+    _updateTextOverlay(overlay.id, next);
+    setState(() {});
+    debugPrint('[TextOverlay] cycle preset=${next.style.lookPreset}');
+  }
+
+  void _applyTextStyle(VideoOverlayItem overlay, VideoTextOverlayStyle style) {
+    final spec = overlay.resolvedTextSpec;
+    if (spec == null) return;
+    _updateTextOverlay(overlay.id, spec.copyWith(style: style));
+    _textReplayTokens[overlay.id] = (_textReplayTokens[overlay.id] ?? 0) + 1;
+    setState(() {});
+  }
+
+  void _applyTextAnimation(
+    VideoOverlayItem overlay,
+    VideoTextAnimation animation,
+  ) {
+    final spec = overlay.resolvedTextSpec;
+    if (spec == null) return;
+    _updateTextOverlay(
+      overlay.id,
+      spec.copyWith(style: spec.style.copyWith(animation: animation)),
+    );
+    _textReplayTokens[overlay.id] = (_textReplayTokens[overlay.id] ?? 0) + 1;
+    setState(() {});
+  }
+
+  void _applyTextPreset(VideoOverlayItem overlay, VideoTextLookPreset preset) {
+    final spec = overlay.resolvedTextSpec;
+    if (spec == null) return;
+    final next = spec.copyWith(style: styleForLookPreset(preset, base: spec.style));
+    _updateTextOverlay(overlay.id, next);
+    _textReplayTokens[overlay.id] = (_textReplayTokens[overlay.id] ?? 0) + 1;
+    setState(() {});
+  }
+
+  void _toggleTextBackground(VideoOverlayItem overlay) {
+    final spec = overlay.resolvedTextSpec;
+    if (spec == null) return;
+    final style = spec.style;
+    final nextShow = !style.showBackground;
+    final next = spec.copyWith(
+      style: style.copyWith(
+        showBackground: nextShow,
+        backgroundStyle: nextShow
+            ? VideoTextBackgroundStyle.rounded
+            : VideoTextBackgroundStyle.none,
+      ),
+    );
+    _updateTextOverlay(overlay.id, next);
+    setState(() {});
+  }
+
+  Future<void> _openTextEditorForOverlay(VideoOverlayItem overlay) async {
+    final spec = overlay.resolvedTextSpec;
+    if (spec == null) return;
+    final updated = await showDialog<VideoTextOverlaySpec>(
+      context: context,
+      barrierDismissible: false,
+      barrierColor: Colors.black26,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: InlineTextEditorOverlay(
+          initialSpec: spec,
+          onDone: (s) => Navigator.pop(ctx, s),
+          onCancel: () => Navigator.pop(ctx),
+        ),
+      ),
+    );
+    if (updated == null || !mounted) return;
+    _updateTextOverlay(overlay.id, updated);
+    setState(() {});
+  }
+
+  void _deleteOverlay(String id) {
+    _timeline.removeOverlay(id);
+    _textReplayTokens.remove(id);
+    _clearSelections();
+    setState(() {
+      _statusLine = 'Overlay deleted';
+    });
+    debugPrint('[TextOverlay] deleted id=$id');
+  }
+
+  int _replayTokenFor(String id) => _textReplayTokens[id] ?? 0;
 
   VideoOverlayItem? _selectedOverlay() {
     final id = _timeline.selectedOverlayId;
@@ -694,60 +1110,23 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   }
 
   void _addEmojiOverlay() {
-    final emojis = ['✨', '🔥', '😂', '❤️', '👍', '🍕', '🎉', '✈️'];
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      showDragHandle: true,
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Choose Emoji Overlay',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-              GridView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.all(16),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                ),
-                itemCount: emojis.length,
-                itemBuilder: (context, i) {
-                  return InkWell(
-                    onTap: () {
-                      final duration = _timeline.durationMs;
-                      final startMs = _playheadTimelineMs;
-                      final endMs = (startMs + 5000).clamp(0, duration);
-                      
-                      final overlay = VideoOverlayItem.emoji(
-                        id: 'emoji:${emojis[i]}:${DateTime.now().millisecondsSinceEpoch}',
-                        startMs: startMs,
-                        endMs: endMs,
-                        anchor: const Offset(0.7, 0.2),
-                        emoji: emojis[i],
-                      );
-                      
-                      _timeline.addOverlay(overlay);
-                      setState(() {});
-                      Navigator.pop(ctx);
-                    },
-                    child: Center(
-                      child: Text(emojis[i], style: const TextStyle(fontSize: 40)),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+    StickerPickerSheet.show(
+      context,
+      onEmojiSelected: (emoji) {
+        final duration = _timeline.durationMs;
+        final startMs = _playheadTimelineMs;
+        final endMs = (startMs + 5000).clamp(0, duration);
+
+        final overlay = VideoOverlayItem.emoji(
+          id: 'emoji:$emoji:${DateTime.now().millisecondsSinceEpoch}',
+          startMs: startMs,
+          endMs: endMs,
+          anchor: const Offset(0.7, 0.2),
+          emoji: emoji,
         );
+
+        _timeline.addOverlay(overlay);
+        setState(() {});
       },
     );
   }
@@ -760,6 +1139,15 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   Future<void> _exportVideo() async {
     final isPlaying = _backend?.isPlaying ?? false;
     if (_busy) return;
+
+    if (_hasPendingNormalization) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please wait — audio is still being prepared for export.'),
+        ),
+      );
+      return;
+    }
 
     if (isPlaying) {
       _backend?.pause();
@@ -948,9 +1336,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
                               setState(() {
                                 _muteOriginalAudio = v;
                               });
-                              if (_exportAudioTracks().isEmpty) {
-                                _backend?.setEmbeddedAudioMuted(v);
-                              }
+                              _syncSession();
+                              _backend?.setEmbeddedAudioMuted(v);
                             },
                           ),
                           FilledButton(
@@ -1135,6 +1522,38 @@ ProcessingPhase.decoding => 'Decoding',
     };
   }
 
+  Widget? _buildMobileToolPanel() {
+    if (_selectedTextOverlay != null) return null;
+    switch (_activeNavTool) {
+      case EditorNavTool.sticker:
+        return LuminaStickerPanel(onEmojiSelected: _addEmojiFromPicker);
+      case EditorNavTool.media:
+      case EditorNavTool.text:
+      case EditorNavTool.music:
+      case EditorNavTool.more:
+        return null;
+    }
+  }
+
+  void _addEmojiFromPicker(String emoji) {
+    final duration = _timeline.durationMs;
+    final startMs = _playheadTimelineMs;
+    final endMs = (startMs + 5000).clamp(0, duration);
+
+    final overlay = VideoOverlayItem.emoji(
+      id: 'emoji:$emoji:${DateTime.now().millisecondsSinceEpoch}',
+      startMs: startMs,
+      endMs: endMs,
+      anchor: const Offset(0.5, 0.45),
+      emoji: emoji,
+    );
+
+    _timeline.addOverlay(overlay);
+    _timeline.selectOverlay(overlay.id);
+    setState(() {});
+    debugPrint('[StickerPanel] overlay added emoji=$emoji');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1142,70 +1561,105 @@ ProcessingPhase.decoding => 'Decoding',
 
     final mainContent = LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 768;
+        final isWide = constraints.maxWidth >= LuminaTokens.breakpointTablet;
         if (isWide) {
-          return Stack(
-            children: [
-              // Main editing column
-              Positioned(
-                left: 0,
-                right: _inspectorWidth,
-                top: 0,
-                bottom: 0,
-                child: _buildLeftPanel(context, theme, isLoaded, isWide, 0.0),
-              ),
-              // Inspector panel
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: 0,
-                width: _inspectorWidth,
-                child: Row(
-                  children: [
-                    // Horizontal resize handle
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragUpdate: (details) {
-                        setState(() {
-                          _inspectorWidth = (_inspectorWidth - details.delta.dx).clamp(280.0, 600.0);
-                        });
-                      },
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.resizeLeftRight,
-                        child: Container(
-                          width: 8,
-                          color: Colors.transparent,
-                          child: Center(
-                            child: Container(
-                              width: 2,
-                              height: 32,
-                              color: Colors.white24,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _buildInspectorPanel(theme, isWide),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        } else {
-          // Mobile/portrait column (Inspector shown as modal bottom sheet on selection)
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _buildLeftPanel(context, theme, isLoaded, isWide, 0.0),
-              ),
-            ],
+          return DesktopTimelineLayout(
+            inspectorWidth: _inspectorWidth,
+            onInspectorResize: (w) => setState(() => _inspectorWidth = w),
+            leftPanel: _buildLeftPanel(context, theme, isLoaded, isWide, fullBleed: false),
+            inspectorPanel: _buildInspectorPanel(theme, isWide),
           );
         }
+        return MobileStoriesLayout(
+          isLoaded: isLoaded,
+          title: widget.displayName,
+          preview: _buildPreviewCanvas(fullBleed: true),
+          scrubberRow: _buildSpatiallyStableScrubberRow(theme),
+          timelineSection: _buildTimelinePanel(theme, isLoaded),
+          onClose: () {
+            widget.config.onCancel?.call();
+            Navigator.pop(context);
+          },
+          onExport: _exportVideo,
+          activeNavTool: _activeNavTool,
+          onNavToolChanged: _onNavToolChanged,
+          toolPanel: _buildMobileToolPanel(),
+          onSplit: _splitAtPlayhead,
+          onDelete: _timeline.selectedVideoClipId != null ||
+                  _timeline.selectedOverlayId != null ||
+                  _timeline.selectedAudioClipId != null
+              ? () {
+                  final vid = _timeline.selectedVideoClipId;
+                  final oid = _timeline.selectedOverlayId;
+                  final aid = _timeline.selectedAudioClipId;
+                  if (vid != null) _timeline.deleteVideoClip(vid);
+                  if (oid != null) _deleteOverlay(oid);
+                  if (aid != null) _timeline.removeAudioClip(aid);
+                  setState(() {});
+                }
+              : null,
+          onSpeed: () => _showMoreSheet(),
+          canSplit: isLoaded && _timeline.videoClips.isNotEmpty,
+          canDelete: _timeline.selectedVideoClipId != null ||
+              _timeline.selectedOverlayId != null ||
+              _timeline.selectedAudioClipId != null,
+          hasMusic: _primaryAudioClip != null,
+          compactPreview: _selectedTextOverlay != null ||
+              _activeNavTool == EditorNavTool.sticker,
+          overlayTracksBar: OverlayTimingTracksBar(
+            overlays: _timeline.overlays,
+            audioClips: _timeline.audioClips,
+            videoDurationMs: _timeline.durationMs,
+            selectedOverlayId: _timeline.selectedOverlayId,
+            selectedAudioId: _timeline.selectedAudioClipId,
+            onSelectOverlay: (id) {
+              _timeline.selectOverlay(id);
+              if (id != null) {
+                _timeline.selectVideoClip(null);
+                _timeline.selectAudioClip(null);
+              }
+              setState(() {});
+            },
+            onSelectAudio: (id) {
+              _timeline.selectAudioClip(id);
+              if (id != null) _timeline.selectOverlay(null);
+              setState(() {});
+            },
+          ),
+          textEditChrome: _selectedTextOverlay == null
+              ? null
+              : TextOverlayEditChrome(
+                  overlay: _selectedTextOverlay!,
+                  videoDurationMs: _timeline.durationMs,
+                  replayToken: _replayTokenFor(_selectedTextOverlay!.id),
+                  onPresetSelected: (p) =>
+                      _applyTextPreset(_selectedTextOverlay!, p),
+                  onStyleChanged: (s) =>
+                      _applyTextStyle(_selectedTextOverlay!, s),
+                  onAnimationSelected: (a) =>
+                      _applyTextAnimation(_selectedTextOverlay!, a),
+                  onToggleBackground: () =>
+                      _toggleTextBackground(_selectedTextOverlay!),
+                  onTimingChanged: (start, end) {
+                    _timeline.updateOverlay(
+                      _selectedTextOverlay!.copyWith(
+                        startMs: start,
+                        endMs: end,
+                      ),
+                    );
+                    setState(() {});
+                  },
+                  onDone: () {
+                    setState(() => _activeNavTool = EditorNavTool.media);
+                    _clearSelections();
+                  },
+                ),
+        );
       },
     );
+
+    final isWideLayout =
+        MediaQuery.sizeOf(context).width >= LuminaTokens.breakpointTablet;
 
     return Focus(
       autofocus: true,
@@ -1232,84 +1686,95 @@ ProcessingPhase.decoding => 'Decoding',
           },
         },
         child: Scaffold(
-          backgroundColor: const Color(0xFF0F0F10),
-          appBar: AppBar(
-            backgroundColor: const Color(0xFF151517),
-            elevation: 0,
-            title: Text(
-              widget.displayName ?? 'Video Creator',
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-              onPressed: () => Navigator.pop(context),
-            ),
-            actions: [
-              if (isLoaded) ...[
-                // Rust runtime badge
-                Container(
-                  margin: const EdgeInsets.symmetric(vertical: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.greenAccent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
+          backgroundColor: LuminaTokens.canvas,
+          appBar: isWideLayout
+              ? AppBar(
+                  backgroundColor: LuminaTokens.surfaceContainerLow,
+                  elevation: 0,
+                  title: Text(
+                    widget.displayName ?? 'Video Creator',
+                    style: const TextStyle(
+                      color: LuminaTokens.onSurface,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.memory,
-                        size: 14,
-                        color: Colors.greenAccent,
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: LuminaTokens.onSurface, size: 20),
+                    onPressed: () {
+                      widget.config.onCancel?.call();
+                      Navigator.pop(context);
+                    },
+                  ),
+                  actions: [
+                    if (isLoaded) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: LuminaTokens.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.memory, size: 14, color: LuminaTokens.accent),
+                            SizedBox(width: 6),
+                            Text(
+                              'Rust',
+                              style: TextStyle(
+                                color: LuminaTokens.accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      SizedBox(width: 6),
-                      Text(
-                        'Rust',
-                        style: TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(
+                          Icons.analytics_outlined,
+                          color: _showDiagnostics ? LuminaTokens.accent : LuminaTokens.onSurfaceMuted,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() => _showDiagnostics = !_showDiagnostics);
+                        },
+                        tooltip: 'Diagnostics',
+                      ),
+                      const SizedBox(width: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 12, top: 10, bottom: 10),
+                        child: FilledButton.icon(
+                          onPressed: _exportVideo,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: LuminaTokens.onAccent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                          ),
+                          icon: const Icon(Icons.save_alt, size: 16),
+                          label: const Text(
+                            'Export',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: Icon(
-                    Icons.analytics_outlined,
-                    color: _showDiagnostics ? Colors.greenAccent : Colors.white54,
-                    size: 20,
-                  ),
-                  onPressed: () {
-                    setState(() => _showDiagnostics = !_showDiagnostics);
-                  },
-                  tooltip: 'Diagnostics',
-                ),
-                const SizedBox(width: 4),
-                Padding(
-                  padding: const EdgeInsets.only(right: 12, top: 10, bottom: 10),
-                  child: FilledButton.icon(
-                    onPressed: _exportVideo,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: theme.colorScheme.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                    ),
-                    icon: const Icon(Icons.save_alt, color: Colors.white, size: 16),
-                    label: const Text('Export', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ],
-          ),
+                  ],
+                )
+              : null,
           body: SafeArea(
+            top: !isWideLayout,
+            bottom: false,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(child: mainContent),
-                _buildStatusLine(),
+                if (isWideLayout) _buildStatusLine(),
               ],
             ),
           ),
@@ -1318,151 +1783,165 @@ ProcessingPhase.decoding => 'Decoding',
     );
   }
 
-  Widget _buildLeftPanel(BuildContext context, ThemeData theme, bool isLoaded, bool isWide, double inspectorWidth) {
+  Widget _buildLeftPanel(
+    BuildContext context,
+    ThemeData theme,
+    bool isLoaded,
+    bool isWide, {
+    required bool fullBleed,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: _buildPreviewCanvas(fullBleed: fullBleed)),
+        if (isLoaded && _showDiagnostics && isWide)
+          SizedBox(
+            height: 140,
+            child: DiagnosticsPanel(
+              backend: _backend as RustPlaybackBackend,
+            ),
+          ),
+        if (isLoaded && _backend is RustPlaybackBackend && isWide)
+          AudioWaveformVisualizer(
+            backend: _backend as RustPlaybackBackend,
+            height: 36,
+          ),
+        if (isWide) _buildSpatiallyStableScrubberRow(theme),
+        if (isWide) _buildTimelineSection(theme, isLoaded, isWide),
+      ],
+    );
+  }
+
+  Widget _buildPreviewCanvas({required bool fullBleed}) {
+    final isLoaded = _backend != null && _backend!.isOpen;
     final info = _activeMediaInfo;
     final aspect = info != null && info.width > 0 && info.height > 0
         ? info.width / info.height
         : 16 / 9;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Video Preview Canvas
-        Expanded(
-          child: Container(
-            color: const Color(0xFF0F0F10),
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: ClipRRect(
+    return Container(
+      color: LuminaTokens.canvas,
+      padding: fullBleed ? EdgeInsets.zero : const EdgeInsets.all(24),
+      child: Center(
+        child: fullBleed
+            ? _buildPreviewStack(aspect, isLoaded)
+            : ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
                   color: Colors.black,
-                  child: isLoaded
-                      ? AspectRatio(
-                          aspectRatio: aspect,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              ListenableBuilder(
-                                listenable: _timeline,
-                                builder: (context, _) {
-                                  return ValueListenableBuilder<double>(
-                                    valueListenable: _playheadNotifier,
-                                    builder: (context, playheadSec, _) {
-                                      final rustBackend = _backend as RustPlaybackBackend?;
-                                      if (rustBackend == null) {
-                                        return const Center(
-                                          child: CircularProgressIndicator(color: Colors.white),
-                                        );
-                                      }
-                                      return RustVideoCanvas(
-                                        key: ValueKey(widget.initialPath),
-                                        backend: rustBackend,
-                                        overlays: _timeline.overlays,
-                                        timelinePlayheadMs:
-                                            (playheadSec * 1000).round(),
-                                        selectedOverlayId:
-                                            _timeline.selectedOverlayId,
-                                        onSelectOverlay: (id) {
-                                          _timeline.selectOverlay(id);
-                                          setState(() {});
-                                        },
-                                        onOverlayChanged: (item) {
-                                          _timeline.updateOverlay(item);
-                                          setState(() {});
-                                        },
-                                        showDiagnostics: _showDiagnostics,
-                                      );
-                                    },
-                                  );
-                                },
-                              ),
-                              // Play Button Overlay
-                              Positioned.fill(
-                                child: ListenableBuilder(
-                                  listenable: _backend ?? _dummyNotifier,
-                                  builder: (context, _) {
-                                    final playing = _backend?.isPlaying ?? false;
-                                    if (playing) return const SizedBox.shrink();
-                                    return Center(
-                                      child: GestureDetector(
-                                        onTap: _togglePlayback,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(16),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(Icons.play_arrow, size: 48, color: Colors.white),
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              if (_metricsLine.isNotEmpty)
-                                Positioned(
-                                  top: 8,
-                                  left: 8,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      _metricsLine,
-                                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'monospace'),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        )
-                      : const Center(
-                          child: CircularProgressIndicator(),
-                        ),
+                  child: _buildPreviewStack(aspect, isLoaded),
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildPreviewStack(double aspect, bool isLoaded) {
+    if (!isLoaded) {
+      return const AspectRatio(
+        aspectRatio: 9 / 16,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    return AspectRatio(
+      aspectRatio: aspect,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ListenableBuilder(
+            listenable: _timeline,
+            builder: (context, _) {
+              return ValueListenableBuilder<double>(
+                valueListenable: _playheadNotifier,
+                builder: (context, playheadSec, _) {
+                  final rustBackend = _backend as RustPlaybackBackend?;
+                  if (rustBackend == null) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    );
+                  }
+                  return RustVideoCanvas(
+                    key: ValueKey(widget.initialPath),
+                    backend: rustBackend,
+                    overlays: _timeline.overlays,
+                    timelinePlayheadMs: (playheadSec * 1000).round(),
+                    selectedOverlayId: _timeline.selectedOverlayId,
+                    onSelectOverlay: (id) {
+                      _timeline.selectOverlay(id);
+                      if (id != null) {
+                        _timeline.selectVideoClip(null);
+                        _timeline.selectAudioClip(null);
+                      }
+                      setState(() {});
+                    },
+                    onOverlayChanged: (item) {
+                      _timeline.updateOverlay(item);
+                      setState(() {});
+                    },
+                    onTapTextOverlay: _cycleTextStyleOnTap,
+                    onDoubleTapTextOverlay: _openTextEditorForOverlay,
+                    onDeleteOverlay: _deleteOverlay,
+                    showDeleteZone: _selectedTextOverlay != null,
+                    showDiagnostics: _showDiagnostics,
+                  );
+                },
+              );
+            },
+          ),
+          Positioned.fill(
+            child: ListenableBuilder(
+              listenable: _backend ?? _dummyNotifier,
+              builder: (context, _) {
+                final playing = _backend?.isPlaying ?? false;
+                if (playing) return const SizedBox.shrink();
+                return Center(
+                  child: GestureDetector(
+                    onTap: _togglePlayback,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.play_arrow,
+                        size: 48,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_metricsLine.isNotEmpty)
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  _metricsLine,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontFamily: 'monospace',
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-
-        // Diagnostics Panel
-        if (isLoaded && _showDiagnostics)
-          Padding(
-            padding: EdgeInsets.only(right: isWide ? inspectorWidth : 0),
-            child: SizedBox(
-              height: 140,
-              child: DiagnosticsPanel(
-                backend: _backend as RustPlaybackBackend,
-              ),
-            ),
-          ),
-
-        // Waveform Visualizer (renders even when muted)
-        if (isLoaded && _backend is RustPlaybackBackend)
-          Padding(
-            padding: EdgeInsets.only(right: isWide ? inspectorWidth : 0),
-            child: AudioWaveformVisualizer(
-              backend: _backend as RustPlaybackBackend,
-              height: 36,
-            ),
-          ),
-
-        // Spatially Stable Scrubber row
-        Padding(
-          padding: EdgeInsets.only(right: isWide ? inspectorWidth : 0),
-          child: _buildSpatiallyStableScrubberRow(theme),
-        ),
-
-        // Timeline Section (Resizable on desktop wide layout)
-        Padding(
-          padding: EdgeInsets.only(right: isWide ? inspectorWidth : 0),
-          child: _buildTimelineSection(theme, isLoaded, isWide),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  Widget _buildTimelinePanel(ThemeData theme, bool isLoaded) {
+    return _buildTimelineSection(theme, isLoaded, false);
   }
 
   double _snapPlayhead(double value) {
@@ -1505,11 +1984,11 @@ ProcessingPhase.decoding => 'Decoding',
   Widget _buildSpatiallyStableScrubberRow(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: const BoxDecoration(
-        color: Color(0xFF151517),
+      decoration: BoxDecoration(
+        color: LuminaTokens.surfaceContainerLow,
         border: Border(
-          top: BorderSide(color: Colors.white12, width: 1),
-          bottom: BorderSide(color: Colors.white12, width: 1),
+          top: BorderSide(color: LuminaTokens.outlineVariant.withValues(alpha: 0.5)),
+          bottom: BorderSide(color: LuminaTokens.outlineVariant.withValues(alpha: 0.5)),
         ),
       ),
       child: Row(
@@ -1641,11 +2120,7 @@ ProcessingPhase.decoding => 'Decoding',
     );
 
     if (!isWide) {
-      // Mobile fixed height timeline
-      return SizedBox(
-        height: 180,
-        child: timelinePanel,
-      );
+      return timelinePanel;
     }
 
     return Column(
@@ -1814,7 +2289,7 @@ ProcessingPhase.decoding => 'Decoding',
     final isText = type == 'text';
     final isEmoji = type == 'emoji';
     final duration = _timeline.durationMs;
-    final isWide = MediaQuery.sizeOf(context).width >= 768;
+    final isWide = MediaQuery.sizeOf(context).width >= LuminaTokens.breakpointTablet;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2176,9 +2651,8 @@ ProcessingPhase.decoding => 'Decoding',
               setState(() {
                 _muteOriginalAudio = v;
               });
-              if (_exportAudioTracks().isEmpty) {
-                _backend?.setEmbeddedAudioMuted(v);
-              }
+              _syncSession();
+              _backend?.setEmbeddedAudioMuted(v);
             },
           ),
         ),
