@@ -2,6 +2,11 @@ pub mod audio_mix;
 pub mod compress;
 pub mod metadata;
 pub mod overlay_burn;
+pub mod overlay_content;
+pub mod overlay_easing;
+pub mod overlay_effects;
+pub mod overlay_text;
+pub mod overlay_transform;
 pub mod preview;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub mod preview_hw;

@@ -1,6 +1,9 @@
 import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:video_forge_kit/video_forge_kit.dart';
+
+import '../theme/lumina_tokens.dart';
 
 class ModernTimeline extends StatefulWidget {
   const ModernTimeline({
@@ -108,12 +111,12 @@ class _ModernTimelineState extends State<ModernTimeline> {
             (_overlayCollapsed ? 20.0 : 64.0) + 16.0;
 
         return Card(
-          color: const Color(0xFF141416),
+          color: LuminaTokens.surfaceContainer,
           margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-          elevation: 2,
+          elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: const BorderSide(color: Colors.white10),
+            borderRadius: BorderRadius.circular(LuminaTokens.radiusLg),
+            side: const BorderSide(color: LuminaTokens.outlineVariant),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -168,7 +171,7 @@ class _ModernTimelineState extends State<ModernTimeline> {
                             child: IgnorePointer(
                               child: Container(
                                 width: 2,
-                                color: Colors.amberAccent,
+                                color: LuminaTokens.accent,
                                 child: Stack(
                                   clipBehavior: Clip.none,
                                   children: [
@@ -179,8 +182,14 @@ class _ModernTimelineState extends State<ModernTimeline> {
                                         width: 12,
                                         height: 12,
                                         decoration: const BoxDecoration(
-                                          color: Colors.amberAccent,
+                                          color: LuminaTokens.accent,
                                           shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: LuminaTokens.selectionGlow,
+                                              blurRadius: 6,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -372,26 +381,26 @@ class _ModernTimelineState extends State<ModernTimeline> {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFF16161A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        color: LuminaTokens.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(LuminaTokens.radiusXs),
+        border: Border.all(color: LuminaTokens.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Stack(
         children: [
-          // Track Name label inside
           Positioned(
             left: 8,
             top: 4,
             child: Row(
               children: [
-                const Icon(Icons.movie_creation_outlined, size: 10, color: Colors.indigoAccent),
+                const Icon(Icons.movie_creation_outlined, size: 10, color: LuminaTokens.accent),
                 const SizedBox(width: 4),
                 Text(
-                  'VIDEO TRACK',
+                  'Video',
                   style: TextStyle(
-                    color: Colors.indigoAccent.withValues(alpha: 0.7),
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
+                    color: LuminaTokens.accent.withValues(alpha: 0.85),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ],
@@ -428,26 +437,26 @@ class _ModernTimelineState extends State<ModernTimeline> {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFF16161A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        color: LuminaTokens.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(LuminaTokens.radiusXs),
+        border: Border.all(color: LuminaTokens.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Stack(
         children: [
-          // Track Name label inside
           Positioned(
             left: 8,
             top: 4,
             child: Row(
               children: [
-                const Icon(Icons.audiotrack, size: 10, color: Colors.greenAccent),
+                const Icon(Icons.audiotrack, size: 10, color: LuminaTokens.secondary),
                 const SizedBox(width: 4),
                 Text(
-                  'AUDIO TRACK',
+                  'Audio',
                   style: TextStyle(
-                    color: Colors.greenAccent.withValues(alpha: 0.7),
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
+                    color: LuminaTokens.secondary.withValues(alpha: 0.85),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ],
@@ -493,26 +502,26 @@ class _ModernTimelineState extends State<ModernTimeline> {
     return Container(
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xFF16161A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        color: LuminaTokens.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(LuminaTokens.radiusXs),
+        border: Border.all(color: LuminaTokens.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Stack(
         children: [
-          // Track Name label inside
           Positioned(
             left: 8,
             top: 4,
             child: Row(
               children: [
-                const Icon(Icons.layers_outlined, size: 10, color: Colors.purpleAccent),
+                const Icon(Icons.title, size: 10, color: LuminaTokens.primaryContainer),
                 const SizedBox(width: 4),
                 Text(
-                  'OVERLAY TRACK',
+                  'Text',
                   style: TextStyle(
-                    color: Colors.purpleAccent.withValues(alpha: 0.7),
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
+                    color: LuminaTokens.primaryContainer.withValues(alpha: 0.9),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ],

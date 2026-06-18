@@ -58,6 +58,9 @@ abstract class AudioRuntime implements RustOpaqueInterface {
   /// Set volume for an overlay track (0.0 .. 1.0).
   Future<void> setOverlayVolume({required BigInt id, required double volume});
 
+  /// Mute only the source (embedded video) audio lane. Overlay tracks keep playing.
+  Future<void> setSourceMuted({required bool muted});
+
   /// Set the trim end point in ms. The cpal callback monitors the audio
   /// clock and sets `trim_end_reached` when it reaches this value.
   Future<void> setTrimEndMs({required BigInt endMs});
@@ -174,6 +177,9 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
   Future<void> setOverlayVolume({required BigInt id, required double volume});
 
   Future<void> setRate({required double rate});
+
+  /// Mute only embedded source audio during preview (overlay BGM keeps playing).
+  Future<void> setSourceMuted({required bool muted});
 
   /// Set the trim range in ms. Packets outside this range are skipped by
   /// the demuxer, and playback auto-pauses when reaching `end_ms`.

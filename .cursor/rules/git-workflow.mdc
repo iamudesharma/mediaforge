@@ -1,0 +1,29 @@
+---
+description: Branch off main for new feature work; keep commits on the feature branch until PR
+alwaysApply: true
+---
+
+# Git workflow (features → PR)
+
+When starting **new feature work**, create a feature branch **before** writing code.
+
+## Branch naming
+
+- Pattern: `{type}/{feature-name}` (kebab-case)
+- Types: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`
+- Examples: `feat/video-forge-editor`, `fix/audio-overlay-preview`
+
+## Steps
+
+1. `git checkout main && git pull`
+2. `git checkout -b feat/<feature-name>` (pick the right type prefix)
+3. Implement and commit on this branch (only when the user asks to commit)
+4. When ready: `git push -u origin HEAD` and open a PR against `main`
+
+## Skip branching when
+
+- Read-only questions or exploration
+- Continuing work on an existing feature branch
+- User explicitly says to use `main` or a named branch
+
+Full repo conventions: see root `AGENTS.md`.

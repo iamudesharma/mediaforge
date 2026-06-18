@@ -181,19 +181,196 @@ pub struct AudioTrackInput {
     pub muted: bool,
 }
 
-/// One overlay layer baked to a PNG with alpha (paths from Flutter export rasterizer).
+/// One overlay layer for export burn-in (image PNG v1; text vector v2).
 #[frb]
 #[derive(Clone, Debug, Default)]
 pub struct BurnInOverlay {
-    pub image_path: String,
+    pub content: OverlayContent,
     /// Visible on [start_ms, end_ms) in source timeline milliseconds.
     pub start_ms: u64,
     pub end_ms: u64,
+    pub transform: TransformTracks,
+    pub effects: OverlayEffects,
+}
+
+/// Raster image or vector text payload.
+#[frb]
+#[derive(Clone, Debug)]
+pub enum OverlayContent {
+    Image(ImageOverlayData),
+    Text(TextOverlayData),
+}
+
+impl Default for OverlayContent {
+    fn default() -> Self {
+        OverlayContent::Image(ImageOverlayData::default())
+    }
+}
+
+/// Pre-rasterized PNG from Flutter (stickers / legacy bake).
+#[frb]
+#[derive(Clone, Debug, Default)]
+pub struct ImageOverlayData {
+    pub path: String,
     /// Normalized anchor 0–1 (top-left origin), matches Flutter compositor.
     pub anchor_x: f32,
     pub anchor_y: f32,
-    pub fade_in_ms: u64,
-    pub fade_out_ms: u64,
+}
+
+/// Vector text rendered at export resolution via cosmic-text (Category 2).
+#[frb]
+#[derive(Clone, Debug)]
+pub struct TextOverlayData {
+    pub text: String,
+    pub anchor_x: f32,
+    pub anchor_y: f32,
+    /// Logical font size at 1080p reference height; scaled to output resolution.
+    pub font_size: f32,
+    /// CSS-style weight 100–900.
+    pub font_weight: u32,
+    pub italic: bool,
+    pub color_r: u8,
+    pub color_g: u8,
+    pub color_b: u8,
+    pub color_a: u8,
+    pub letter_spacing: f32,
+    /// Max layout width in normalized frame units (1.0 = full output width).
+    pub max_width: f32,
+    pub padding: f32,
+    pub corner_radius: f32,
+    pub show_background: bool,
+    pub background_r: u8,
+    pub background_g: u8,
+    pub background_b: u8,
+    pub background_a: u8,
+    pub glow_intensity: f32,
+    pub text_align: TextAlign,
+    pub content_animation: TextContentAnimation,
+    pub content_animation_duration_ms: u64,
+}
+
+impl Default for TextOverlayData {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            anchor_x: 0.5,
+            anchor_y: 0.5,
+            font_size: 32.0,
+            font_weight: 600,
+            italic: false,
+            color_r: 255,
+            color_g: 255,
+            color_b: 255,
+            color_a: 255,
+            letter_spacing: 0.0,
+            max_width: 0.5,
+            padding: 12.0,
+            corner_radius: 16.0,
+            show_background: true,
+            background_r: 0,
+            background_g: 0,
+            background_b: 0,
+            background_a: 230,
+            glow_intensity: 0.0,
+            text_align: TextAlign::Center,
+            content_animation: TextContentAnimation::None,
+            content_animation_duration_ms: 0,
+        }
+    }
+}
+
+/// Category 2 content animations (glyph/word visibility — not rigid transforms).
+#[frb]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TextContentAnimation {
+    #[default]
+    None,
+    Typewriter,
+    WordReveal,
+    CharacterStagger,
+}
+
+#[frb]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TextAlign {
+    #[default]
+    Left,
+    Center,
+    Right,
+}
+
+/// GPU-style overlay post-effects (v3 — CPU implementation during burn-in).
+#[frb]
+#[derive(Clone, Debug, Default)]
+pub struct OverlayEffects {
+    pub effects: Vec<OverlayEffect>,
+}
+
+#[frb]
+#[derive(Clone, Debug)]
+pub struct OverlayEffect {
+    pub kind: OverlayEffectKind,
+    /// 0–1 strength.
+    pub intensity: f32,
+    /// Ms relative to overlay [start_ms]; 0 = overlay start.
+    pub start_ms: u64,
+    /// 0 = entire visible duration after [start_ms].
+    pub duration_ms: u64,
+}
+
+#[frb]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum OverlayEffectKind {
+    #[default]
+    None,
+    Glitch,
+    Glow,
+    ChromaticAberration,
+    RgbSplit,
+    MotionBlur,
+    Shake,
+}
+
+/// Sparse transform animation tracks (normalized coordinates).
+#[frb]
+#[derive(Clone, Debug, Default)]
+pub struct TransformTracks {
+    pub tracks: Vec<AnimationTrack>,
+}
+
+/// One animated scalar property over a time window (relative to overlay [start_ms]).
+#[frb]
+#[derive(Clone, Debug)]
+pub struct AnimationTrack {
+    pub property: TransformProperty,
+    pub from: f32,
+    pub to: f32,
+    pub start_ms: u64,
+    pub duration_ms: u64,
+    pub easing: Easing,
+}
+
+/// Transform channel. Translate values are fractions of output frame size (1.0 = full width/height).
+#[frb]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransformProperty {
+    TranslateX,
+    TranslateY,
+    Scale,
+    Rotation,
+    Opacity,
+}
+
+/// Easing curve applied to track progress t in [0, 1].
+#[frb]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Easing {
+    Linear,
+    EaseIn,
+    EaseOut,
+    EaseInOut,
+    Overshoot,
+    Bounce,
 }
 
 #[frb]

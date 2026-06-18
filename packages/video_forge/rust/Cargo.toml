@@ -37,6 +37,7 @@ serde_json.workspace = true
 rayon.workspace = true
 fast_image_resize.workspace = true
 lru.workspace = true
+cosmic-text.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"

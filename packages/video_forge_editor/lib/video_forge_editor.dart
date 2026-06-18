@@ -13,6 +13,7 @@ export 'src/editor/video_forge_editor_widget.dart';
 export 'src/models/video_export_result.dart';
 export 'src/playback/playback_backend.dart';
 export 'src/playback/rust_playback_backend.dart';
+export 'src/services/audio_picker.dart';
 export 'src/services/editor_output_paths.dart';
 export 'src/services/media_ingest.dart';
 export 'src/services/video_export_service.dart';

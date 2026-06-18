@@ -292,9 +292,10 @@ class RustPlaybackBackend extends PlaybackBackend {
     final engine = _engine;
     if (engine == null) return;
     try {
-      await engine.setMuted(muted: muted);
+      await engine.setSourceMuted(muted: muted);
+      debugPrint('[RustPlayback] setSourceMuted muted=$muted');
     } catch (e) {
-      debugPrint('[RustPlayback] setEmbeddedAudioMuted failed: $e');
+      debugPrint('[RustPlayback] setSourceMuted failed: $e');
     }
   }
 

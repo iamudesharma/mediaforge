@@ -80,9 +80,20 @@ class _VideoForgeEditorWidgetState extends State<VideoForgeEditorWidget> {
     }
 
     final theme = widget.config.theme ?? AppTheme.dark();
+    final config = VideoForgeEditorConfig(
+      title: widget.config.title,
+      theme: theme,
+      initialVideoPath: widget.config.initialVideoPath,
+      session: _session,
+      showDiagnostics: widget.config.showDiagnostics,
+      previewMaxEdge: widget.config.previewMaxEdge,
+      onExport: widget.config.onExport,
+      onCancel: widget.config.onCancel,
+      cacheSegment: widget.config.cacheSegment,
+    );
     return Theme(
       data: theme,
-      child: VideoEditorScreen(config: widget.config),
+      child: VideoEditorScreen(config: config),
     );
   }
 }

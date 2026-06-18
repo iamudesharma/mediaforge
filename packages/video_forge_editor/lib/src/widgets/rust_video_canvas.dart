@@ -18,6 +18,10 @@ class RustVideoCanvas extends StatelessWidget {
     this.selectedOverlayId,
     this.onOverlayChanged,
     this.onSelectOverlay,
+    this.onTapTextOverlay,
+    this.onDoubleTapTextOverlay,
+    this.onDeleteOverlay,
+    this.showDeleteZone = false,
     this.fit = BoxFit.contain,
     this.backgroundColor = Colors.black,
     this.showDiagnostics = false,
@@ -29,6 +33,10 @@ class RustVideoCanvas extends StatelessWidget {
   final String? selectedOverlayId;
   final ValueChanged<VideoOverlayItem>? onOverlayChanged;
   final ValueChanged<String?>? onSelectOverlay;
+  final ValueChanged<VideoOverlayItem>? onTapTextOverlay;
+  final ValueChanged<VideoOverlayItem>? onDoubleTapTextOverlay;
+  final ValueChanged<String>? onDeleteOverlay;
+  final bool showDeleteZone;
   final BoxFit fit;
   final Color backgroundColor;
   final bool showDiagnostics;
@@ -60,6 +68,10 @@ class RustVideoCanvas extends StatelessWidget {
                       selectedOverlayId: selectedOverlayId,
                       onOverlayChanged: onOverlayChanged,
                       onSelectOverlay: onSelectOverlay,
+                      onTapTextOverlay: onTapTextOverlay,
+                      onDoubleTapTextOverlay: onDoubleTapTextOverlay,
+                      onDeleteOverlay: onDeleteOverlay,
+                      showDeleteZone: showDeleteZone,
                     );
 
               return Center(

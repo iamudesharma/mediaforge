@@ -62,6 +62,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  AnimationTrack dco_decode_animation_track(dynamic raw);
+
+  @protected
   AudioTrackInput dco_decode_audio_track_input(dynamic raw);
 
   @protected
@@ -102,6 +105,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_box_autoadd_f_32(dynamic raw);
 
   @protected
+  ImageOverlayData dco_decode_box_autoadd_image_overlay_data(dynamic raw);
+
+  @protected
   OutputProfile dco_decode_box_autoadd_output_profile(dynamic raw);
 
   @protected
@@ -111,6 +117,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PreviewFrameRgba dco_decode_box_autoadd_preview_frame_rgba(dynamic raw);
+
+  @protected
+  TextOverlayData dco_decode_box_autoadd_text_overlay_data(dynamic raw);
 
   @protected
   ThumbnailBytesOptions dco_decode_box_autoadd_thumbnail_bytes_options(
@@ -145,6 +154,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DecoderCacheStatsDto dco_decode_decoder_cache_stats_dto(dynamic raw);
 
   @protected
+  Easing dco_decode_easing(dynamic raw);
+
+  @protected
   double dco_decode_f_32(dynamic raw);
 
   @protected
@@ -154,10 +166,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  ImageOverlayData dco_decode_image_overlay_data(dynamic raw);
+
+  @protected
   JobResult dco_decode_job_result(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<AnimationTrack> dco_decode_list_animation_track(dynamic raw);
 
   @protected
   List<AudioTrackInput> dco_decode_list_audio_track_input(dynamic raw);
@@ -167,6 +185,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Uint8List> dco_decode_list_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<OverlayEffect> dco_decode_list_overlay_effect(dynamic raw);
 
   @protected
   Uint64List dco_decode_list_prim_u_64_strict(dynamic raw);
@@ -217,6 +238,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   OutputProfile dco_decode_output_profile(dynamic raw);
 
   @protected
+  OverlayContent dco_decode_overlay_content(dynamic raw);
+
+  @protected
+  OverlayEffect dco_decode_overlay_effect(dynamic raw);
+
+  @protected
+  OverlayEffectKind dco_decode_overlay_effect_kind(dynamic raw);
+
+  @protected
+  OverlayEffects dco_decode_overlay_effects(dynamic raw);
+
+  @protected
   PlaybackFrame dco_decode_playback_frame(dynamic raw);
 
   @protected
@@ -241,6 +274,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (BigInt, BigInt) dco_decode_record_usize_usize(dynamic raw);
 
   @protected
+  TextAlign dco_decode_text_align(dynamic raw);
+
+  @protected
+  TextContentAnimation dco_decode_text_content_animation(dynamic raw);
+
+  @protected
+  TextOverlayData dco_decode_text_overlay_data(dynamic raw);
+
+  @protected
   ThumbnailBytesOptions dco_decode_thumbnail_bytes_options(dynamic raw);
 
   @protected
@@ -251,6 +293,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ThumbnailOptions dco_decode_thumbnail_options(dynamic raw);
+
+  @protected
+  TransformProperty dco_decode_transform_property(dynamic raw);
+
+  @protected
+  TransformTracks dco_decode_transform_tracks(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -311,6 +359,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AnimationTrack sse_decode_animation_track(SseDeserializer deserializer);
+
+  @protected
   AudioTrackInput sse_decode_audio_track_input(SseDeserializer deserializer);
 
   @protected
@@ -361,6 +412,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_box_autoadd_f_32(SseDeserializer deserializer);
 
   @protected
+  ImageOverlayData sse_decode_box_autoadd_image_overlay_data(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   OutputProfile sse_decode_box_autoadd_output_profile(
     SseDeserializer deserializer,
   );
@@ -372,6 +428,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PreviewFrameRgba sse_decode_box_autoadd_preview_frame_rgba(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  TextOverlayData sse_decode_box_autoadd_text_overlay_data(
     SseDeserializer deserializer,
   );
 
@@ -414,6 +475,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  Easing sse_decode_easing(SseDeserializer deserializer);
+
+  @protected
   double sse_decode_f_32(SseDeserializer deserializer);
 
   @protected
@@ -423,10 +487,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  ImageOverlayData sse_decode_image_overlay_data(SseDeserializer deserializer);
+
+  @protected
   JobResult sse_decode_job_result(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<AnimationTrack> sse_decode_list_animation_track(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<AudioTrackInput> sse_decode_list_audio_track_input(
@@ -440,6 +512,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<Uint8List> sse_decode_list_list_prim_u_8_strict(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<OverlayEffect> sse_decode_list_overlay_effect(
     SseDeserializer deserializer,
   );
 
@@ -498,6 +575,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   OutputProfile sse_decode_output_profile(SseDeserializer deserializer);
 
   @protected
+  OverlayContent sse_decode_overlay_content(SseDeserializer deserializer);
+
+  @protected
+  OverlayEffect sse_decode_overlay_effect(SseDeserializer deserializer);
+
+  @protected
+  OverlayEffectKind sse_decode_overlay_effect_kind(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  OverlayEffects sse_decode_overlay_effects(SseDeserializer deserializer);
+
+  @protected
   PlaybackFrame sse_decode_playback_frame(SseDeserializer deserializer);
 
   @protected
@@ -528,6 +619,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   (BigInt, BigInt) sse_decode_record_usize_usize(SseDeserializer deserializer);
 
   @protected
+  TextAlign sse_decode_text_align(SseDeserializer deserializer);
+
+  @protected
+  TextContentAnimation sse_decode_text_content_animation(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  TextOverlayData sse_decode_text_overlay_data(SseDeserializer deserializer);
+
+  @protected
   ThumbnailBytesOptions sse_decode_thumbnail_bytes_options(
     SseDeserializer deserializer,
   );
@@ -542,6 +644,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ThumbnailOptions sse_decode_thumbnail_options(SseDeserializer deserializer);
+
+  @protected
+  TransformProperty sse_decode_transform_property(SseDeserializer deserializer);
+
+  @protected
+  TransformTracks sse_decode_transform_tracks(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -610,6 +718,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_animation_track(
+    AnimationTrack self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_audio_track_input(
     AudioTrackInput self,
     SseSerializer serializer,
@@ -670,6 +784,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_box_autoadd_f_32(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_image_overlay_data(
+    ImageOverlayData self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_output_profile(
     OutputProfile self,
     SseSerializer serializer,
@@ -684,6 +804,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_preview_frame_rgba(
     PreviewFrameRgba self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_text_overlay_data(
+    TextOverlayData self,
     SseSerializer serializer,
   );
 
@@ -736,6 +862,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_easing(Easing self, SseSerializer serializer);
+
+  @protected
   void sse_encode_f_32(double self, SseSerializer serializer);
 
   @protected
@@ -745,10 +874,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_image_overlay_data(
+    ImageOverlayData self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_job_result(JobResult self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_animation_track(
+    List<AnimationTrack> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_audio_track_input(
@@ -765,6 +906,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_list_prim_u_8_strict(
     List<Uint8List> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_overlay_effect(
+    List<OverlayEffect> self,
     SseSerializer serializer,
   );
 
@@ -832,6 +979,27 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_output_profile(OutputProfile self, SseSerializer serializer);
 
   @protected
+  void sse_encode_overlay_content(
+    OverlayContent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_overlay_effect(OverlayEffect self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_overlay_effect_kind(
+    OverlayEffectKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_overlay_effects(
+    OverlayEffects self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_playback_frame(PlaybackFrame self, SseSerializer serializer);
 
   @protected
@@ -874,6 +1042,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_text_align(TextAlign self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_text_content_animation(
+    TextContentAnimation self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_text_overlay_data(
+    TextOverlayData self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_thumbnail_bytes_options(
     ThumbnailBytesOptions self,
     SseSerializer serializer,
@@ -894,6 +1077,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_thumbnail_options(
     ThumbnailOptions self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_transform_property(
+    TransformProperty self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_transform_tracks(
+    TransformTracks self,
     SseSerializer serializer,
   );
 

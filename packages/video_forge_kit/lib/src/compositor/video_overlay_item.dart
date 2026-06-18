@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'animated_video_text_overlay_content.dart';
 import 'video_text_overlay_content.dart';
 import 'video_text_overlay_style.dart';
 
@@ -96,7 +97,7 @@ final class VideoOverlayItem {
       anchor: anchor ?? this.anchor,
       child: child ??
           (nextSpec != null
-              ? VideoTextOverlayContent(spec: nextSpec)
+              ? VideoOverlayItem._textChild(nextSpec)
               : this.child),
       textSpec: nextSpec,
       fadeInMs: fadeInMs ?? this.fadeInMs,
@@ -105,11 +106,18 @@ final class VideoOverlayItem {
   }
 
   /// Updates text label/style and rebuilds [child].
-  VideoOverlayItem withTextSpec(VideoTextOverlaySpec spec) {
+  VideoOverlayItem withTextSpec(VideoTextOverlaySpec spec, {int replayToken = 0}) {
     return copyWith(
       textSpec: spec,
-      child: VideoTextOverlayContent(spec: spec),
+      child: AnimatedVideoTextOverlayContent(
+        spec: spec,
+        replayToken: replayToken,
+      ),
     );
+  }
+
+  static Widget _textChild(VideoTextOverlaySpec spec, {int replayToken = 0}) {
+    return AnimatedVideoTextOverlayContent(spec: spec, replayToken: replayToken);
   }
 
   factory VideoOverlayItem.text({
@@ -131,7 +139,7 @@ final class VideoOverlayItem {
       fadeInMs: fadeInMs,
       fadeOutMs: fadeOutMs,
       textSpec: spec,
-      child: VideoTextOverlayContent(spec: spec),
+      child: AnimatedVideoTextOverlayContent(spec: spec),
     );
   }
 

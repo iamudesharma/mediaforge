@@ -127,7 +127,7 @@ abstract final class AppTypography {
       fontWeight: FontWeight.w500,
       letterSpacing: 0.2,
       shadows: _noShadow,
-      color: selected ? LuminaTokens.onAccent : LuminaTokens.onSurfaceVariant,
+      color: selected ? LuminaTokens.accent : LuminaTokens.onSurfaceVariant,
     );
   }
 

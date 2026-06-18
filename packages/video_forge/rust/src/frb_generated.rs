@@ -1556,6 +1556,26 @@ impl SseDecode for String {
     }
 }
 
+impl SseDecode for crate::types::AnimationTrack {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_property = <crate::types::TransformProperty>::sse_decode(deserializer);
+        let mut var_from = <f32>::sse_decode(deserializer);
+        let mut var_to = <f32>::sse_decode(deserializer);
+        let mut var_startMs = <u64>::sse_decode(deserializer);
+        let mut var_durationMs = <u64>::sse_decode(deserializer);
+        let mut var_easing = <crate::types::Easing>::sse_decode(deserializer);
+        return crate::types::AnimationTrack {
+            property: var_property,
+            from: var_from,
+            to: var_to,
+            start_ms: var_startMs,
+            duration_ms: var_durationMs,
+            easing: var_easing,
+        };
+    }
+}
+
 impl SseDecode for crate::types::AudioTrackInput {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1656,21 +1676,17 @@ impl SseDecode for bool {
 impl SseDecode for crate::types::BurnInOverlay {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_imagePath = <String>::sse_decode(deserializer);
+        let mut var_content = <crate::types::OverlayContent>::sse_decode(deserializer);
         let mut var_startMs = <u64>::sse_decode(deserializer);
         let mut var_endMs = <u64>::sse_decode(deserializer);
-        let mut var_anchorX = <f32>::sse_decode(deserializer);
-        let mut var_anchorY = <f32>::sse_decode(deserializer);
-        let mut var_fadeInMs = <u64>::sse_decode(deserializer);
-        let mut var_fadeOutMs = <u64>::sse_decode(deserializer);
+        let mut var_transform = <crate::types::TransformTracks>::sse_decode(deserializer);
+        let mut var_effects = <crate::types::OverlayEffects>::sse_decode(deserializer);
         return crate::types::BurnInOverlay {
-            image_path: var_imagePath,
+            content: var_content,
             start_ms: var_startMs,
             end_ms: var_endMs,
-            anchor_x: var_anchorX,
-            anchor_y: var_anchorY,
-            fade_in_ms: var_fadeInMs,
-            fade_out_ms: var_fadeOutMs,
+            transform: var_transform,
+            effects: var_effects,
         };
     }
 }
@@ -1759,6 +1775,22 @@ impl SseDecode for crate::api::DecoderCacheStatsDto {
     }
 }
 
+impl SseDecode for crate::types::Easing {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::types::Easing::Linear,
+            1 => crate::types::Easing::EaseIn,
+            2 => crate::types::Easing::EaseOut,
+            3 => crate::types::Easing::EaseInOut,
+            4 => crate::types::Easing::Overshoot,
+            5 => crate::types::Easing::Bounce,
+            _ => unreachable!("Invalid variant for Easing: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for f32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1777,6 +1809,20 @@ impl SseDecode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for crate::types::ImageOverlayData {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_anchorX = <f32>::sse_decode(deserializer);
+        let mut var_anchorY = <f32>::sse_decode(deserializer);
+        return crate::types::ImageOverlayData {
+            path: var_path,
+            anchor_x: var_anchorX,
+            anchor_y: var_anchorY,
+        };
     }
 }
 
@@ -1806,6 +1852,18 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::types::AnimationTrack> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::types::AnimationTrack>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -1842,6 +1900,18 @@ impl SseDecode for Vec<Vec<u8>> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<Vec<u8>>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::types::OverlayEffect> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::types::OverlayEffect>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -2050,6 +2120,69 @@ impl SseDecode for crate::types::OutputProfile {
     }
 }
 
+impl SseDecode for crate::types::OverlayContent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_field0 = <crate::types::ImageOverlayData>::sse_decode(deserializer);
+                return crate::types::OverlayContent::Image(var_field0);
+            }
+            1 => {
+                let mut var_field0 = <crate::types::TextOverlayData>::sse_decode(deserializer);
+                return crate::types::OverlayContent::Text(var_field0);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::types::OverlayEffect {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_kind = <crate::types::OverlayEffectKind>::sse_decode(deserializer);
+        let mut var_intensity = <f32>::sse_decode(deserializer);
+        let mut var_startMs = <u64>::sse_decode(deserializer);
+        let mut var_durationMs = <u64>::sse_decode(deserializer);
+        return crate::types::OverlayEffect {
+            kind: var_kind,
+            intensity: var_intensity,
+            start_ms: var_startMs,
+            duration_ms: var_durationMs,
+        };
+    }
+}
+
+impl SseDecode for crate::types::OverlayEffectKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::types::OverlayEffectKind::None,
+            1 => crate::types::OverlayEffectKind::Glitch,
+            2 => crate::types::OverlayEffectKind::Glow,
+            3 => crate::types::OverlayEffectKind::ChromaticAberration,
+            4 => crate::types::OverlayEffectKind::RgbSplit,
+            5 => crate::types::OverlayEffectKind::MotionBlur,
+            6 => crate::types::OverlayEffectKind::Shake,
+            _ => unreachable!("Invalid variant for OverlayEffectKind: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::types::OverlayEffects {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_effects = <Vec<crate::types::OverlayEffect>>::sse_decode(deserializer);
+        return crate::types::OverlayEffects {
+            effects: var_effects,
+        };
+    }
+}
+
 impl SseDecode for crate::types::PlaybackFrame {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2177,6 +2310,88 @@ impl SseDecode for (usize, usize) {
     }
 }
 
+impl SseDecode for crate::types::TextAlign {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::types::TextAlign::Left,
+            1 => crate::types::TextAlign::Center,
+            2 => crate::types::TextAlign::Right,
+            _ => unreachable!("Invalid variant for TextAlign: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::types::TextContentAnimation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::types::TextContentAnimation::None,
+            1 => crate::types::TextContentAnimation::Typewriter,
+            2 => crate::types::TextContentAnimation::WordReveal,
+            3 => crate::types::TextContentAnimation::CharacterStagger,
+            _ => unreachable!("Invalid variant for TextContentAnimation: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::types::TextOverlayData {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_text = <String>::sse_decode(deserializer);
+        let mut var_anchorX = <f32>::sse_decode(deserializer);
+        let mut var_anchorY = <f32>::sse_decode(deserializer);
+        let mut var_fontSize = <f32>::sse_decode(deserializer);
+        let mut var_fontWeight = <u32>::sse_decode(deserializer);
+        let mut var_italic = <bool>::sse_decode(deserializer);
+        let mut var_colorR = <u8>::sse_decode(deserializer);
+        let mut var_colorG = <u8>::sse_decode(deserializer);
+        let mut var_colorB = <u8>::sse_decode(deserializer);
+        let mut var_colorA = <u8>::sse_decode(deserializer);
+        let mut var_letterSpacing = <f32>::sse_decode(deserializer);
+        let mut var_maxWidth = <f32>::sse_decode(deserializer);
+        let mut var_padding = <f32>::sse_decode(deserializer);
+        let mut var_cornerRadius = <f32>::sse_decode(deserializer);
+        let mut var_showBackground = <bool>::sse_decode(deserializer);
+        let mut var_backgroundR = <u8>::sse_decode(deserializer);
+        let mut var_backgroundG = <u8>::sse_decode(deserializer);
+        let mut var_backgroundB = <u8>::sse_decode(deserializer);
+        let mut var_backgroundA = <u8>::sse_decode(deserializer);
+        let mut var_glowIntensity = <f32>::sse_decode(deserializer);
+        let mut var_textAlign = <crate::types::TextAlign>::sse_decode(deserializer);
+        let mut var_contentAnimation =
+            <crate::types::TextContentAnimation>::sse_decode(deserializer);
+        let mut var_contentAnimationDurationMs = <u64>::sse_decode(deserializer);
+        return crate::types::TextOverlayData {
+            text: var_text,
+            anchor_x: var_anchorX,
+            anchor_y: var_anchorY,
+            font_size: var_fontSize,
+            font_weight: var_fontWeight,
+            italic: var_italic,
+            color_r: var_colorR,
+            color_g: var_colorG,
+            color_b: var_colorB,
+            color_a: var_colorA,
+            letter_spacing: var_letterSpacing,
+            max_width: var_maxWidth,
+            padding: var_padding,
+            corner_radius: var_cornerRadius,
+            show_background: var_showBackground,
+            background_r: var_backgroundR,
+            background_g: var_backgroundG,
+            background_b: var_backgroundB,
+            background_a: var_backgroundA,
+            glow_intensity: var_glowIntensity,
+            text_align: var_textAlign,
+            content_animation: var_contentAnimation,
+            content_animation_duration_ms: var_contentAnimationDurationMs,
+        };
+    }
+}
+
 impl SseDecode for crate::types::ThumbnailBytesOptions {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2236,6 +2451,29 @@ impl SseDecode for crate::types::ThumbnailOptions {
             height: var_height,
             format: var_format,
         };
+    }
+}
+
+impl SseDecode for crate::types::TransformProperty {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::types::TransformProperty::TranslateX,
+            1 => crate::types::TransformProperty::TranslateY,
+            2 => crate::types::TransformProperty::Scale,
+            3 => crate::types::TransformProperty::Rotation,
+            4 => crate::types::TransformProperty::Opacity,
+            _ => unreachable!("Invalid variant for TransformProperty: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::types::TransformTracks {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_tracks = <Vec<crate::types::AnimationTrack>>::sse_decode(deserializer);
+        return crate::types::TransformTracks { tracks: var_tracks };
     }
 }
 
@@ -2496,6 +2734,28 @@ impl flutter_rust_bridge::IntoIntoDart<FrbWrapper<VideoPreviewSession>> for Vide
 }
 
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::AnimationTrack {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.property.into_into_dart().into_dart(),
+            self.from.into_into_dart().into_dart(),
+            self.to.into_into_dart().into_dart(),
+            self.start_ms.into_into_dart().into_dart(),
+            self.duration_ms.into_into_dart().into_dart(),
+            self.easing.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::AnimationTrack {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::AnimationTrack>
+    for crate::types::AnimationTrack
+{
+    fn into_into_dart(self) -> crate::types::AnimationTrack {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::AudioTrackInput {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2615,13 +2875,11 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::BatchThumbnailResult>
 impl flutter_rust_bridge::IntoDart for crate::types::BurnInOverlay {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
-            self.image_path.into_into_dart().into_dart(),
+            self.content.into_into_dart().into_dart(),
             self.start_ms.into_into_dart().into_dart(),
             self.end_ms.into_into_dart().into_dart(),
-            self.anchor_x.into_into_dart().into_dart(),
-            self.anchor_y.into_into_dart().into_dart(),
-            self.fade_in_ms.into_into_dart().into_dart(),
-            self.fade_out_ms.into_into_dart().into_dart(),
+            self.transform.into_into_dart().into_dart(),
+            self.effects.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2716,6 +2974,48 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::DecoderCacheStatsDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::Easing {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Linear => 0.into_dart(),
+            Self::EaseIn => 1.into_dart(),
+            Self::EaseOut => 2.into_dart(),
+            Self::EaseInOut => 3.into_dart(),
+            Self::Overshoot => 4.into_dart(),
+            Self::Bounce => 5.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::Easing {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::Easing> for crate::types::Easing {
+    fn into_into_dart(self) -> crate::types::Easing {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::ImageOverlayData {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.path.into_into_dart().into_dart(),
+            self.anchor_x.into_into_dart().into_dart(),
+            self.anchor_y.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::types::ImageOverlayData
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::ImageOverlayData>
+    for crate::types::ImageOverlayData
+{
+    fn into_into_dart(self) -> crate::types::ImageOverlayData {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::JobResult {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -2796,6 +3096,90 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::OutputProfile>
     for crate::types::OutputProfile
 {
     fn into_into_dart(self) -> crate::types::OutputProfile {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::OverlayContent {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::types::OverlayContent::Image(field0) => {
+                [0.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            crate::types::OverlayContent::Text(field0) => {
+                [1.into_dart(), field0.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::OverlayContent {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::OverlayContent>
+    for crate::types::OverlayContent
+{
+    fn into_into_dart(self) -> crate::types::OverlayContent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::OverlayEffect {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.kind.into_into_dart().into_dart(),
+            self.intensity.into_into_dart().into_dart(),
+            self.start_ms.into_into_dart().into_dart(),
+            self.duration_ms.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::OverlayEffect {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::OverlayEffect>
+    for crate::types::OverlayEffect
+{
+    fn into_into_dart(self) -> crate::types::OverlayEffect {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::OverlayEffectKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::None => 0.into_dart(),
+            Self::Glitch => 1.into_dart(),
+            Self::Glow => 2.into_dart(),
+            Self::ChromaticAberration => 3.into_dart(),
+            Self::RgbSplit => 4.into_dart(),
+            Self::MotionBlur => 5.into_dart(),
+            Self::Shake => 6.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::types::OverlayEffectKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::OverlayEffectKind>
+    for crate::types::OverlayEffectKind
+{
+    fn into_into_dart(self) -> crate::types::OverlayEffectKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::OverlayEffects {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.effects.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::OverlayEffects {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::OverlayEffects>
+    for crate::types::OverlayEffects
+{
+    fn into_into_dart(self) -> crate::types::OverlayEffects {
         self
     }
 }
@@ -2940,6 +3324,87 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::ProgressEvent>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::TextAlign {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Left => 0.into_dart(),
+            Self::Center => 1.into_dart(),
+            Self::Right => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::TextAlign {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::TextAlign> for crate::types::TextAlign {
+    fn into_into_dart(self) -> crate::types::TextAlign {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::TextContentAnimation {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::None => 0.into_dart(),
+            Self::Typewriter => 1.into_dart(),
+            Self::WordReveal => 2.into_dart(),
+            Self::CharacterStagger => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::types::TextContentAnimation
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::TextContentAnimation>
+    for crate::types::TextContentAnimation
+{
+    fn into_into_dart(self) -> crate::types::TextContentAnimation {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::TextOverlayData {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.text.into_into_dart().into_dart(),
+            self.anchor_x.into_into_dart().into_dart(),
+            self.anchor_y.into_into_dart().into_dart(),
+            self.font_size.into_into_dart().into_dart(),
+            self.font_weight.into_into_dart().into_dart(),
+            self.italic.into_into_dart().into_dart(),
+            self.color_r.into_into_dart().into_dart(),
+            self.color_g.into_into_dart().into_dart(),
+            self.color_b.into_into_dart().into_dart(),
+            self.color_a.into_into_dart().into_dart(),
+            self.letter_spacing.into_into_dart().into_dart(),
+            self.max_width.into_into_dart().into_dart(),
+            self.padding.into_into_dart().into_dart(),
+            self.corner_radius.into_into_dart().into_dart(),
+            self.show_background.into_into_dart().into_dart(),
+            self.background_r.into_into_dart().into_dart(),
+            self.background_g.into_into_dart().into_dart(),
+            self.background_b.into_into_dart().into_dart(),
+            self.background_a.into_into_dart().into_dart(),
+            self.glow_intensity.into_into_dart().into_dart(),
+            self.text_align.into_into_dart().into_dart(),
+            self.content_animation.into_into_dart().into_dart(),
+            self.content_animation_duration_ms
+                .into_into_dart()
+                .into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::TextOverlayData {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::TextOverlayData>
+    for crate::types::TextOverlayData
+{
+    fn into_into_dart(self) -> crate::types::TextOverlayData {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::ThumbnailBytesOptions {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3024,6 +3489,44 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::ThumbnailOptions>
     for crate::types::ThumbnailOptions
 {
     fn into_into_dart(self) -> crate::types::ThumbnailOptions {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::TransformProperty {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::TranslateX => 0.into_dart(),
+            Self::TranslateY => 1.into_dart(),
+            Self::Scale => 2.into_dart(),
+            Self::Rotation => 3.into_dart(),
+            Self::Opacity => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::types::TransformProperty
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::TransformProperty>
+    for crate::types::TransformProperty
+{
+    fn into_into_dart(self) -> crate::types::TransformProperty {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::TransformTracks {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [self.tracks.into_into_dart().into_dart()].into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::TransformTracks {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::TransformTracks>
+    for crate::types::TransformTracks
+{
+    fn into_into_dart(self) -> crate::types::TransformTracks {
         self
     }
 }
@@ -3167,6 +3670,18 @@ impl SseEncode for String {
     }
 }
 
+impl SseEncode for crate::types::AnimationTrack {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::types::TransformProperty>::sse_encode(self.property, serializer);
+        <f32>::sse_encode(self.from, serializer);
+        <f32>::sse_encode(self.to, serializer);
+        <u64>::sse_encode(self.start_ms, serializer);
+        <u64>::sse_encode(self.duration_ms, serializer);
+        <crate::types::Easing>::sse_encode(self.easing, serializer);
+    }
+}
+
 impl SseEncode for crate::types::AudioTrackInput {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3231,13 +3746,11 @@ impl SseEncode for bool {
 impl SseEncode for crate::types::BurnInOverlay {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <String>::sse_encode(self.image_path, serializer);
+        <crate::types::OverlayContent>::sse_encode(self.content, serializer);
         <u64>::sse_encode(self.start_ms, serializer);
         <u64>::sse_encode(self.end_ms, serializer);
-        <f32>::sse_encode(self.anchor_x, serializer);
-        <f32>::sse_encode(self.anchor_y, serializer);
-        <u64>::sse_encode(self.fade_in_ms, serializer);
-        <u64>::sse_encode(self.fade_out_ms, serializer);
+        <crate::types::TransformTracks>::sse_encode(self.transform, serializer);
+        <crate::types::OverlayEffects>::sse_encode(self.effects, serializer);
     }
 }
 
@@ -3289,6 +3802,26 @@ impl SseEncode for crate::api::DecoderCacheStatsDto {
     }
 }
 
+impl SseEncode for crate::types::Easing {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::types::Easing::Linear => 0,
+                crate::types::Easing::EaseIn => 1,
+                crate::types::Easing::EaseOut => 2,
+                crate::types::Easing::EaseInOut => 3,
+                crate::types::Easing::Overshoot => 4,
+                crate::types::Easing::Bounce => 5,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for f32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3307,6 +3840,15 @@ impl SseEncode for i32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for crate::types::ImageOverlayData {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.path, serializer);
+        <f32>::sse_encode(self.anchor_x, serializer);
+        <f32>::sse_encode(self.anchor_y, serializer);
     }
 }
 
@@ -3338,6 +3880,16 @@ impl SseEncode for Vec<String> {
     }
 }
 
+impl SseEncode for Vec<crate::types::AnimationTrack> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::types::AnimationTrack>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::types::AudioTrackInput> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3364,6 +3916,16 @@ impl SseEncode for Vec<Vec<u8>> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <Vec<u8>>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::types::OverlayEffect> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::types::OverlayEffect>::sse_encode(item, serializer);
         }
     }
 }
@@ -3536,6 +4098,63 @@ impl SseEncode for crate::types::OutputProfile {
     }
 }
 
+impl SseEncode for crate::types::OverlayContent {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::types::OverlayContent::Image(field0) => {
+                <i32>::sse_encode(0, serializer);
+                <crate::types::ImageOverlayData>::sse_encode(field0, serializer);
+            }
+            crate::types::OverlayContent::Text(field0) => {
+                <i32>::sse_encode(1, serializer);
+                <crate::types::TextOverlayData>::sse_encode(field0, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::types::OverlayEffect {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::types::OverlayEffectKind>::sse_encode(self.kind, serializer);
+        <f32>::sse_encode(self.intensity, serializer);
+        <u64>::sse_encode(self.start_ms, serializer);
+        <u64>::sse_encode(self.duration_ms, serializer);
+    }
+}
+
+impl SseEncode for crate::types::OverlayEffectKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::types::OverlayEffectKind::None => 0,
+                crate::types::OverlayEffectKind::Glitch => 1,
+                crate::types::OverlayEffectKind::Glow => 2,
+                crate::types::OverlayEffectKind::ChromaticAberration => 3,
+                crate::types::OverlayEffectKind::RgbSplit => 4,
+                crate::types::OverlayEffectKind::MotionBlur => 5,
+                crate::types::OverlayEffectKind::Shake => 6,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::types::OverlayEffects {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::types::OverlayEffect>>::sse_encode(self.effects, serializer);
+    }
+}
+
 impl SseEncode for crate::types::PlaybackFrame {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3636,6 +4255,70 @@ impl SseEncode for (usize, usize) {
     }
 }
 
+impl SseEncode for crate::types::TextAlign {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::types::TextAlign::Left => 0,
+                crate::types::TextAlign::Center => 1,
+                crate::types::TextAlign::Right => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::types::TextContentAnimation {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::types::TextContentAnimation::None => 0,
+                crate::types::TextContentAnimation::Typewriter => 1,
+                crate::types::TextContentAnimation::WordReveal => 2,
+                crate::types::TextContentAnimation::CharacterStagger => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::types::TextOverlayData {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.text, serializer);
+        <f32>::sse_encode(self.anchor_x, serializer);
+        <f32>::sse_encode(self.anchor_y, serializer);
+        <f32>::sse_encode(self.font_size, serializer);
+        <u32>::sse_encode(self.font_weight, serializer);
+        <bool>::sse_encode(self.italic, serializer);
+        <u8>::sse_encode(self.color_r, serializer);
+        <u8>::sse_encode(self.color_g, serializer);
+        <u8>::sse_encode(self.color_b, serializer);
+        <u8>::sse_encode(self.color_a, serializer);
+        <f32>::sse_encode(self.letter_spacing, serializer);
+        <f32>::sse_encode(self.max_width, serializer);
+        <f32>::sse_encode(self.padding, serializer);
+        <f32>::sse_encode(self.corner_radius, serializer);
+        <bool>::sse_encode(self.show_background, serializer);
+        <u8>::sse_encode(self.background_r, serializer);
+        <u8>::sse_encode(self.background_g, serializer);
+        <u8>::sse_encode(self.background_b, serializer);
+        <u8>::sse_encode(self.background_a, serializer);
+        <f32>::sse_encode(self.glow_intensity, serializer);
+        <crate::types::TextAlign>::sse_encode(self.text_align, serializer);
+        <crate::types::TextContentAnimation>::sse_encode(self.content_animation, serializer);
+        <u64>::sse_encode(self.content_animation_duration_ms, serializer);
+    }
+}
+
 impl SseEncode for crate::types::ThumbnailBytesOptions {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3688,6 +4371,32 @@ impl SseEncode for crate::types::ThumbnailOptions {
         <Option<u32>>::sse_encode(self.width, serializer);
         <Option<u32>>::sse_encode(self.height, serializer);
         <crate::types::ThumbnailFormat>::sse_encode(self.format, serializer);
+    }
+}
+
+impl SseEncode for crate::types::TransformProperty {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::types::TransformProperty::TranslateX => 0,
+                crate::types::TransformProperty::TranslateY => 1,
+                crate::types::TransformProperty::Scale => 2,
+                crate::types::TransformProperty::Rotation => 3,
+                crate::types::TransformProperty::Opacity => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::types::TransformTracks {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::types::AnimationTrack>>::sse_encode(self.tracks, serializer);
     }
 }
 
