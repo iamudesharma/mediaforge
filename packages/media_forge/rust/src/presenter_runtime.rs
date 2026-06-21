@@ -9,7 +9,8 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 
 use crate::api::runtime::{
-    AudioFrame, FrameQueue, MediaVideoFrame, PacketQueue, PlaybackClock, PlaybackState,
+    discard_media_video_frame, AudioFrame, FrameQueue, MediaVideoFrame, PacketQueue, PlaybackClock,
+    PlaybackState,
 };
 
 macro_rules! presenter_log {
@@ -92,19 +93,20 @@ impl SeekController {
         // Align audio clock immediately so hard resync / presenter do not use pre-seek PTS.
         self.audio_clock_ms.store(time_ms, Ordering::Relaxed);
 
-        // Freeze the last presented frame
+        // Move the last presented frame into frozen (do not clone — CVPixelBuffer
+        // ownership is single-retain; cloning the raw ptr caused double handoff).
         let mut display = self.display_frame.lock();
-        if let Some(frame) = display.as_ref() {
-            let mut frozen = frame.clone();
-            frozen.seek_generation = new_gen;
-            *self.frozen_frame.lock() = Some(frozen);
-            presenter_log!("[SeekController] Froze last good frame for seek gen={} pts={}ms", new_gen, frame.pts_ms);
-        } else {
-            *self.frozen_frame.lock() = None;
+        if let Some(mut frame) = display.take() {
+            let pts = frame.pts_ms;
+            frame.seek_generation = new_gen;
+            if let Some(old) = self.frozen_frame.lock().take() {
+                discard_media_video_frame(old);
+            }
+            *self.frozen_frame.lock() = Some(frame);
+            presenter_log!("[SeekController] Froze last good frame for seek gen={} pts={}ms", new_gen, pts);
+        } else if let Some(old) = self.frozen_frame.lock().take() {
+            discard_media_video_frame(old);
         }
-
-        // Clear active presented frame (display queue)
-        *display = None;
 
         if self.demuxer_active.load(Ordering::Relaxed) {
             let was_playing = self.clock.get_state() == PlaybackState::Playing;
@@ -148,7 +150,9 @@ impl HardResyncState {
         video_frame_queue: &FrameQueue<MediaVideoFrame>,
     ) {
         if self.maybe_resync_precheck(seek, clock, audio_clock_ms, video_frame_queue) {
-            display_frame.lock().take();
+            if let Some(old) = display_frame.lock().take() {
+                discard_media_video_frame(old);
+            }
             self.finish_resync(seek, clock, audio_clock_ms, video_frame_queue);
         }
     }
@@ -259,15 +263,21 @@ impl PresenterRuntime {
 
     #[allow(dead_code)]
     pub fn clear_display_frame(&self) {
-        self.display_frame.lock().take();
+        if let Some(old) = self.display_frame.lock().take() {
+            discard_media_video_frame(old);
+        }
     }
 
-    pub fn get_frozen_frame(&self) -> Option<MediaVideoFrame> {
-        self.frozen_frame.lock().clone()
+    /// Take the seek freeze-frame once. Callers must not re-handoff the same
+    /// CVPixelBuffer on every presentation tick.
+    pub fn take_frozen_frame(&self) -> Option<MediaVideoFrame> {
+        self.frozen_frame.lock().take()
     }
 
     pub fn clear_frozen_frame(&self) {
-        *self.frozen_frame.lock() = None;
+        if let Some(old) = self.frozen_frame.lock().take() {
+            discard_media_video_frame(old);
+        }
     }
 
     pub fn start(
@@ -364,8 +374,13 @@ impl PresenterRuntime {
                     last_presented_frame_pts = Some(pts);
                     last_presented_frame_time = Some(frame_time);
 
+                    if let Some(old) = display_frame.lock().take() {
+                        discard_media_video_frame(old);
+                    }
                     *display_frame.lock() = Some(frame);
-                    *frozen_frame.lock() = None; // Reset frozen frame on new frame presentation
+                    if let Some(old) = frozen_frame.lock().take() {
+                        discard_media_video_frame(old);
+                    }
 
                     if last_present_log.elapsed() >= Duration::from_secs(2) {
                         presenter_log!(
@@ -392,8 +407,12 @@ impl PresenterRuntime {
             return;
         }
         presenter_log!("[PresenterRuntime] Stopping");
-        *self.display_frame.lock() = None;
-        *self.frozen_frame.lock() = None;
+        if let Some(old) = self.display_frame.lock().take() {
+            discard_media_video_frame(old);
+        }
+        if let Some(old) = self.frozen_frame.lock().take() {
+            discard_media_video_frame(old);
+        }
         if let Some(handle) = self.thread_handle.lock().take() {
             let _ = handle.join();
         }

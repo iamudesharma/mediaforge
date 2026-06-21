@@ -173,6 +173,7 @@ abstract final class VideoProcessor {
     List<BurnInOverlay> burnInOverlays = const [],
     List<AudioTrackInput> audioTracks = const [],
     bool muteOriginalAudio = false,
+    ClipEffects? clipEffects,
   }) async {
     await initialize();
 
@@ -195,6 +196,7 @@ abstract final class VideoProcessor {
       burnInOverlays: burnInOverlays,
       audioTracks: audioTracks,
       muteOriginalAudio: muteOriginalAudio,
+      clipEffects: clipEffects,
     ).build();
 
     final progressStream = core.startCompress(options: options);
@@ -415,5 +417,14 @@ abstract final class VideoProcessor {
   /// Clear all cached thumbnails.
   static Future<void> evictAllThumbnailCache() {
     return ThumbnailCache.evictAll();
+  }
+
+  /// Stream-copy join of homogeneous MP4 segments (per-clip timeline export).
+  static Future<void> concatVideoFiles({
+    required List<String> paths,
+    required String outputPath,
+  }) async {
+    await initialize();
+    await core.concatVideoFiles(paths: paths, outputPath: outputPath);
   }
 }

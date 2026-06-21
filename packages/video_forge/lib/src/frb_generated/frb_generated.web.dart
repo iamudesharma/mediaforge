@@ -96,6 +96,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ClipEffects dco_decode_box_autoadd_clip_effects(dynamic raw);
+
+  @protected
   CompressOptions dco_decode_box_autoadd_compress_options(dynamic raw);
 
   @protected
@@ -143,6 +146,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BurnInOverlay dco_decode_burn_in_overlay(dynamic raw);
+
+  @protected
+  ClipEffects dco_decode_clip_effects(dynamic raw);
+
+  @protected
+  ClipTransformBase dco_decode_clip_transform_base(dynamic raw);
 
   @protected
   CompressOptions dco_decode_compress_options(dynamic raw);
@@ -199,6 +208,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<SpeedSegment> dco_decode_list_speed_segment(dynamic raw);
+
+  @protected
   List<ThumbnailDecodeStatus> dco_decode_list_thumbnail_decode_status(
     dynamic raw,
   );
@@ -208,6 +220,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  ClipEffects? dco_decode_opt_box_autoadd_clip_effects(dynamic raw);
 
   @protected
   double? dco_decode_opt_box_autoadd_f_32(dynamic raw);
@@ -272,6 +287,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   (BigInt, BigInt) dco_decode_record_usize_usize(dynamic raw);
+
+  @protected
+  SpeedSegment dco_decode_speed_segment(dynamic raw);
 
   @protected
   TextAlign dco_decode_text_align(dynamic raw);
@@ -399,6 +417,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ClipEffects sse_decode_box_autoadd_clip_effects(SseDeserializer deserializer);
+
+  @protected
   CompressOptions sse_decode_box_autoadd_compress_options(
     SseDeserializer deserializer,
   );
@@ -462,6 +483,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BurnInOverlay sse_decode_burn_in_overlay(SseDeserializer deserializer);
+
+  @protected
+  ClipEffects sse_decode_clip_effects(SseDeserializer deserializer);
+
+  @protected
+  ClipTransformBase sse_decode_clip_transform_base(
+    SseDeserializer deserializer,
+  );
 
   @protected
   CompressOptions sse_decode_compress_options(SseDeserializer deserializer);
@@ -530,6 +559,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<SpeedSegment> sse_decode_list_speed_segment(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<ThumbnailDecodeStatus> sse_decode_list_thumbnail_decode_status(
     SseDeserializer deserializer,
   );
@@ -539,6 +573,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  ClipEffects? sse_decode_opt_box_autoadd_clip_effects(
+    SseDeserializer deserializer,
+  );
 
   @protected
   double? sse_decode_opt_box_autoadd_f_32(SseDeserializer deserializer);
@@ -617,6 +656,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   (BigInt, BigInt) sse_decode_record_usize_usize(SseDeserializer deserializer);
+
+  @protected
+  SpeedSegment sse_decode_speed_segment(SseDeserializer deserializer);
 
   @protected
   TextAlign sse_decode_text_align(SseDeserializer deserializer);
@@ -769,6 +811,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_clip_effects(
+    ClipEffects self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_compress_options(
     CompressOptions self,
     SseSerializer serializer,
@@ -842,6 +890,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_burn_in_overlay(BurnInOverlay self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_clip_effects(ClipEffects self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_clip_transform_base(
+    ClipTransformBase self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_compress_options(
@@ -931,6 +988,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_speed_segment(
+    List<SpeedSegment> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_thumbnail_decode_status(
     List<ThumbnailDecodeStatus> self,
     SseSerializer serializer,
@@ -941,6 +1004,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_clip_effects(
+    ClipEffects? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_f_32(double? self, SseSerializer serializer);
@@ -1040,6 +1109,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     (BigInt, BigInt) self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_speed_segment(SpeedSegment self, SseSerializer serializer);
 
   @protected
   void sse_encode_text_align(TextAlign self, SseSerializer serializer);

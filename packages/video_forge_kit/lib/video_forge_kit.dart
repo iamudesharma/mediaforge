@@ -22,6 +22,7 @@ export 'src/playback/native_playback_platform.dart';
 export 'src/playback/native_playback_trim.dart';
 export 'src/playback/native_video_canvas.dart';
 export 'src/export/overlay_raster_exporter.dart';
+export 'src/export/timeline_export_service.dart';
 export 'src/export/overlay_transform_tracks.dart';
 export 'src/export/overlay_text_export.dart';
 export 'src/export/overlay_effects_export.dart';
@@ -35,8 +36,9 @@ export 'src/widgets/timeline/overlay_timeline_panel.dart';
 export 'src/widgets/timeline/audio_range_scrubber.dart';
 export 'src/widgets/video_preview_surface.dart';
 export 'package:video_forge_cache/video_forge_cache.dart';
+export 'src/models/clip_effects.dart';
 export 'package:video_forge/video_forge.dart'
     show AudioTrackInput, BurnInOverlay, OverlayContent, ImageOverlayData,
         TextOverlayData, TransformTracks, AnimationTrack, TransformProperty,
         Easing, OverlayEffects, OverlayEffect, OverlayEffectKind,
-        TextContentAnimation;
+        TextContentAnimation, ClipEffects, ClipTransformBase, SpeedSegment;

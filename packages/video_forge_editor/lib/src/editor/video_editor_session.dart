@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -22,8 +23,15 @@ class VideoEditorSession extends ChangeNotifier {
   bool preferHw = true;
   bool muteOriginalAudio = false;
   double playbackRate = 1.0;
+  bool loopOnFinish = false;
+  ClipEffects clipEffects = ClipEffectsKit.identity();
 
   bool get hasRustBackend => backend is RustPlaybackBackend;
+
+  /// Clip effects for export (non-identity only).
+  ClipEffects? exportClipEffects() {
+    return ClipEffectsKit.isIdentity(clipEffects) ? null : clipEffects;
+  }
 
   RustPlaybackBackend? get rustBackend =>
       backend is RustPlaybackBackend ? backend! as RustPlaybackBackend : null;
@@ -76,7 +84,12 @@ class VideoEditorSession extends ChangeNotifier {
 
   @override
   void dispose() {
-    backend?.dispose();
+    final b = backend;
+    backend = null;
+    if (b != null) {
+      unawaited(b.close());
+      b.dispose();
+    }
     timeline.dispose();
     super.dispose();
   }

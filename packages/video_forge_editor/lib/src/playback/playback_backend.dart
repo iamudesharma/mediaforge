@@ -34,6 +34,9 @@ abstract class PlaybackBackend extends ChangeNotifier {
   /// Set playback rate (speed).
   Future<void> setPlaybackRate(double rate);
 
+  /// Enable or disable looping when playback reaches the end of the trim range.
+  Future<void> setLooping(bool looping);
+
   // ── Read-only state ──
 
   bool get isOpen;

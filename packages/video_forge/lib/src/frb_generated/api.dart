@@ -176,6 +176,15 @@ BigInt clearDecoderCache() => RustLib.instance.api.crateApiClearDecoderCache();
 DecoderCacheStatsDto decoderCacheStats() =>
     RustLib.instance.api.crateApiDecoderCacheStats();
 
+/// Stream-copy join of homogeneous MP4 segments (per-clip export).
+Future<void> concatVideoFiles({
+  required List<String> paths,
+  required String outputPath,
+}) => RustLib.instance.api.crateApiConcatVideoFiles(
+  paths: paths,
+  outputPath: outputPath,
+);
+
 /// Public stats DTO. Fields mirror [crate::cache::CacheStatsSnapshot].
 class DecoderCacheStatsDto {
   final BigInt hits;

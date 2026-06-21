@@ -167,6 +167,75 @@ pub struct CompressOptions {
     pub audio_tracks: Vec<AudioTrackInput>,
     /// When true, omit the source file’s embedded audio from the mix (only added tracks).
     pub mute_original_audio: bool,
+    /// Zoom / pan / rotate / speed effects on the source clip (forces CPU encode path when active).
+    pub clip_effects: Option<ClipEffects>,
+}
+
+/// Static transform on the source video clip (normalized coordinates).
+#[frb]
+#[derive(Clone, Copy, Debug)]
+pub struct ClipTransformBase {
+    /// Fraction of output width (−1…1).
+    pub translate_x: f32,
+    /// Fraction of output height (−1…1).
+    pub translate_y: f32,
+    /// Uniform scale (1.0 = identity; >1 zooms in).
+    pub scale: f32,
+    /// Rotation in degrees.
+    pub rotation: f32,
+}
+
+impl Default for ClipTransformBase {
+    fn default() -> Self {
+        Self {
+            translate_x: 0.0,
+            translate_y: 0.0,
+            scale: 1.0,
+            rotation: 0.0,
+        }
+    }
+}
+
+/// Per-segment speed override (timeline-local milliseconds).
+#[frb]
+#[derive(Clone, Debug)]
+pub struct SpeedSegment {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    /// 0.25 = slow-mo, 2.0 = fast-forward.
+    pub rate: f32,
+}
+
+/// Clip-wide effects: transform, keyframed motion, and playback speed.
+#[frb]
+#[derive(Clone, Debug, Default)]
+pub struct ClipEffects {
+    pub base: ClipTransformBase,
+    pub motion: TransformTracks,
+    /// Clip-wide speed (1.0 = normal). Export remaps video PTS and audio tempo.
+    pub speed: f32,
+    pub speed_segments: Vec<SpeedSegment>,
+}
+
+impl ClipEffects {
+    pub fn identity() -> Self {
+        Self {
+            base: ClipTransformBase::default(),
+            motion: TransformTracks::default(),
+            speed: 1.0,
+            speed_segments: Vec::new(),
+        }
+    }
+
+    pub fn is_identity(&self) -> bool {
+        (self.speed - 1.0).abs() < 0.001
+            && self.speed_segments.is_empty()
+            && self.motion.tracks.is_empty()
+            && (self.base.scale - 1.0).abs() < 0.001
+            && self.base.translate_x.abs() < 0.001
+            && self.base.translate_y.abs() < 0.001
+            && self.base.rotation.abs() < 0.001
+    }
 }
 
 /// Background audio lane for export mux (paths must be local FFmpeg-readable files).
@@ -547,6 +616,7 @@ impl Default for CompressOptions {
             burn_in_overlays: Vec::new(),
             audio_tracks: Vec::new(),
             mute_original_audio: false,
+            clip_effects: None,
         }
     }
 }

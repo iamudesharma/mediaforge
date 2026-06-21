@@ -12,6 +12,8 @@ class VideoForgeEditorConfig {
     this.session,
     this.showDiagnostics = false,
     this.previewMaxEdge = 1080,
+    this.autoPlay = false,
+    this.loopOnFinish = false,
     this.onExport,
     this.onCancel,
     this.cacheSegment = 'video_forge_editor',
@@ -34,6 +36,12 @@ class VideoForgeEditorConfig {
 
   /// Max decode edge for GPU preview.
   final int previewMaxEdge;
+
+  /// Start playback automatically once the initial video is loaded.
+  final bool autoPlay;
+
+  /// Loop playback back to the start when it reaches the end of the trim range.
+  final bool loopOnFinish;
 
   /// Called when export completes successfully.
   final void Function(VideoExportResult result)? onExport;

@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:video_forge/video_forge.dart';
+
 /// One contiguous segment from a source file placed on the master timeline.
 @immutable
 class VideoTimelineClip {
@@ -9,6 +11,7 @@ class VideoTimelineClip {
     required this.sourceStartMs,
     required this.sourceEndMs,
     required this.timelineStartMs,
+    this.effects,
   })  : assert(sourceStartMs >= 0),
         assert(sourceEndMs > sourceStartMs),
         assert(timelineStartMs >= 0);
@@ -18,6 +21,8 @@ class VideoTimelineClip {
   final int sourceStartMs;
   final int sourceEndMs;
   final int timelineStartMs;
+  /// Zoom / pan / rotate / speed effects applied to this clip.
+  final ClipEffects? effects;
 
   int get durationMs => sourceEndMs - sourceStartMs;
   int get timelineEndMs => timelineStartMs + durationMs;
@@ -33,6 +38,7 @@ class VideoTimelineClip {
     int? sourceStartMs,
     int? sourceEndMs,
     int? timelineStartMs,
+    ClipEffects? effects,
   }) {
     return VideoTimelineClip(
       id: id ?? this.id,
@@ -40,6 +46,7 @@ class VideoTimelineClip {
       sourceStartMs: sourceStartMs ?? this.sourceStartMs,
       sourceEndMs: sourceEndMs ?? this.sourceEndMs,
       timelineStartMs: timelineStartMs ?? this.timelineStartMs,
+      effects: effects ?? this.effects,
     );
   }
 }

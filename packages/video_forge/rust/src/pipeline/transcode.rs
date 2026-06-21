@@ -21,9 +21,11 @@ use crate::ffmpeg::vt_pipeline::{self, VtScaler};
 use crate::jobs::progress::ProgressReporter;
 use crate::jobs::registry::CancellationToken;
 use crate::pipeline::audio_mix;
+use crate::pipeline::clip_transform::{resolve_from_effects, ClipTransformProcessor};
 use crate::pipeline::overlay_burn::OverlayCompositor;
+use crate::pipeline::speed_ramp::SpeedController;
 use crate::pipeline::streaming::{movflags, movflags_for_profile};
-use crate::types::{effective_output_profile, CompressOptions, CompressResult, VideoCodec};
+use crate::types::{effective_output_profile, ClipEffects, CompressOptions, CompressResult, VideoCodec};
 
 /// Never target more than ~82% of measured source video bitrate when compressing.
 const SOURCE_BITRATE_SHRINK: f64 = 0.82;
@@ -41,6 +43,10 @@ fn ms_to_seek_ts(ms: u64, tb: Rational) -> i64 {
         return 0;
     }
     (ms as f64 / 1000.0 / tb.0 as f64 * tb.1 as f64) as i64
+}
+
+fn ms_to_encoder_pts(ms: u64, tb: Rational) -> i64 {
+    ms_to_seek_ts(ms, tb)
 }
 
 struct VideoTranscoder {
@@ -68,6 +74,10 @@ struct VideoTranscoder {
     clip_end_ms: Option<u64>,
     stop_encoding: bool,
     burn_in: Option<OverlayCompositor>,
+    clip_transform: Option<ClipTransformProcessor>,
+    clip_effects: Option<ClipEffects>,
+    speed_controller: SpeedController,
+    clip_start_ms: u64,
     /// After CPU overlay burn (YUV420P), convert to encoder pixel format (e.g. NV12 for MediaCodec).
     burn_submit_scaler: Option<ScalerContext>,
     burn_submit_frame: Video,
@@ -197,13 +207,15 @@ impl VideoTranscoder {
         &mut self,
         src: &mut Video,
         frame_ms: u64,
+        relative_ms: u64,
+        output_pts_ms: u64,
         octx: &mut format::context::Output,
         ost_time_base: Rational,
         scaled: &mut Video,
         packet_pool: &mut PacketPool,
     ) -> Result<()> {
-        let pts = src.timestamp();
-        src.set_pts(pts);
+        let pts = ms_to_encoder_pts(output_pts_ms, self.input_time_base);
+        src.set_pts(Some(pts));
         src.set_kind(picture::Type::None);
 
         if self.scale_needed {
@@ -211,13 +223,25 @@ impl VideoTranscoder {
             self.ensure_scaled_frame(scaled)?;
             let s = self.scaler.as_mut().expect("scaler");
             s.run(src, scaled).map_err(map_ffmpeg_error)?;
-            scaled.set_pts(pts);
+            scaled.set_pts(Some(pts));
             scaled.set_kind(picture::Type::None);
+            if let Some(proc) = &mut self.clip_transform {
+                if let Some(effects) = &self.clip_effects {
+                    let t = resolve_from_effects(effects, relative_ms);
+                    proc.apply_on_yuv420(scaled, &t)?;
+                }
+            }
             if let Some(comp) = &mut self.burn_in {
                 comp.apply_on_yuv420(scaled, frame_ms)?;
             }
             self.send_yuv420_to_encoder(scaled, octx, ost_time_base, packet_pool)?;
         } else {
+            if let Some(proc) = &mut self.clip_transform {
+                if let Some(effects) = &self.clip_effects {
+                    let t = resolve_from_effects(effects, relative_ms);
+                    proc.apply_on_yuv420(src, &t)?;
+                }
+            }
             if let Some(comp) = &mut self.burn_in {
                 comp.apply_on_yuv420(src, frame_ms)?;
             }
@@ -254,6 +278,8 @@ impl VideoTranscoder {
         &mut self,
         frame: &mut Video,
         frame_ms: u64,
+        relative_ms: u64,
+        output_pts_ms: u64,
         octx: &mut format::context::Output,
         ost_time_base: Rational,
         scaled: &mut Video,
@@ -261,6 +287,7 @@ impl VideoTranscoder {
     ) -> Result<()> {
         #[cfg(any(target_os = "ios", target_os = "macos"))]
         if self.burn_in.is_none()
+            && self.clip_transform.is_none()
             && crate::ffmpeg::hw_decode::is_hw_pixel_format(frame.format())
         {
             match self.vt_link {
@@ -268,6 +295,8 @@ impl VideoTranscoder {
                     return self.send_to_encoder(
                         frame,
                         frame_ms,
+                        relative_ms,
+                        output_pts_ms,
                         octx,
                         ost_time_base,
                         scaled,
@@ -288,6 +317,8 @@ impl VideoTranscoder {
                 return self.send_to_encoder(
                     &mut sw,
                     frame_ms,
+                    relative_ms,
+                    output_pts_ms,
                     octx,
                     ost_time_base,
                     scaled,
@@ -298,6 +329,8 @@ impl VideoTranscoder {
         self.send_to_encoder(
             frame,
             frame_ms,
+            relative_ms,
+            output_pts_ms,
             octx,
             ost_time_base,
             scaled,
@@ -443,7 +476,9 @@ fn run_compress_inner(
                 max_h,
                 options.max_fps,
                 clip_end_ms,
+                clip_start_ms,
                 &options.burn_in_overlays,
+                options.clip_effects.as_ref(),
             )?;
             transcoders.insert(ist_index, transcoder);
         } else {
@@ -581,10 +616,21 @@ fn run_compress_inner(
                     continue;
                 }
 
-                transcoder.frame_count += 1;
                 let relative_ms = frame_ms.saturating_sub(clip_start_ms);
-                let percent =
-                    (relative_ms as f64 / encode_span_ms as f64).clamp(0.0, 0.95) as f32;
+                let output_pts_ms = match transcoder
+                    .speed_controller
+                    .output_ms_for_encode(relative_ms)
+                {
+                    Some(ms) => ms,
+                    None => continue,
+                };
+
+                transcoder.frame_count += 1;
+                let percent = if encode_span_ms > 0 {
+                    (relative_ms as f64 / encode_span_ms as f64).clamp(0.0, 0.95) as f32
+                } else {
+                    0.0
+                };
                 progress.emit(
                     crate::types::ProcessingPhase::Encoding,
                     percent,
@@ -597,6 +643,8 @@ fn run_compress_inner(
                 transcoder.process_decoded(
                     &mut decoded,
                     frame_ms,
+                    relative_ms,
+                    output_pts_ms,
                     &mut octx,
                     ost_time_base,
                     &mut scaled,
@@ -634,9 +682,16 @@ fn run_compress_inner(
         while transcoder.decoder.receive_frame(&mut decoded).is_ok() {
             let frame_ms =
                 pts_to_ms(decoded.pts().unwrap_or(0), transcoder.input_time_base);
+            let relative_ms = frame_ms.saturating_sub(transcoder.clip_start_ms);
+            let output_pts_ms = transcoder
+                .speed_controller
+                .output_ms_for_encode(relative_ms)
+                .unwrap_or(relative_ms);
             transcoder.process_decoded(
                 &mut decoded,
                 frame_ms,
+                relative_ms,
+                output_pts_ms,
                 &mut octx,
                 ost_time_base,
                 &mut scaled,
@@ -729,16 +784,31 @@ fn create_video_transcoder(
     max_h: u32,
     max_fps: Option<f32>,
     clip_end_ms: Option<u64>,
+    clip_start_ms: u64,
     burn_in_specs: &[crate::types::BurnInOverlay],
+    clip_effects: Option<&ClipEffects>,
 ) -> Result<VideoTranscoder> {
     let global_header = octx
         .format()
         .flags()
         .contains(format::flag::Flags::GLOBAL_HEADER);
 
-    // Burn-in composites CPU YUV420P; HW decode/encode paths are unreliable for that pipeline.
+    let effects = clip_effects.cloned().filter(|e| !e.is_identity());
+    let effects_active = effects.is_some();
+    if let Some(ref e) = effects {
+        log::info!(
+            "[transcode] clip_effects scale={:.2} rotation={:.1} speed={:.2} motion_tracks={}",
+            e.base.scale,
+            e.base.rotation,
+            e.speed,
+            e.motion.tracks.len()
+        );
+    }
+
+    // Burn-in / clip effects composite CPU YUV420P; HW decode/encode paths are unreliable.
     let burn_in_active = !burn_in_specs.is_empty();
-    let prefer_hw_decode = !burn_in_active
+    let cpu_effects_active = burn_in_active || effects_active;
+    let prefer_hw_decode = !cpu_effects_active
         && prefer_hw
         && crate::ffmpeg::hw_decode::prefer_hw_decode_with_encode();
     let (mut decoder, mut hw_transfer) =
@@ -749,7 +819,7 @@ fn create_video_transcoder(
     let src_h = decoder.height();
     let (out_w, out_h) = scale_dimensions(src_w, src_h, max_w, max_h);
 
-    let candidates = if burn_in_active {
+    let candidates = if cpu_effects_active {
         let list = encoder_candidates_burn_in(codec);
         if list.is_empty() {
             return Err(VideoForgeError::UnsupportedCodec(format!(
@@ -780,7 +850,7 @@ fn create_video_transcoder(
             target_bitrate,
             is_hardware_encoder(encoder_name),
             hw_transfer.as_mut(),
-            burn_in_active,
+            cpu_effects_active,
         ) {
             Ok((encoder, ost_idx, vt_mode)) => {
                 opened_pair = Some((encoder, ost_idx, encoder_name.to_string(), vt_mode));
@@ -818,11 +888,23 @@ fn create_video_transcoder(
     };
 
     let burn_in = OverlayCompositor::new(burn_in_specs, out_w, out_h)?;
+    let clip_transform = if effects_active {
+        ClipTransformProcessor::new(out_w, out_h)?
+    } else {
+        None
+    };
+
+    let speed = effects.as_ref().map(|e| e.speed).unwrap_or(1.0);
+    let speed_segments = effects
+        .as_ref()
+        .map(|e| e.speed_segments.clone())
+        .unwrap_or_default();
+    let speed_controller = SpeedController::new(speed, max_fps, speed_segments);
 
     let (burn_submit_scaler, burn_submit_frame) =
         setup_burn_in_submit_buffer(burn_in.as_ref(), &encoder, out_w, out_h)?;
 
-    let (enc_pixel, scale_needed, vt_link) = if burn_in_active {
+    let (enc_pixel, scale_needed, vt_link) = if cpu_effects_active {
         (Pixel::YUV420P, true, VtLinkMode::None)
     } else if vt_link != VtLinkMode::None {
         (Pixel::VIDEOTOOLBOX, false, vt_link)
@@ -884,6 +966,10 @@ fn create_video_transcoder(
         clip_end_ms,
         stop_encoding: false,
         burn_in,
+        clip_transform,
+        clip_effects: effects,
+        speed_controller,
+        clip_start_ms,
         burn_submit_scaler,
         burn_submit_frame,
     })

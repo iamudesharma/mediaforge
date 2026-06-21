@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:media_forge/media_forge.dart';
 import 'package:video_forge_kit/video_forge_kit.dart'
-    show DraggableVideoOverlays, VideoOverlayItem;
+    show ClipEffects, ClipEffectsKit, DraggableVideoOverlays, VideoOverlayItem;
 
 import '../playback/rust_playback_backend.dart';
+import '../utils/clip_transform_preview.dart';
 
 /// Letterboxed video preview using the Rust MediaPlaybackEngine.
 ///
@@ -25,6 +28,8 @@ class RustVideoCanvas extends StatelessWidget {
     this.fit = BoxFit.contain,
     this.backgroundColor = Colors.black,
     this.showDiagnostics = false,
+    this.clipEffects,
+    this.clipLocalMs = 0,
   });
 
   final RustPlaybackBackend backend;
@@ -40,6 +45,8 @@ class RustVideoCanvas extends StatelessWidget {
   final BoxFit fit;
   final Color backgroundColor;
   final bool showDiagnostics;
+  final ClipEffects? clipEffects;
+  final int clipLocalMs;
 
   @override
   Widget build(BuildContext context) {
@@ -74,27 +81,39 @@ class RustVideoCanvas extends StatelessWidget {
                       showDeleteZone: showDeleteZone,
                     );
 
+              Widget videoStack = Stack(
+                clipBehavior: Clip.none,
+                fit: StackFit.expand,
+                children: [
+                  MediaVideoSurface(
+                    presenter: presenter,
+                    fit: fit,
+                  ),
+                  overlayLayer,
+                  if (showDiagnostics)
+                    Positioned(
+                      top: 4,
+                      left: 4,
+                      child: _DiagnosticsBadge(backend: backend),
+                    ),
+                ],
+              );
+
+              final effects = clipEffects;
+              if (effects != null && !ClipEffectsKit.isIdentity(effects)) {
+                final base = ClipTransformPreview.atMs(effects, clipLocalMs);
+                videoStack = Transform(
+                  transform: ClipTransformPreview.matrixFor(base, frame),
+                  alignment: Alignment.center,
+                  child: videoStack,
+                );
+              }
+
               return Center(
                 child: SizedBox(
                   width: frame.width,
                   height: frame.height,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    fit: StackFit.expand,
-                    children: [
-                      MediaVideoSurface(
-                        presenter: presenter,
-                        fit: fit,
-                      ),
-                      overlayLayer,
-                      if (showDiagnostics)
-                        Positioned(
-                          top: 4,
-                          left: 4,
-                          child: _DiagnosticsBadge(backend: backend),
-                        ),
-                    ],
-                  ),
+                  child: videoStack,
                 ),
               );
             },

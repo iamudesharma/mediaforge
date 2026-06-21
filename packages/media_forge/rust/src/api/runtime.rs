@@ -505,40 +505,41 @@ impl<T: HasPts> FrameQueue<T> {
 impl FrameQueue<MediaVideoFrame> {
     /// Like [`FrameQueue::enqueue`] but logs when the queue drops a frame.
     pub fn enqueue_video(&self, frame: MediaVideoFrame) -> Option<MediaVideoFrame> {
-        let dropped = self.enqueue(frame);
-        if let Some(ref old) = dropped {
-            release_media_video_frame_pixel_buffer(old);
+        let mut dropped = self.enqueue(frame);
+        if let Some(ref mut old) = dropped {
             runtime_log!(
                 "[VideoDecoder] Dropped oldest frame (PTS: {}ms) — queue full ({}/{})",
                 old.pts_ms,
                 self.len(),
                 self.max_size()
             );
+            release_media_video_frame_pixel_buffer(old);
         }
         dropped
     }
 
     pub fn flush_video(&self) {
         let mut q = self.queue.lock();
-        for f in q.drain(..) {
-            release_media_video_frame_pixel_buffer(&f);
+        for mut f in q.drain(..) {
+            release_media_video_frame_pixel_buffer(&mut f);
         }
     }
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn release_media_video_frame_pixel_buffer(frame: &MediaVideoFrame) {
+fn release_media_video_frame_pixel_buffer(frame: &mut MediaVideoFrame) {
     if frame.pixel_buffer_ptr != 0 {
         unsafe {
             crate::vt_pixel_buffer::release_pixel_buffer(
                 frame.pixel_buffer_ptr as *mut std::ffi::c_void,
             );
         }
+        frame.pixel_buffer_ptr = 0;
     }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-fn release_media_video_frame_pixel_buffer(_frame: &MediaVideoFrame) {}
+fn release_media_video_frame_pixel_buffer(_frame: &mut MediaVideoFrame) {}
 
 impl FrameQueue<MediaVideoFrame> {
     pub fn dequeue_best_for_time(&self, current_time: u64) -> Option<MediaVideoFrame> {
@@ -547,9 +548,11 @@ impl FrameQueue<MediaVideoFrame> {
         let mut skipped_count = 0;
         while let Some(front) = queue.front() {
             if front.pts_ms <= current_time {
-                best_frame = queue.pop_front();
                 if best_frame.is_some() {
                     skipped_count += 1;
+                }
+                if let Some(mut skipped) = best_frame.replace(queue.pop_front()?) {
+                    release_media_video_frame_pixel_buffer(&mut skipped);
                 }
             } else {
                 break;
@@ -583,7 +586,7 @@ impl FrameQueue<MediaVideoFrame> {
 ///
 /// **RGBA path:** [pixels] is `width × height × 4`, [pixel_buffer_ptr] is 0.
 /// **Apple HW path:** [pixel_buffer_ptr] is a retained BGRA `CVPixelBuffer*`; [pixels] is empty.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 #[frb(non_opaque)]
 pub struct MediaVideoFrame {
     pub pts_ms: u64,
@@ -592,6 +595,32 @@ pub struct MediaVideoFrame {
     pub pixels: Vec<u8>,
     pub pixel_buffer_ptr: u64,
     pub seek_generation: u64,
+}
+
+impl Clone for MediaVideoFrame {
+    fn clone(&self) -> Self {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        if self.pixel_buffer_ptr != 0 {
+            unsafe {
+                crate::vt_pixel_buffer::retain_pixel_buffer(
+                    self.pixel_buffer_ptr as *mut std::ffi::c_void,
+                );
+            }
+        }
+        Self {
+            pts_ms: self.pts_ms,
+            width: self.width,
+            height: self.height,
+            pixels: self.pixels.clone(),
+            pixel_buffer_ptr: self.pixel_buffer_ptr,
+            seek_generation: self.seek_generation,
+        }
+    }
+}
+
+/// Release an owned HW frame when it will not be handed to Flutter.
+pub(crate) fn discard_media_video_frame(mut frame: MediaVideoFrame) {
+    release_media_video_frame_pixel_buffer(&mut frame);
 }
 
 /// Hand off `CVPixelBuffer` to Flutter without releasing on [MediaVideoFrame] drop.
@@ -1050,6 +1079,10 @@ struct AudioPlayerState {
     trim_end_ms: Arc<AtomicU64>,
     /// Set by the cpal callback when audio clock >= trim_end_ms.
     trim_end_reached: Arc<AtomicBool>,
+    /// When true, playback loops instead of ending at trim_end_ms.
+    looping: Arc<AtomicBool>,
+    /// Set by the cpal callback when looping && trim_end reached; cleared by loop watcher.
+    loop_requested: Arc<AtomicBool>,
     /// Shared overlay audio states — **shared** with AudioRuntime via Arc<Mutex<>>
     /// so overlays added after start() are visible to the cpal callback.
     overlay_states: Arc<Mutex<Vec<Arc<Mutex<OverlayAudioState>>>>>,
@@ -1083,6 +1116,10 @@ pub struct AudioRuntime {
     trim_end_ms: Arc<AtomicU64>,
     /// Set by cpal callback when audio clock >= trim_end_ms.
     trim_end_reached: Arc<AtomicBool>,
+    /// When true, playback loops instead of ending at trim_end_ms.
+    looping: Arc<AtomicBool>,
+    /// Set by the cpal callback when looping && trim_end reached; cleared by loop watcher.
+    loop_requested: Arc<AtomicBool>,
     /// Overlay audio tracks mixed into the output in real-time.
     #[frb(ignore)]
     overlay_tracks: Mutex<Vec<Arc<OverlayAudioTrack>>>,
@@ -1127,6 +1164,8 @@ impl AudioRuntime {
             source_muted: Arc::new(AtomicBool::new(false)),
             trim_end_ms: Arc::new(AtomicU64::new(u64::MAX)),
             trim_end_reached: Arc::new(AtomicBool::new(false)),
+            looping: Arc::new(AtomicBool::new(false)),
+            loop_requested: Arc::new(AtomicBool::new(false)),
             overlay_tracks: Mutex::new(Vec::new()),
             overlay_states: Arc::new(Mutex::new(Vec::new())),
             next_overlay_id: AtomicU64::new(1),
@@ -1165,6 +1204,8 @@ impl AudioRuntime {
                 let source_muted_arc = self.source_muted.clone();
                 let trim_end_ms_arc = self.trim_end_ms.clone();
                 let trim_end_reached_arc = self.trim_end_reached.clone();
+                let looping_arc = self.looping.clone();
+                let loop_requested_arc = self.loop_requested.clone();
                 // Pass the shared Arc — cpal callback will lock it each buffer,
                 // so overlays added after start() are visible.
                 let overlay_states_shared = self.overlay_states.clone();
@@ -1179,6 +1220,8 @@ impl AudioRuntime {
                     source_muted: source_muted_arc,
                     trim_end_ms: trim_end_ms_arc,
                     trim_end_reached: trim_end_reached_arc,
+                    looping: looping_arc,
+                    loop_requested: loop_requested_arc,
                     overlay_states: overlay_states_shared,
                     sr: sample_rate as u64,
                     ch: channels as u64,
@@ -1212,10 +1255,14 @@ impl AudioRuntime {
                                 state.clock.sync_from_audio_ms(audio_ms);
 
                                 // Trim-end detection: when audio clock reaches trim_end_ms,
-                                // signal the engine to transition to Ended state.
+                                // either request a loop or signal the engine to transition to Ended state.
                                 let te = state.trim_end_ms.load(Ordering::Relaxed);
                                 if te < u64::MAX && audio_ms >= te {
-                                    state.trim_end_reached.store(true, Ordering::Relaxed);
+                                    if state.looping.load(Ordering::Relaxed) {
+                                        state.loop_requested.store(true, Ordering::Relaxed);
+                                    } else {
+                                        state.trim_end_reached.store(true, Ordering::Relaxed);
+                                    }
                                 }
                             }
                         }
@@ -1727,6 +1774,17 @@ let mut max_amplitude = 0.0f32;
     /// Clear the trim-end flag (e.g. after a seek backward past trim end).
     pub fn clear_trim_end_reached(&self) {
         self.trim_end_reached.store(false, Ordering::Relaxed);
+    }
+
+    /// Enable or disable playback looping for the audio/cpal callback path.
+    pub fn set_looping(&self, enabled: bool) {
+        self.looping.store(enabled, Ordering::Relaxed);
+        runtime_log!("[AudioRuntime] set_looping={}", enabled);
+    }
+
+    /// Returns true if looping is currently enabled.
+    pub fn is_looping(&self) -> bool {
+        self.looping.load(Ordering::Relaxed)
     }
 
     // ── Overlay audio track management ──
@@ -2349,6 +2407,10 @@ pub struct MediaPlaybackEngine {
     preview_max_edge: u32,
     trim_start_ms: Arc<AtomicU64>,
     trim_end_ms: Arc<AtomicU64>,
+    /// Handle to the lightweight thread that triggers loop seeks.
+    loop_thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
+    /// Signal flag for the loop watcher thread.
+    loop_thread_running: Arc<AtomicBool>,
 }
 
 impl MediaPlaybackEngine {
@@ -2428,6 +2490,8 @@ impl MediaPlaybackEngine {
             preview_max_edge,
             trim_start_ms: Arc::new(AtomicU64::new(0)),
             trim_end_ms: Arc::new(AtomicU64::new(u64::MAX)),
+            loop_thread_handle: Mutex::new(None),
+            loop_thread_running: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -2482,6 +2546,8 @@ impl MediaPlaybackEngine {
         let is_running_demux = is_running.clone();
         let seek_target_ms_demux = self.seek_target_ms.clone();
         let seek_was_playing_demux = self.seek_was_playing.clone();
+        let looping_demux = self.audio_runtime.looping.clone();
+        let seek_controller_demux = self.seek_controller.clone();
         
         let video_pq = self.video_packet_queue.clone();
         let audio_pq = self.audio_packet_queue.clone();
@@ -2603,6 +2669,12 @@ impl MediaPlaybackEngine {
                         }
                     }
                     Err(ffmpeg_next::Error::Eof) => {
+                        if looping_demux.load(Ordering::Relaxed) {
+                            let loop_start = trim_start_demux.load(Ordering::Relaxed);
+                            runtime_log!("[Demuxer] Looping at EOF back to {}ms", loop_start);
+                            seek_controller_demux.request_seek(loop_start, "loop_eof");
+                            continue;
+                        }
                         runtime_log!(
                             "[Demuxer] End of file reached. video={} audio={}. Waiting for seek or stop.",
                             video_count, audio_count
@@ -2670,10 +2742,31 @@ impl MediaPlaybackEngine {
             runtime_log!("[MediaPlaybackEngine] Auto-seeking to trim_start={}ms", trim_start);
             self.seek_controller.request_seek(trim_start, "trim_start");
         }
+
+        // Start the loop watcher thread that reacts to cpal loop requests.
+        self.stop_loop_watcher();
+        self.loop_thread_running.store(true, Ordering::SeqCst);
+        let loop_running = self.loop_thread_running.clone();
+        let loop_requested = self.audio_runtime.loop_requested.clone();
+        let loop_looping = self.audio_runtime.looping.clone();
+        let loop_trim_start = self.trim_start_ms.clone();
+        let loop_seek_controller = self.seek_controller.clone();
+        let loop_handle = thread::spawn(move || {
+            while loop_running.load(Ordering::SeqCst) {
+                if loop_requested.swap(false, Ordering::Relaxed) && loop_looping.load(Ordering::Relaxed) {
+                    let start = loop_trim_start.load(Ordering::Relaxed);
+                    runtime_log!("[MediaPlaybackEngine] Loop triggered, seeking to {}ms", start);
+                    loop_seek_controller.request_seek(start, "loop");
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+        });
+        *self.loop_thread_handle.lock() = Some(loop_handle);
     }
 
     pub fn pause(&self) {
         runtime_log!("[MediaPlaybackEngine] Pausing clock");
+        self.stop_loop_watcher();
         self.presenter_runtime.stop();
         self.clock.pause();
         // Flush frame queues so decoder threads stop filling them after the
@@ -2694,6 +2787,13 @@ impl MediaPlaybackEngine {
 
     pub fn set_muted(&self, muted: bool) {
         self.audio_runtime.set_muted(muted);
+    }
+
+    /// Enable or disable playback looping. When enabled, playback seeks back to
+    /// `trim_start_ms` when the audio clock reaches `trim_end_ms` or EOF.
+    pub fn set_looping(&self, enabled: bool) {
+        self.audio_runtime.set_looping(enabled);
+        runtime_log!("[MediaPlaybackEngine] set_looping={}", enabled);
     }
 
     /// Mute only embedded source audio during preview (overlay BGM keeps playing).
@@ -2756,8 +2856,17 @@ impl MediaPlaybackEngine {
         self.audio_runtime.set_overlay_volume(id, volume);
     }
 
+    /// Stop the lightweight loop-watcher thread spawned by `start()`.
+    fn stop_loop_watcher(&self) {
+        self.loop_thread_running.store(false, Ordering::SeqCst);
+        if let Some(handle) = self.loop_thread_handle.lock().take() {
+            let _ = handle.join();
+        }
+    }
+
     pub fn stop(&self) {
         runtime_log!("[MediaPlaybackEngine] Stopping runtimes");
+        self.stop_loop_watcher();
         self.presenter_runtime.stop();
         self.clock.pause();
         self.stop_demuxer_session();
@@ -2797,12 +2906,13 @@ impl MediaPlaybackEngine {
                     frame.seek_generation,
                     current_gen
                 );
+                discard_media_video_frame(frame);
             }
         }
         
         let state = self.clock.get_state();
         if state == PlaybackState::Seeking {
-            if let Some(frame) = self.presenter_runtime.get_frozen_frame() {
+            if let Some(frame) = self.presenter_runtime.take_frozen_frame() {
                 return Some(frame);
             }
         }
@@ -2818,6 +2928,7 @@ impl MediaPlaybackEngine {
                         frame.seek_generation,
                         current_gen
                     );
+                    discard_media_video_frame(frame);
                 }
             }
         }
@@ -2884,7 +2995,7 @@ impl MediaPlaybackEngine {
     }
 
     pub fn get_playback_state(&self) -> PlaybackState {
-        if self.audio_runtime.is_trim_end_reached() {
+        if self.audio_runtime.is_trim_end_reached() && !self.audio_runtime.is_looping() {
             return PlaybackState::Ended;
         }
         self.clock.get_state()

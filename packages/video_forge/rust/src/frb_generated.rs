@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1250792123;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1943322713;
 
 // Section: executor
 
@@ -858,6 +858,42 @@ fn wire__crate__api__clear_decoder_cache_impl(
                 let output_ok = Result::<_, ()>::Ok(crate::api::clear_decoder_cache())?;
                 Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__concat_video_files_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "concat_video_files",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_paths = <Vec<String>>::sse_decode(&mut deserializer);
+            let api_output_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, flutter_rust_bridge::for_generated::anyhow::Error>(
+                    (move || {
+                        let output_ok = crate::api::concat_video_files(api_paths, api_output_path)?;
+                        Ok(output_ok)
+                    })(),
+                )
+            }
         },
     )
 }
@@ -1691,6 +1727,38 @@ impl SseDecode for crate::types::BurnInOverlay {
     }
 }
 
+impl SseDecode for crate::types::ClipEffects {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_base = <crate::types::ClipTransformBase>::sse_decode(deserializer);
+        let mut var_motion = <crate::types::TransformTracks>::sse_decode(deserializer);
+        let mut var_speed = <f32>::sse_decode(deserializer);
+        let mut var_speedSegments = <Vec<crate::types::SpeedSegment>>::sse_decode(deserializer);
+        return crate::types::ClipEffects {
+            base: var_base,
+            motion: var_motion,
+            speed: var_speed,
+            speed_segments: var_speedSegments,
+        };
+    }
+}
+
+impl SseDecode for crate::types::ClipTransformBase {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_translateX = <f32>::sse_decode(deserializer);
+        let mut var_translateY = <f32>::sse_decode(deserializer);
+        let mut var_scale = <f32>::sse_decode(deserializer);
+        let mut var_rotation = <f32>::sse_decode(deserializer);
+        return crate::types::ClipTransformBase {
+            translate_x: var_translateX,
+            translate_y: var_translateY,
+            scale: var_scale,
+            rotation: var_rotation,
+        };
+    }
+}
+
 impl SseDecode for crate::types::CompressOptions {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1713,6 +1781,7 @@ impl SseDecode for crate::types::CompressOptions {
         let mut var_burnInOverlays = <Vec<crate::types::BurnInOverlay>>::sse_decode(deserializer);
         let mut var_audioTracks = <Vec<crate::types::AudioTrackInput>>::sse_decode(deserializer);
         let mut var_muteOriginalAudio = <bool>::sse_decode(deserializer);
+        let mut var_clipEffects = <Option<crate::types::ClipEffects>>::sse_decode(deserializer);
         return crate::types::CompressOptions {
             input_path: var_inputPath,
             output_path: var_outputPath,
@@ -1733,6 +1802,7 @@ impl SseDecode for crate::types::CompressOptions {
             burn_in_overlays: var_burnInOverlays,
             audio_tracks: var_audioTracks,
             mute_original_audio: var_muteOriginalAudio,
+            clip_effects: var_clipEffects,
         };
     }
 }
@@ -1941,6 +2011,18 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for Vec<crate::types::SpeedSegment> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::types::SpeedSegment>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::types::ThumbnailDecodeStatus> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1990,6 +2072,17 @@ impl SseDecode for Option<String> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::types::ClipEffects> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::types::ClipEffects>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -2307,6 +2400,20 @@ impl SseDecode for (usize, usize) {
         let mut var_field0 = <usize>::sse_decode(deserializer);
         let mut var_field1 = <usize>::sse_decode(deserializer);
         return (var_field0, var_field1);
+    }
+}
+
+impl SseDecode for crate::types::SpeedSegment {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_startMs = <u64>::sse_decode(deserializer);
+        let mut var_endMs = <u64>::sse_decode(deserializer);
+        let mut var_rate = <f32>::sse_decode(deserializer);
+        return crate::types::SpeedSegment {
+            start_ms: var_startMs,
+            end_ms: var_endMs,
+            rate: var_rate,
+        };
     }
 }
 
@@ -2640,33 +2747,34 @@ fn pde_ffi_dispatcher_primary_impl(
         12 => wire__crate__api__batch_thumbnails_impl(port, ptr, rust_vec_len, data_len),
         18 => wire__crate__api__cancel_job_impl(port, ptr, rust_vec_len, data_len),
         19 => wire__crate__api__cleanup_job_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__decode_preview_frame_pixel_buffer_impl(
+        21 => wire__crate__api__concat_video_files_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__decode_preview_frame_pixel_buffer_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        22 => wire__crate__api__decode_preview_frame_rgba_impl(port, ptr, rust_vec_len, data_len),
-        23 => {
+        23 => wire__crate__api__decode_preview_frame_rgba_impl(port, ptr, rust_vec_len, data_len),
+        24 => {
             wire__crate__api__decode_preview_frame_rgba_buf_impl(port, ptr, rust_vec_len, data_len)
         }
-        25 => wire__crate__api__get_media_info_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__initialize_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__start_compress_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__start_prefetch_remote_input_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__thumbnail_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__thumbnail_bytes_impl(port, ptr, rust_vec_len, data_len),
-        35 => {
+        26 => wire__crate__api__get_media_info_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__init_app_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__initialize_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__start_compress_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__start_prefetch_remote_input_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__thumbnail_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__thumbnail_bytes_impl(port, ptr, rust_vec_len, data_len),
+        36 => {
             wire__crate__error__video_forge_error_error_code_impl(port, ptr, rust_vec_len, data_len)
         }
-        36 => wire__crate__error__video_forge_error_error_message_impl(
+        37 => wire__crate__error__video_forge_error_error_message_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => wire__crate__api__wait_for_job_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__wait_for_job_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2705,10 +2813,10 @@ fn pde_ffi_dispatcher_sync_impl(
         16 => wire__crate__api__buffer_pool_release_by_token_impl(ptr, rust_vec_len, data_len),
         17 => wire__crate__api__buffer_pool_stats_impl(ptr, rust_vec_len, data_len),
         20 => wire__crate__api__clear_decoder_cache_impl(ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__decoder_cache_stats_impl(ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__prefetch_remote_input_impl(ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__prefetch_remote_input_range_impl(ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__release_preview_pixel_buffer_impl(ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__decoder_cache_stats_impl(ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__prefetch_remote_input_impl(ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__prefetch_remote_input_range_impl(ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__release_preview_pixel_buffer_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2893,6 +3001,47 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::BurnInOverlay>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::ClipEffects {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.base.into_into_dart().into_dart(),
+            self.motion.into_into_dart().into_dart(),
+            self.speed.into_into_dart().into_dart(),
+            self.speed_segments.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::ClipEffects {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::ClipEffects> for crate::types::ClipEffects {
+    fn into_into_dart(self) -> crate::types::ClipEffects {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::ClipTransformBase {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.translate_x.into_into_dart().into_dart(),
+            self.translate_y.into_into_dart().into_dart(),
+            self.scale.into_into_dart().into_dart(),
+            self.rotation.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::types::ClipTransformBase
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::ClipTransformBase>
+    for crate::types::ClipTransformBase
+{
+    fn into_into_dart(self) -> crate::types::ClipTransformBase {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::types::CompressOptions {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2915,6 +3064,7 @@ impl flutter_rust_bridge::IntoDart for crate::types::CompressOptions {
             self.burn_in_overlays.into_into_dart().into_dart(),
             self.audio_tracks.into_into_dart().into_dart(),
             self.mute_original_audio.into_into_dart().into_dart(),
+            self.clip_effects.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -3320,6 +3470,23 @@ impl flutter_rust_bridge::IntoIntoDart<crate::types::ProgressEvent>
     for crate::types::ProgressEvent
 {
     fn into_into_dart(self) -> crate::types::ProgressEvent {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::types::SpeedSegment {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.start_ms.into_into_dart().into_dart(),
+            self.end_ms.into_into_dart().into_dart(),
+            self.rate.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive for crate::types::SpeedSegment {}
+impl flutter_rust_bridge::IntoIntoDart<crate::types::SpeedSegment> for crate::types::SpeedSegment {
+    fn into_into_dart(self) -> crate::types::SpeedSegment {
         self
     }
 }
@@ -3754,6 +3921,26 @@ impl SseEncode for crate::types::BurnInOverlay {
     }
 }
 
+impl SseEncode for crate::types::ClipEffects {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::types::ClipTransformBase>::sse_encode(self.base, serializer);
+        <crate::types::TransformTracks>::sse_encode(self.motion, serializer);
+        <f32>::sse_encode(self.speed, serializer);
+        <Vec<crate::types::SpeedSegment>>::sse_encode(self.speed_segments, serializer);
+    }
+}
+
+impl SseEncode for crate::types::ClipTransformBase {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <f32>::sse_encode(self.translate_x, serializer);
+        <f32>::sse_encode(self.translate_y, serializer);
+        <f32>::sse_encode(self.scale, serializer);
+        <f32>::sse_encode(self.rotation, serializer);
+    }
+}
+
 impl SseEncode for crate::types::CompressOptions {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3776,6 +3963,7 @@ impl SseEncode for crate::types::CompressOptions {
         <Vec<crate::types::BurnInOverlay>>::sse_encode(self.burn_in_overlays, serializer);
         <Vec<crate::types::AudioTrackInput>>::sse_encode(self.audio_tracks, serializer);
         <bool>::sse_encode(self.mute_original_audio, serializer);
+        <Option<crate::types::ClipEffects>>::sse_encode(self.clip_effects, serializer);
     }
 }
 
@@ -3950,6 +4138,16 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for Vec<crate::types::SpeedSegment> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::types::SpeedSegment>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::types::ThumbnailDecodeStatus> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3983,6 +4181,16 @@ impl SseEncode for Option<String> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::types::ClipEffects> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::types::ClipEffects>::sse_encode(value, serializer);
         }
     }
 }
@@ -4252,6 +4460,15 @@ impl SseEncode for (usize, usize) {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <usize>::sse_encode(self.0, serializer);
         <usize>::sse_encode(self.1, serializer);
+    }
+}
+
+impl SseEncode for crate::types::SpeedSegment {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u64>::sse_encode(self.start_ms, serializer);
+        <u64>::sse_encode(self.end_ms, serializer);
+        <f32>::sse_encode(self.rate, serializer);
     }
 }
 

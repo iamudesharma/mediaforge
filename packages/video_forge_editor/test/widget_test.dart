@@ -10,7 +10,34 @@ void main() {
     expect(config.title, 'Video Studio');
     expect(config.previewMaxEdge, 1080);
     expect(config.showDiagnostics, false);
+    expect(config.autoPlay, false);
+    expect(config.loopOnFinish, false);
     expect(config.cacheSegment, 'video_forge_editor');
+  });
+
+  test('VideoForgeEditorConfig forwards playback flags when rebuilt like widget', () {
+    const incoming = VideoForgeEditorConfig(
+      initialVideoPath: '/tmp/sample.mp4',
+      autoPlay: true,
+      loopOnFinish: true,
+      previewMaxEdge: 720,
+    );
+    // Mirrors VideoForgeEditorWidget config rebuild.
+    final forwarded = VideoForgeEditorConfig(
+      title: incoming.title,
+      theme: incoming.theme,
+      initialVideoPath: incoming.initialVideoPath,
+      showDiagnostics: incoming.showDiagnostics,
+      previewMaxEdge: incoming.previewMaxEdge,
+      autoPlay: incoming.autoPlay,
+      loopOnFinish: incoming.loopOnFinish,
+      onExport: incoming.onExport,
+      onCancel: incoming.onCancel,
+      cacheSegment: incoming.cacheSegment,
+    );
+    expect(forwarded.autoPlay, true);
+    expect(forwarded.loopOnFinish, true);
+    expect(forwarded.previewMaxEdge, 720);
   });
 
   test('VideoExportResult holds export metadata', () {

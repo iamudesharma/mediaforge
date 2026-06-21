@@ -6,7 +6,7 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `ffmpeg_version_string`, `find_best_audio_stream`, `hw_decode_enabled`, `log_decode_capabilities`, `probe_decode_capabilities_inner`, `release_media_video_frame_pixel_buffer`, `stop_demuxer_session`, `update_time_internal`, `video_frame_queue_capacity`
+// These functions are ignored because they are not marked as `pub`: `ffmpeg_version_string`, `find_best_audio_stream`, `hw_decode_enabled`, `log_decode_capabilities`, `probe_decode_capabilities_inner`, `release_media_video_frame_pixel_buffer`, `stop_demuxer_session`, `stop_loop_watcher`, `update_time_internal`, `video_frame_queue_capacity`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AudioPlayerState`, `DecoderRecoveryState`, `FrameQueue`, `OverlayAudioState`, `OverlayAudioTrack`, `PacketQueueInner`, `PlaybackClockInner`, `PlaybackSession`, `SendSafeStream`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 // These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `new`, `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`
@@ -44,11 +44,17 @@ abstract class AudioRuntime implements RustOpaqueInterface {
   /// Flush all overlay frame queues (called on seek).
   Future<void> flushOverlayQueues();
 
+  /// Returns true if looping is currently enabled.
+  Future<bool> isLooping();
+
   /// Returns true when the audio clock has reached the trim end point.
   Future<bool> isTrimEndReached();
 
   /// Remove an overlay audio track by ID.
   Future<void> removeOverlay({required BigInt id});
+
+  /// Enable or disable playback looping for the audio/cpal callback path.
+  Future<void> setLooping({required bool enabled});
 
   /// Enable or disable audio muting. When muted, the cpal callback writes
   /// silence while continuing to consume decoded frames so the clock and
@@ -170,6 +176,10 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
   Future<void> removeOverlayAudio({required BigInt id});
 
   Future<void> seek({required BigInt timeMs});
+
+  /// Enable or disable playback looping. When enabled, playback seeks back to
+  /// `trim_start_ms` when the audio clock reaches `trim_end_ms` or EOF.
+  Future<void> setLooping({required bool enabled});
 
   Future<void> setMuted({required bool muted});
 

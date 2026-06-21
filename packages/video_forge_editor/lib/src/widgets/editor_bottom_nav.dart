@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/app_typography.dart';
 import '../theme/lumina_tokens.dart';
 
-/// Lumina Edit bottom navigation — Media, Text, Sticker, Music, More.
-enum EditorNavTool { media, text, sticker, music, more }
+/// Lumina Edit bottom navigation — Media, Text, Sticker, Music, Effects.
+enum EditorNavTool { media, text, sticker, music, effects }
 
 class EditorBottomNav extends StatelessWidget {
   const EditorBottomNav({
@@ -39,10 +39,10 @@ class EditorBottomNav extends StatelessWidget {
       Icons.music_note,
       'Music',
     ),
-    EditorNavTool.more: (
-      Icons.more_horiz,
-      Icons.more_horiz,
-      'More',
+    EditorNavTool.effects: (
+      Icons.tune_outlined,
+      Icons.tune,
+      'Effects',
     ),
   };
 

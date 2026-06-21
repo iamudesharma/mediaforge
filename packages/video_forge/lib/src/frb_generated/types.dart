@@ -274,6 +274,76 @@ class BurnInOverlay {
           effects == other.effects;
 }
 
+/// Clip-wide effects: transform, keyframed motion, and playback speed.
+class ClipEffects {
+  final ClipTransformBase base;
+  final TransformTracks motion;
+
+  /// Clip-wide speed (1.0 = normal). Export remaps video PTS and audio tempo.
+  final double speed;
+  final List<SpeedSegment> speedSegments;
+
+  const ClipEffects({
+    required this.base,
+    required this.motion,
+    required this.speed,
+    required this.speedSegments,
+  });
+
+  @override
+  int get hashCode =>
+      base.hashCode ^ motion.hashCode ^ speed.hashCode ^ speedSegments.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ClipEffects &&
+          runtimeType == other.runtimeType &&
+          base == other.base &&
+          motion == other.motion &&
+          speed == other.speed &&
+          speedSegments == other.speedSegments;
+}
+
+/// Static transform on the source video clip (normalized coordinates).
+class ClipTransformBase {
+  /// Fraction of output width (−1…1).
+  final double translateX;
+
+  /// Fraction of output height (−1…1).
+  final double translateY;
+
+  /// Uniform scale (1.0 = identity; >1 zooms in).
+  final double scale;
+
+  /// Rotation in degrees.
+  final double rotation;
+
+  const ClipTransformBase({
+    required this.translateX,
+    required this.translateY,
+    required this.scale,
+    required this.rotation,
+  });
+
+  @override
+  int get hashCode =>
+      translateX.hashCode ^
+      translateY.hashCode ^
+      scale.hashCode ^
+      rotation.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ClipTransformBase &&
+          runtimeType == other.runtimeType &&
+          translateX == other.translateX &&
+          translateY == other.translateY &&
+          scale == other.scale &&
+          rotation == other.rotation;
+}
+
 class CompressOptions {
   final String inputPath;
   final String? outputPath;
@@ -316,6 +386,9 @@ class CompressOptions {
   /// When true, omit the source file’s embedded audio from the mix (only added tracks).
   final bool muteOriginalAudio;
 
+  /// Zoom / pan / rotate / speed effects on the source clip (forces CPU encode path when active).
+  final ClipEffects? clipEffects;
+
   const CompressOptions({
     required this.inputPath,
     this.outputPath,
@@ -336,6 +409,7 @@ class CompressOptions {
     required this.burnInOverlays,
     required this.audioTracks,
     required this.muteOriginalAudio,
+    this.clipEffects,
   });
 
   @override
@@ -358,7 +432,8 @@ class CompressOptions {
       endMs.hashCode ^
       burnInOverlays.hashCode ^
       audioTracks.hashCode ^
-      muteOriginalAudio.hashCode;
+      muteOriginalAudio.hashCode ^
+      clipEffects.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -383,7 +458,8 @@ class CompressOptions {
           endMs == other.endMs &&
           burnInOverlays == other.burnInOverlays &&
           audioTracks == other.audioTracks &&
-          muteOriginalAudio == other.muteOriginalAudio;
+          muteOriginalAudio == other.muteOriginalAudio &&
+          clipEffects == other.clipEffects;
 }
 
 class CompressResult {
@@ -815,6 +891,33 @@ class ProgressEvent {
           frame == other.frame &&
           fps == other.fps &&
           etaMs == other.etaMs;
+}
+
+/// Per-segment speed override (timeline-local milliseconds).
+class SpeedSegment {
+  final BigInt startMs;
+  final BigInt endMs;
+
+  /// 0.25 = slow-mo, 2.0 = fast-forward.
+  final double rate;
+
+  const SpeedSegment({
+    required this.startMs,
+    required this.endMs,
+    required this.rate,
+  });
+
+  @override
+  int get hashCode => startMs.hashCode ^ endMs.hashCode ^ rate.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SpeedSegment &&
+          runtimeType == other.runtimeType &&
+          startMs == other.startMs &&
+          endMs == other.endMs &&
+          rate == other.rate;
 }
 
 enum TextAlign { left, center, right }

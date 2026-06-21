@@ -69,7 +69,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.12.0';
 
   @override
-  int get rustContentHash => -1250792123;
+  int get rustContentHash => 1943322713;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -154,6 +154,11 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiCleanupJob({required String jobId});
 
   BigInt crateApiClearDecoderCache();
+
+  Future<void> crateApiConcatVideoFiles({
+    required List<String> paths,
+    required String outputPath,
+  });
 
   Future<PreviewFramePixelBuffer> crateApiDecodePreviewFramePixelBuffer({
     required String inputPath,
@@ -872,6 +877,40 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "clear_decoder_cache", argNames: []);
 
   @override
+  Future<void> crateApiConcatVideoFiles({
+    required List<String> paths,
+    required String outputPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_list_String(paths, serializer);
+          sse_encode_String(outputPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 21,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+        constMeta: kCrateApiConcatVideoFilesConstMeta,
+        argValues: [paths, outputPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiConcatVideoFilesConstMeta => const TaskConstMeta(
+    debugName: "concat_video_files",
+    argNames: ["paths", "outputPath"],
+  );
+
+  @override
   Future<PreviewFramePixelBuffer> crateApiDecodePreviewFramePixelBuffer({
     required String inputPath,
     required BigInt positionMs,
@@ -887,7 +926,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 22,
             port: port_,
           );
         },
@@ -924,7 +963,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 23,
             port: port_,
           );
         },
@@ -961,7 +1000,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 24,
             port: port_,
           );
         },
@@ -988,7 +1027,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_decoder_cache_stats_dto,
@@ -1014,7 +1053,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1041,7 +1080,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 27,
             port: port_,
           );
         },
@@ -1068,7 +1107,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 28,
             port: port_,
           );
         },
@@ -1097,7 +1136,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(url, serializer);
           sse_encode_String(destDir, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1131,7 +1170,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           sse_encode_u_64(startBytes, serializer);
           sse_encode_u_64(endBytes, serializer);
           sse_encode_String(destDir, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1157,7 +1196,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_u_64(pixelBufferPtr, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1191,7 +1230,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 31,
+              funcId: 32,
               port: port_,
             );
           },
@@ -1230,7 +1269,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             pdeCallFfi(
               generalizedFrbRustBinding,
               serializer,
-              funcId: 32,
+              funcId: 33,
               port: port_,
             );
           },
@@ -1263,7 +1302,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1293,7 +1332,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1323,7 +1362,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 36,
             port: port_,
           );
         },
@@ -1356,7 +1395,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1387,7 +1426,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1584,6 +1623,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ClipEffects dco_decode_box_autoadd_clip_effects(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_clip_effects(raw);
+  }
+
+  @protected
   CompressOptions dco_decode_box_autoadd_compress_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_compress_options(raw);
@@ -1687,11 +1732,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ClipEffects dco_decode_clip_effects(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ClipEffects(
+      base: dco_decode_clip_transform_base(arr[0]),
+      motion: dco_decode_transform_tracks(arr[1]),
+      speed: dco_decode_f_32(arr[2]),
+      speedSegments: dco_decode_list_speed_segment(arr[3]),
+    );
+  }
+
+  @protected
+  ClipTransformBase dco_decode_clip_transform_base(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ClipTransformBase(
+      translateX: dco_decode_f_32(arr[0]),
+      translateY: dco_decode_f_32(arr[1]),
+      scale: dco_decode_f_32(arr[2]),
+      rotation: dco_decode_f_32(arr[3]),
+    );
+  }
+
+  @protected
   CompressOptions dco_decode_compress_options(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 19)
-      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
+    if (arr.length != 20)
+      throw Exception('unexpected arr length: expect 20 but see ${arr.length}');
     return CompressOptions(
       inputPath: dco_decode_String(arr[0]),
       outputPath: dco_decode_opt_String(arr[1]),
@@ -1712,6 +1785,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       burnInOverlays: dco_decode_list_burn_in_overlay(arr[16]),
       audioTracks: dco_decode_list_audio_track_input(arr[17]),
       muteOriginalAudio: dco_decode_bool(arr[18]),
+      clipEffects: dco_decode_opt_box_autoadd_clip_effects(arr[19]),
     );
   }
 
@@ -1853,6 +1927,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SpeedSegment> dco_decode_list_speed_segment(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_speed_segment).toList();
+  }
+
+  @protected
   List<ThumbnailDecodeStatus> dco_decode_list_thumbnail_decode_status(
     dynamic raw,
   ) {
@@ -1887,6 +1967,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  ClipEffects? dco_decode_opt_box_autoadd_clip_effects(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_clip_effects(raw);
   }
 
   @protected
@@ -2107,6 +2193,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       throw Exception('Expected 2 elements, got ${arr.length}');
     }
     return (dco_decode_usize(arr[0]), dco_decode_usize(arr[1]));
+  }
+
+  @protected
+  SpeedSegment dco_decode_speed_segment(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return SpeedSegment(
+      startMs: dco_decode_u_64(arr[0]),
+      endMs: dco_decode_u_64(arr[1]),
+      rate: dco_decode_f_32(arr[2]),
+    );
   }
 
   @protected
@@ -2494,6 +2593,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ClipEffects sse_decode_box_autoadd_clip_effects(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_clip_effects(deserializer));
+  }
+
+  @protected
   CompressOptions sse_decode_box_autoadd_compress_options(
     SseDeserializer deserializer,
   ) {
@@ -2615,6 +2722,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ClipEffects sse_decode_clip_effects(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_base = sse_decode_clip_transform_base(deserializer);
+    var var_motion = sse_decode_transform_tracks(deserializer);
+    var var_speed = sse_decode_f_32(deserializer);
+    var var_speedSegments = sse_decode_list_speed_segment(deserializer);
+    return ClipEffects(
+      base: var_base,
+      motion: var_motion,
+      speed: var_speed,
+      speedSegments: var_speedSegments,
+    );
+  }
+
+  @protected
+  ClipTransformBase sse_decode_clip_transform_base(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_translateX = sse_decode_f_32(deserializer);
+    var var_translateY = sse_decode_f_32(deserializer);
+    var var_scale = sse_decode_f_32(deserializer);
+    var var_rotation = sse_decode_f_32(deserializer);
+    return ClipTransformBase(
+      translateX: var_translateX,
+      translateY: var_translateY,
+      scale: var_scale,
+      rotation: var_rotation,
+    );
+  }
+
+  @protected
   CompressOptions sse_decode_compress_options(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_inputPath = sse_decode_String(deserializer);
@@ -2638,6 +2777,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_burnInOverlays = sse_decode_list_burn_in_overlay(deserializer);
     var var_audioTracks = sse_decode_list_audio_track_input(deserializer);
     var var_muteOriginalAudio = sse_decode_bool(deserializer);
+    var var_clipEffects = sse_decode_opt_box_autoadd_clip_effects(deserializer);
     return CompressOptions(
       inputPath: var_inputPath,
       outputPath: var_outputPath,
@@ -2658,6 +2798,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       burnInOverlays: var_burnInOverlays,
       audioTracks: var_audioTracks,
       muteOriginalAudio: var_muteOriginalAudio,
+      clipEffects: var_clipEffects,
     );
   }
 
@@ -2857,6 +2998,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SpeedSegment> sse_decode_list_speed_segment(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SpeedSegment>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_speed_segment(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<ThumbnailDecodeStatus> sse_decode_list_thumbnail_decode_status(
     SseDeserializer deserializer,
   ) {
@@ -2905,6 +3060,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  ClipEffects? sse_decode_opt_box_autoadd_clip_effects(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_clip_effects(deserializer));
     } else {
       return null;
     }
@@ -3197,6 +3365,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_field0 = sse_decode_usize(deserializer);
     var var_field1 = sse_decode_usize(deserializer);
     return (var_field0, var_field1);
+  }
+
+  @protected
+  SpeedSegment sse_decode_speed_segment(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_startMs = sse_decode_u_64(deserializer);
+    var var_endMs = sse_decode_u_64(deserializer);
+    var var_rate = sse_decode_f_32(deserializer);
+    return SpeedSegment(startMs: var_startMs, endMs: var_endMs, rate: var_rate);
   }
 
   @protected
@@ -3615,6 +3792,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_clip_effects(
+    ClipEffects self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_clip_effects(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_compress_options(
     CompressOptions self,
     SseSerializer serializer,
@@ -3742,6 +3928,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_clip_effects(ClipEffects self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_clip_transform_base(self.base, serializer);
+    sse_encode_transform_tracks(self.motion, serializer);
+    sse_encode_f_32(self.speed, serializer);
+    sse_encode_list_speed_segment(self.speedSegments, serializer);
+  }
+
+  @protected
+  void sse_encode_clip_transform_base(
+    ClipTransformBase self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_f_32(self.translateX, serializer);
+    sse_encode_f_32(self.translateY, serializer);
+    sse_encode_f_32(self.scale, serializer);
+    sse_encode_f_32(self.rotation, serializer);
+  }
+
+  @protected
   void sse_encode_compress_options(
     CompressOptions self,
     SseSerializer serializer,
@@ -3766,6 +3973,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_burn_in_overlay(self.burnInOverlays, serializer);
     sse_encode_list_audio_track_input(self.audioTracks, serializer);
     sse_encode_bool(self.muteOriginalAudio, serializer);
+    sse_encode_opt_box_autoadd_clip_effects(self.clipEffects, serializer);
   }
 
   @protected
@@ -3944,6 +4152,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_speed_segment(
+    List<SpeedSegment> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_speed_segment(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_thumbnail_decode_status(
     List<ThumbnailDecodeStatus> self,
     SseSerializer serializer,
@@ -3978,6 +4198,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_clip_effects(
+    ClipEffects? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_clip_effects(self, serializer);
     }
   }
 
@@ -4228,6 +4461,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_usize(self.$1, serializer);
     sse_encode_usize(self.$2, serializer);
+  }
+
+  @protected
+  void sse_encode_speed_segment(SpeedSegment self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.startMs, serializer);
+    sse_encode_u_64(self.endMs, serializer);
+    sse_encode_f_32(self.rate, serializer);
   }
 
   @protected

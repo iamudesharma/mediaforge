@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -97,9 +98,19 @@ class MediaGpuTexturePresenter {
     _lastUploadedPtsMs = -1;
   }
 
-  void dispose() {
+  Future<void> disposeAsync() async {
+    if (_isDisposed) return;
     _isDisposed = true;
-    disposeTexture();
+    await disposeTexture();
+    textureId.dispose();
+    frameSize.dispose();
+  }
+
+  void dispose() {
+    if (_isDisposed) return;
+    _isDisposed = true;
+    // Fire-and-forget; callers that need ordering should use [disposeAsync].
+    unawaited(disposeTexture());
     textureId.dispose();
     frameSize.dispose();
   }

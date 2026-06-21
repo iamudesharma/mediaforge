@@ -422,3 +422,9 @@ pub struct DecoderCacheStatsDto {
     pub working_set_bytes: u64,
 }
 
+/// Stream-copy join of homogeneous MP4 segments (per-clip export).
+#[frb]
+pub fn concat_video_files(paths: Vec<String>, output_path: String) -> Result<()> {
+    pipeline::concat_video_files(&paths, &output_path)
+}
+

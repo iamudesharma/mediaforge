@@ -54,6 +54,7 @@ class RustPlaybackBackend extends PlaybackBackend {
   MediaInfo? _mediaInfo;
   bool _isPlaying = false;
   bool _disposed = false;
+  int _trimStartMs = 0;
   int _trimEndMs = 0;
 
   /// Map of audio clip ID → Rust overlay ID for real-time mixing.
@@ -68,6 +69,7 @@ class RustPlaybackBackend extends PlaybackBackend {
 
   Timer? _diagnosticsTimer;
   Timer? _presentationTimer;
+  bool _presentationInFlight = false;
 
   /// Diagnostics timer (500ms) — runs whenever the engine is open.
   /// Keeps position/state info fresh for the UI even when paused.
@@ -118,8 +120,10 @@ class RustPlaybackBackend extends PlaybackBackend {
   }
 
   Future<bool> _presentationTick() async {
+    if (_presentationInFlight) return false;
     final drive = _drive;
     if (drive == null || _disposed) return false;
+    _presentationInFlight = true;
     try {
       final result = await drive.presentationTick();
       // When paused and a frame was just presented (e.g. after a seek),
@@ -128,8 +132,11 @@ class RustPlaybackBackend extends PlaybackBackend {
         _stopPresentationTimer();
       }
       return result.hasFrame;
-    } catch (_) {}
-    return false;
+    } catch (_) {
+      return false;
+    } finally {
+      _presentationInFlight = false;
+    }
   }
 
   // ── PlaybackBackend ──
@@ -219,7 +226,7 @@ class RustPlaybackBackend extends PlaybackBackend {
       } catch (_) {}
     }
     try {
-      presenter?.dispose();
+      await presenter?.disposeAsync();
     } catch (_) {}
     if (!_disposed) {
       notifyListeners();
@@ -282,9 +289,12 @@ class RustPlaybackBackend extends PlaybackBackend {
     if (engine == null) return;
     final start = startMs ?? 0;
     final end = endMs ?? _trimEndMs;
+    if (start == _trimStartMs && end == _trimEndMs) return;
+    _trimStartMs = start;
     _trimEndMs = end;
     engine.setTrimRange(startMs: BigInt.from(start), endMs: BigInt.from(end));
-    notifyListeners();
+    // Intentionally no notifyListeners — trim is engine state, not UI state.
+    // Notifying here caused reentrant _onBackendUpdated → seek storms.
   }
 
   @override
@@ -307,6 +317,18 @@ class RustPlaybackBackend extends PlaybackBackend {
       await engine.setRate(rate: rate);
     } catch (e) {
       debugPrint('[RustPlayback] setPlaybackRate failed: $e');
+    }
+  }
+
+  @override
+  Future<void> setLooping(bool looping) async {
+    final engine = _engine;
+    if (engine == null) return;
+    try {
+      await engine.setLooping(enabled: looping);
+      debugPrint('[RustBackend] setLooping looping=$looping');
+    } catch (e) {
+      debugPrint('[RustBackend] setLooping failed: $e');
     }
   }
 
@@ -483,6 +505,7 @@ class RustPlaybackBackend extends PlaybackBackend {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
     _stopAllTimers();
     final engine = _engine;
@@ -493,7 +516,7 @@ class RustPlaybackBackend extends PlaybackBackend {
     if (engine != null) {
       engine.stop();
     }
-    presenter?.dispose();
+    unawaited(presenter?.disposeAsync());
     super.dispose();
   }
 }

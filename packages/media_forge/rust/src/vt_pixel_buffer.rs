@@ -520,6 +520,13 @@ unsafe fn create_iosurface_bgra_buffer(width: u32, height: u32) -> Result<CVPixe
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
+pub unsafe fn retain_pixel_buffer(pb: CVPixelBufferRef) {
+    if !pb.is_null() {
+        CVPixelBufferRetain(pb);
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub unsafe fn release_pixel_buffer(pb: CVPixelBufferRef) {
     if !pb.is_null() {
         CFRelease(pb);

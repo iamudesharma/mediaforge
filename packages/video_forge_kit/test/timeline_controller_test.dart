@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:video_forge_kit/src/models/clip_effects.dart';
 import 'package:video_forge_kit/src/timeline/timeline_controller.dart';
+import 'package:video_forge/video_forge.dart';
 
 void main() {
   group('TimelineController', () {
@@ -56,6 +58,33 @@ void main() {
       final audio = controller.audioClips.single;
       expect(audio.durationMs, 60_000);
       expect(audio.timelineStartMs + audio.durationMs, lessThanOrEqualTo(60_000));
+    });
+
+    test('updateVideoClip stores per-clip effects independently', () {
+      controller.splitVideoAt(30_000);
+      final left = controller.videoClips[0];
+      final right = controller.videoClips[1];
+      final zoomed = ClipEffectsKit.copyWithBase(
+        ClipEffectsKit.identity(),
+        scale: 2.0,
+      );
+      controller.updateVideoClip(left.copyWith(effects: zoomed));
+      expect(ClipEffectsKit.forClip(controller.videoClips[0]).base.scale, 2.0);
+      expect(ClipEffectsKit.forClip(controller.videoClips[1]).base.scale, 1.0);
+      expect(right.id, isNot(left.id));
+    });
+
+    test('updateVideoClipEffects does not relayout timeline offsets', () {
+      controller.splitVideoAt(30_000);
+      final before = controller.videoClips.map((c) => c.timelineStartMs).toList();
+      final fx = ClipEffectsKit.copyWithBase(
+        ClipEffectsKit.identity(),
+        scale: 1.5,
+      );
+      controller.updateVideoClipEffects(controller.videoClips[0].id, fx);
+      final after = controller.videoClips.map((c) => c.timelineStartMs).toList();
+      expect(after, before);
+      expect(ClipEffectsKit.forClip(controller.videoClips[0]).base.scale, 1.5);
     });
 
     test('updateAudioClip enforces timeline_start + duration <= video', () {

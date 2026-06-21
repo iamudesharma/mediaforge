@@ -11,6 +11,8 @@ import 'package:video_forge_editor/src/layout/desktop_timeline_layout.dart';
 import 'package:video_forge_editor/src/layout/mobile_stories_layout.dart';
 import 'package:video_forge_editor/src/models/recent_audio_track.dart';
 import 'package:video_forge_editor/src/models/video_export_result.dart';
+import 'package:video_forge_editor/src/panels/clip_effects_panel.dart';
+import 'package:video_forge_editor/src/panels/clip_motion_panel.dart';
 import 'package:video_forge_editor/src/panels/inline_text_editor.dart';
 import 'package:video_forge_editor/src/panels/lumina_sticker_panel.dart';
 import 'package:video_forge_editor/src/panels/music_picker_sheet.dart';
@@ -20,6 +22,7 @@ import 'package:video_forge_editor/src/panels/text_overlay_sheet.dart';
 import 'package:video_forge_editor/src/playback/playback_backend.dart';
 import 'package:video_forge_editor/src/playback/rust_playback_backend.dart';
 import 'package:video_forge_editor/src/services/audio_picker.dart';
+import 'package:video_forge_editor/src/services/clip_effects_session.dart';
 import 'package:video_forge_editor/src/services/editor_output_paths.dart';
 import 'package:video_forge_editor/src/services/media_ingest.dart';
 import 'package:video_forge_editor/src/theme/lumina_tokens.dart';
@@ -28,6 +31,7 @@ import 'package:video_forge_editor/src/widgets/editor_bottom_nav.dart';
 import 'package:video_forge_editor/src/widgets/filmstrip_trimmer.dart';
 import 'package:video_forge_editor/src/widgets/modern_timeline.dart';
 import 'package:video_forge_editor/src/widgets/overlay_timing_tracks_bar.dart';
+import 'package:video_forge_editor/src/widgets/clip_transform_gesture_layer.dart';
 import 'package:video_forge_editor/src/widgets/rust_video_canvas.dart';
 import 'video_editor_session.dart';
 import 'video_forge_editor_config.dart';
@@ -57,6 +61,12 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   bool _showDiagnostics = false;
   PlaybackBackend? _backend;
   double _playbackRate = 1.0;
+  bool _isLooping = false;
+  /// Last video clip id whose speed was pushed to the playback engine.
+  String? _activeSpeedClipId;
+  double? _activeEffectiveSpeed;
+  /// Session/bootstrap effects applied to the first clip on load (then cleared).
+  ClipEffects? _pendingSessionClipEffects;
 
   List<String> _filmstripPaths = [];
   late final TimelineController _timeline;
@@ -87,6 +97,14 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   VideoEditorSession? _session;
   final Map<String, int> _textReplayTokens = {};
   EditorNavTool _activeNavTool = EditorNavTool.media;
+  /// Bumped on each video load so preview [Texture] widgets are not reused.
+  int _previewSessionId = 0;
+  late final ClipEffectsSession _clipEffectsSession;
+  String? _lastAudioSyncSignature;
+  String? _lastSelectedVideoClipId;
+  String? _activeTrimClipId;
+  int _seekGeneration = 0;
+  bool _clipTransitionInFlight = false;
 
   VideoOverlayItem? get _selectedTextOverlay {
     final overlay = _selectedOverlay();
@@ -104,9 +122,17 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       _exportPreset = _session!.exportPreset;
       _preferHw = _session!.preferHw;
       _playbackRate = _session!.playbackRate;
+      final sessionFx = _session!.clipEffects;
+      if (!ClipEffectsKit.isIdentity(sessionFx)) {
+        _pendingSessionClipEffects = sessionFx;
+      }
       _session!.backend = _backend;
     }
     _showDiagnostics = widget.config.showDiagnostics;
+    _clipEffectsSession = ClipEffectsSession(
+      timeline: _timeline,
+      onCommitted: _syncSession,
+    );
     _timeline.addListener(_onTimelineUpdated);
     final path = widget.config.initialVideoPath;
     if (path != null && path.isNotEmpty) {
@@ -117,13 +143,16 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   @override
   void dispose() {
     _progressSub?.cancel();
+    _clipEffectsSession.dispose();
     _timeline.removeListener(_onTimelineUpdated);
     if (_session == null) {
       _timeline.dispose();
     }
     _playheadNotifier.dispose();
+    unawaited(_tearDownBackend());
     if (_session == null) {
       _backend?.dispose();
+      _backend = null;
     }
     super.dispose();
   }
@@ -135,29 +164,242 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     session.exportPreset = _exportPreset;
     session.preferHw = _preferHw;
     session.playbackRate = _playbackRate;
+    session.loopOnFinish = _isLooping;
     session.backend = _backend;
     session.startSec = _startSec;
     session.endSec = _endSec;
     session.playheadSec = _playheadSec;
+    session.clipEffects = ClipEffectsKit.forClip(_effectsTargetClip);
+  }
+
+  /// Selected video clip, or the clip under the playhead when nothing is selected.
+  VideoTimelineClip? get _effectsTargetClip {
+    final selectedId = _timeline.selectedVideoClipId;
+    if (selectedId != null) {
+      return _timeline.clipById(selectedId);
+    }
+    return _timeline.clipAtTimelineMs(_playheadTimelineMs);
+  }
+
+  /// Clip currently shown in the preview (playhead position).
+  VideoTimelineClip? get _previewClip =>
+      _timeline.clipAtTimelineMs(_playheadTimelineMs);
+
+  void _ensureEffectsClipSelected() {
+    if (_timeline.selectedVideoClipId != null) return;
+    final clip = _timeline.clipAtTimelineMs(_playheadTimelineMs);
+    if (clip != null) {
+      _timeline.selectVideoClip(clip.id);
+    }
+  }
+
+  Future<void> _applyClipSpeed(double rate) async {
+    final clamped = rate.clamp(0.25, 4.0);
+    if ((_playbackRate - clamped).abs() < 0.001) return;
+    _playbackRate = clamped;
+    await _backend?.setPlaybackRate(clamped);
+  }
+
+  void _syncPlaybackSpeedToActiveClip({bool force = false}) {
+    final clip = _previewClip;
+    if (clip == null) return;
+    final localMs =
+        ClipEffectsKit.localTimelineMs(clip, (_playheadSec * 1000).round());
+    final speed =
+        ClipEffectsKit.effectiveSpeedAt(ClipEffectsKit.forClip(clip), localMs);
+    if (!force &&
+        clip.id == _activeSpeedClipId &&
+        _activeEffectiveSpeed != null &&
+        (speed - _activeEffectiveSpeed!).abs() < 0.001) {
+      return;
+    }
+    _activeSpeedClipId = clip.id;
+    _activeEffectiveSpeed = speed;
+    unawaited(_applyClipSpeed(speed));
+  }
+
+  void _applyClipEffectsCommit(ClipEffects effects, {required String clipId}) {
+    _clipEffectsSession.commitNow(clipId, effects);
+    if (_previewClip?.id == clipId) {
+      _activeSpeedClipId = null;
+      final clip = _previewClip!;
+      final localMs =
+          ClipEffectsKit.localTimelineMs(clip, (_playheadSec * 1000).round());
+      unawaited(
+        _applyClipSpeed(
+          ClipEffectsKit.effectiveSpeedAt(effects, localMs),
+        ),
+      );
+    }
+    _syncSession();
+  }
+
+  void _previewClipEffects(ClipEffects effects, {required String clipId}) {
+    _clipEffectsSession.previewEffects(clipId, effects);
+    if (_previewClip?.id == clipId) {
+      _activeSpeedClipId = null;
+      final clip = _previewClip!;
+      final localMs =
+          ClipEffectsKit.localTimelineMs(clip, (_playheadSec * 1000).round());
+      unawaited(
+        _applyClipSpeed(
+          ClipEffectsKit.effectiveSpeedAt(effects, localMs),
+        ),
+      );
+    }
+  }
+
+  void _resetClipEffects(String clipId) {
+    _applyClipEffectsCommit(ClipEffectsKit.identity(), clipId: clipId);
+  }
+
+  Future<void> _seekToClipStart(VideoTimelineClip clip) async {
+    final backend = _backend;
+    if (backend?.isPlaying ?? false) {
+      backend!.pause();
+    }
+    _activeTrimClipId = null;
+    final sec = clip.timelineStartMs / 1000.0;
+    _playheadSec = sec;
+    _playheadNotifier.value = sec;
+    await _applySeekFromTimelineMs(clip.timelineStartMs);
+    debugPrint(
+      '[ClipSelect] seek clip=${clip.id} timeline=${clip.timelineStartMs}ms',
+    );
+  }
+
+  void _onVideoClipSelectionChanged(String? clipId) {
+    if (clipId == _lastSelectedVideoClipId) return;
+    _lastSelectedVideoClipId = clipId;
+    if (clipId == null) return;
+    final clip = _timeline.clipById(clipId);
+    if (clip == null) return;
+    _clipEffectsSession.clearPreview(clipId: clipId);
+    unawaited(_seekToClipStart(clip));
+  }
+
+  bool get _hasSelectedVideoClip => _timeline.selectedVideoClipId != null;
+
+  VideoTimelineClip? get _selectedVideoClip {
+    final id = _timeline.selectedVideoClipId;
+    if (id == null) return null;
+    return _timeline.clipById(id);
+  }
+
+  /// When a clip is selected, keep playhead inside it before starting playback.
+  Future<void> _ensurePlayheadInSelectedClip() async {
+    final clip = _selectedVideoClip;
+    if (clip == null) return;
+    final ph = _playheadTimelineMs;
+    if (ph < clip.timelineStartMs || ph >= clip.timelineEndMs) {
+      await _seekToClipStart(clip);
+    }
+  }
+
+  String _audioClipsSignature() {
+    return _timeline.audioClips
+        .map(
+          (c) =>
+              '${c.id}:${c.sourcePath}:${c.timelineStartMs}:${c.durationMs}:'
+              '${c.sourceStartMs}:${c.volume}:${c.muted}',
+        )
+        .join('|');
+  }
+
+  ClipEffects? get _exportClipEffects {
+    if (_timeline.videoClips.length == 1) {
+      final effects = ClipEffectsKit.forClip(_timeline.videoClips.first);
+      return ClipEffectsKit.isIdentity(effects) ? null : effects;
+    }
+    return null;
+  }
+
+  Widget _buildClipEffectsEditor(VideoTimelineClip clip) {
+    return ValueListenableBuilder<ClipEffectsPreview?>(
+      valueListenable: _clipEffectsSession.preview,
+      builder: (context, live, _) {
+        final effects = _clipEffectsSession.effectsForClip(clip);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Transform & speed · ${_formatDuration(clip.durationMs)}',
+              style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ClipEffectsPanel(
+              key: ValueKey(clip.id),
+              effects: effects,
+              clipDurationMs: clip.durationMs,
+              onPreview: (fx) => _previewClipEffects(fx, clipId: clip.id),
+              onCommit: (fx) => _applyClipEffectsCommit(fx, clipId: clip.id),
+              onReset: () => _resetClipEffects(clip.id),
+            ),
+            const SizedBox(height: LuminaTokens.space3),
+            ClipMotionPanel(
+              durationMs: clip.durationMs,
+              currentEffects: effects,
+              onPresetSelected: (fx) =>
+                  _applyClipEffectsCommit(fx, clipId: clip.id),
+            ),
+            const SizedBox(height: LuminaTokens.space2),
+            OutlinedButton.icon(
+              onPressed: _splitAtPlayhead,
+              icon: const Icon(Icons.content_cut, size: 18),
+              label: const Text('Split at playhead & edit next segment'),
+            ),
+            const SizedBox(height: LuminaTokens.space2),
+            const Text(
+              'Pinch the preview to zoom, rotate, and pan the selected clip.',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSelectClipForEffectsHint() {
+    return const Padding(
+      padding: EdgeInsets.all(LuminaTokens.space4),
+      child: Text(
+        'Select a video clip on the timeline, or move the playhead inside a clip, '
+        'to edit zoom, rotation, and speed for that segment only.',
+        style: TextStyle(color: Colors.white54, fontSize: 13),
+        textAlign: TextAlign.center,
+      ),
+    );
   }
 
   void _onTimelineUpdated() {
-    if (mounted) setState(() {});
-    // Sync overlay audio tracks with the Rust engine.
+    _onVideoClipSelectionChanged(_timeline.selectedVideoClipId);
+
     final backend = _backend;
     if (backend is RustPlaybackBackend) {
-      final clips = _timeline.audioClips
-          .map((c) => AudioClipInfo(
-                id: c.id,
-                sourcePath: c.sourcePath,
-                volume: c.volume,
-                timelineStartMs: c.timelineStartMs,
-                durationMs: c.durationMs,
-                sourceStartMs: c.sourceStartMs,
-                muted: c.muted,
-              ))
-          .toList();
-      backend.syncOverlayTracks(clips);
+      final audioSig = _audioClipsSignature();
+      if (audioSig != _lastAudioSyncSignature) {
+        _lastAudioSyncSignature = audioSig;
+        final clips = _timeline.audioClips
+            .map((c) => AudioClipInfo(
+                  id: c.id,
+                  sourcePath: c.sourcePath,
+                  volume: c.volume,
+                  timelineStartMs: c.timelineStartMs,
+                  durationMs: c.durationMs,
+                  sourceStartMs: c.sourceStartMs,
+                  muted: c.muted,
+                ))
+            .toList();
+        backend.syncOverlayTracks(clips);
+      }
+    }
+
+    if (mounted && !_clipEffectsSession.isLiveEditing) {
+      setState(() {});
     }
 
     // Check for new selections on narrow layout to open bottom sheet
@@ -258,6 +500,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     _playheadSec = clampedSec;
     _playheadNotifier.value = clampedSec;
 
+    _syncPlaybackSpeedToActiveClip();
+
     if (backend.isPlaying) {
       unawaited(_advancePastClipEndIfNeeded(sourceMs));
     }
@@ -290,9 +534,23 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   Future<void> _tearDownBackend() async {
     final backend = _backend;
     if (backend == null) return;
+    _backend = null;
+    if (_session != null) {
+      _session!.backend = null;
+    }
     backend.removeListener(_onBackendUpdated);
     backend.pause();
+    final handle = backend is RustPlaybackBackend ? backend.textureHandle : null;
+    debugPrint('[VideoEditor] tearing down backend handle=$handle');
     await backend.close();
+  }
+
+  Future<void> _cancelAndClose() async {
+    widget.config.onCancel?.call();
+    await _tearDownBackend();
+    if (mounted) {
+      Navigator.pop(context);
+    }
   }
 
   Future<void> _loadVideo(String path) async {
@@ -303,20 +561,33 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
 
     try {
       await _tearDownBackend();
+      _previewSessionId++;
       // Use a unique handle so GPU texture registration works.
       final handle = DateTime.now().millisecondsSinceEpoch & 0x7FFFFFFF;
-      final backend = RustPlaybackBackend(textureHandle: handle, previewMaxEdge: 1080);
+      final backend = RustPlaybackBackend(
+        textureHandle: handle,
+        previewMaxEdge: widget.config.previewMaxEdge,
+      );
       _backend = backend;
       backend.addListener(_onBackendUpdated);
       await backend.open(path);
-      await backend.setPlaybackRate(_playbackRate);
       await backend.setEmbeddedAudioMuted(_muteOriginalAudio);
       _syncSession();
 
-      // Start the engine so the first frame is presented, then pause so the
-      // timeline stays in its "loaded but not playing" state.
+      // Start the engine so the first frame is presented. Stay playing if
+      // autoPlay is enabled, otherwise pause so the timeline opens in a
+      // "loaded but not playing" state.
+      _isLooping = widget.config.loopOnFinish;
+      debugPrint(
+        '[VideoEditor] autoPlay=${widget.config.autoPlay} loopOnFinish=${widget.config.loopOnFinish}',
+      );
       await backend.play();
-      backend.pause();
+      if (widget.config.loopOnFinish) {
+        await backend.setLooping(true);
+      }
+      if (!widget.config.autoPlay) {
+        backend.pause();
+      }
 
       final info = backend.mediaInfo ?? await VideoProcessor.getMediaInfo(path);
       final dur = info.durationMs.toInt() / 1000.0;
@@ -325,6 +596,14 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         sourcePath: path,
         durationMs: durationMs > 0 ? durationMs : 1000,
       );
+
+      final pending = _pendingSessionClipEffects;
+      if (pending != null && _timeline.videoClips.isNotEmpty) {
+        _timeline.updateVideoClip(
+          _timeline.videoClips.first.copyWith(effects: pending),
+        );
+        _pendingSessionClipEffects = null;
+      }
 
       setState(() {
         _startSec = 0;
@@ -335,6 +614,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       });
 
       _updatePlaybackMetrics(backend);
+      _activeTrimClipId = null;
       backend.setTrimRange(
         startMs: (_startSec * 1000).round(),
         endMs: (_endSec * 1000).round(),
@@ -435,17 +715,26 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     final target = _timeline.seekTargetAt(timelineMs);
     if (target == null) return;
 
+    final gen = ++_seekGeneration;
+
     final clip = _timeline.clipById(target.clipId);
-    if (clip != null) {
+    if (clip != null && clip.id != _activeTrimClipId) {
+      _activeTrimClipId = clip.id;
       backend.setTrimRange(
         startMs: clip.sourceStartMs,
         endMs: clip.sourceEndMs,
       );
     }
+
     await backend.seekTo(Duration(milliseconds: target.sourceMs));
+    if (gen != _seekGeneration || !mounted) return;
+
+    _activeSpeedClipId = null;
+    _syncPlaybackSpeedToActiveClip(force: true);
   }
 
   Future<void> _advancePastClipEndIfNeeded(int sourcePtsMs) async {
+    if (_clipTransitionInFlight) return;
     final backend = _backend;
     if (backend == null || !backend.isPlaying) return;
 
@@ -453,21 +742,44 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
     if (clip == null) return;
     if (sourcePtsMs < clip.sourceEndMs - 80) return;
 
-    final index = _timeline.videoClips.indexWhere((c) => c.id == clip.id);
-    if (index < 0 || index >= _timeline.videoClips.length - 1) {
-      // Loop back to start of timeline
-      setState(() => _playheadSec = 0.0);
-      await _applySeekFromTimelineMs(0);
+    _clipTransitionInFlight = true;
+    try {
+      final selected = _selectedVideoClip;
+      if (selected != null && clip.id == selected.id) {
+        if (_isLooping) {
+          await _seekToClipStart(selected);
+          if (backend.isOpen && !backend.isPlaying) {
+            await backend.play();
+          }
+          return;
+        }
+        backend.pause();
+        if (mounted) {
+          setState(() => _statusLine = 'Paused at end of selected clip');
+        }
+        return;
+      }
+
+      final index = _timeline.videoClips.indexWhere((c) => c.id == clip.id);
+      if (index < 0 || index >= _timeline.videoClips.length - 1) {
+        if (_isLooping) {
+          return;
+        }
+        backend.pause();
+        if (mounted) {
+          setState(() => _statusLine = 'Paused at end of clip');
+        }
+        return;
+      }
+      final next = _timeline.videoClips[index + 1];
+      setState(() => _playheadSec = next.timelineStartMs / 1000.0);
+      _playheadNotifier.value = next.timelineStartMs / 1000.0;
+      await _applySeekFromTimelineMs(next.timelineStartMs);
       if (backend.isOpen && !backend.isPlaying) {
         await backend.play();
       }
-      return;
-    }
-    final next = _timeline.videoClips[index + 1];
-    setState(() => _playheadSec = next.timelineStartMs / 1000.0);
-    await _applySeekFromTimelineMs(next.timelineStartMs);
-    if (backend.isOpen && !backend.isPlaying) {
-      await backend.play();
+    } finally {
+      _clipTransitionInFlight = false;
     }
   }
 
@@ -718,8 +1030,9 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         break;
       case EditorNavTool.music:
         _showMusicPicker();
-      case EditorNavTool.more:
-        _showMoreSheet();
+      case EditorNavTool.effects:
+        _ensureEffectsClipSelected();
+        break;
     }
   }
 
@@ -850,6 +1163,10 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
 
   void _splitAtPlayhead() {
     final ok = _timeline.splitVideoAt(_playheadTimelineMs);
+    _activeSpeedClipId = null;
+    if (ok) {
+      _syncPlaybackSpeedToActiveClip(force: true);
+    }
     setState(() {
       _statusLine = ok
           ? 'Split clip at ${_formatDuration(_playheadTimelineMs)}'
@@ -897,15 +1214,8 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   }
 
   void _schedulePreviewSync(double timelineSeconds) {
-    // Rust backend mixes overlay audio in real time — no preview mux needed.
+    if (_backend?.isPlaying ?? false) return;
     unawaited(_applySeekFromTimelineMs((timelineSeconds * 1000).round()));
-  }
-
-  Future<void> _updatePlaybackRate(double rate) async {
-    setState(() {
-      _playbackRate = rate;
-    });
-    await _backend?.setPlaybackRate(rate);
   }
 
   Future<void> _togglePlayback() async {
@@ -920,10 +1230,10 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
 
     setState(() => _busy = true);
     try {
-      // Overlay audio tracks are managed via syncOverlayTracks() in
-      // _onTimelineUpdated(). No preview mux is needed — real-time mixing
-      // happens in the cpal callback.
       await _reopenSourceFileIfNeeded();
+      if (_hasSelectedVideoClip) {
+        await _ensurePlayheadInSelectedClip();
+      }
       await _applySeekFromTimelineMs(_playheadTimelineMs);
       await backend.play();
       final tracks = _exportAudioTracks();
@@ -1160,15 +1470,18 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
           : 'Baking overlays for export…';
     });
 
+    final segmentedExport =
+        TimelineExportService.needsSegmentedExport(_timeline.videoClips);
+    final exportInfo = _activeMediaInfo ??
+        await VideoProcessor.getMediaInfo(widget.initialPath);
+
     List<BurnInOverlay> burnInOverlays = const [];
     try {
-      if (_timeline.overlays.isNotEmpty) {
-        final info = _activeMediaInfo ??
-            await VideoProcessor.getMediaInfo(widget.initialPath);
+      if (!segmentedExport && _timeline.overlays.isNotEmpty) {
         burnInOverlays = await OverlayRasterExporter.rasterizeForExport(
           overlays: _timeline.overlays,
-          sourceWidth: info.width,
-          sourceHeight: info.height,
+          sourceWidth: exportInfo.width,
+          sourceHeight: exportInfo.height,
           preset: _exportPreset,
         );
       }
@@ -1229,21 +1542,48 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
             }
 
             if (activeJob == null && !exportCancelled && exportStarted) {
-              // Initiate compressJob
               final sw = Stopwatch()..start();
-              VideoProcessor.compressJob(
-                input: widget.initialPath,
-                output: outPath,
-                quality: _exportPreset.quality,
-                // Burn-in uses CPU YUV420P compositing; software encode is required.
-                preferHardwareEncoder:
-                    burnInOverlays.isEmpty && _preferHw,
-                startMs: startMs,
-                endMs: endMs > startMs ? endMs : null,
-                burnInOverlays: burnInOverlays,
-                audioTracks: exportAudioTracks,
-                muteOriginalAudio: muteOriginalAudio,
-              ).then((job) {
+              final exportClipEffects = _exportClipEffects;
+              if (segmentedExport) {
+                debugPrint(
+                  '[VideoExport] segmented clips=${_timeline.videoClips.length}',
+                );
+              } else if (exportClipEffects != null) {
+                debugPrint(
+                  '[VideoExport] clip_effects speed=${exportClipEffects.speed} '
+                  'motion_tracks=${exportClipEffects.motion.tracks.length}',
+                );
+              }
+
+              final Future<VideoJob> jobFuture = segmentedExport
+                  ? TimelineExportService.compressTimeline(
+                      clips: _timeline.videoClips,
+                      outputPath: outPath,
+                      quality: _exportPreset.quality,
+                      preset: _exportPreset,
+                      preferHardwareEncoder: _preferHw,
+                      overlays: _timeline.overlays,
+                      sourceWidth: exportInfo.width,
+                      sourceHeight: exportInfo.height,
+                      audioTracks: exportAudioTracks,
+                      muteOriginalAudio: muteOriginalAudio,
+                    )
+                  : VideoProcessor.compressJob(
+                      input: widget.initialPath,
+                      output: outPath,
+                      quality: _exportPreset.quality,
+                      preferHardwareEncoder: burnInOverlays.isEmpty &&
+                          exportClipEffects == null &&
+                          _preferHw,
+                      startMs: startMs,
+                      endMs: endMs > startMs ? endMs : null,
+                      burnInOverlays: burnInOverlays,
+                      audioTracks: exportAudioTracks,
+                      muteOriginalAudio: muteOriginalAudio,
+                      clipEffects: exportClipEffects,
+                    );
+
+              jobFuture.then((job) {
                 activeJob = job;
                 _progressSub = job.progress.listen((event) {
                   setBottomSheetState(() {
@@ -1527,10 +1867,26 @@ ProcessingPhase.decoding => 'Decoding',
     switch (_activeNavTool) {
       case EditorNavTool.sticker:
         return LuminaStickerPanel(onEmojiSelected: _addEmojiFromPicker);
+      case EditorNavTool.effects:
+        final clip = _effectsTargetClip;
+        if (clip == null) {
+          return _buildSelectClipForEffectsHint();
+        }
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildClipEffectsEditor(clip),
+            ListTile(
+              leading: const Icon(Icons.analytics_outlined),
+              title: const Text('Diagnostics'),
+              onTap: () => setState(() => _showDiagnostics = !_showDiagnostics),
+            ),
+          ],
+        );
       case EditorNavTool.media:
       case EditorNavTool.text:
       case EditorNavTool.music:
-      case EditorNavTool.more:
         return null;
     }
   }
@@ -1577,8 +1933,7 @@ ProcessingPhase.decoding => 'Decoding',
           scrubberRow: _buildSpatiallyStableScrubberRow(theme),
           timelineSection: _buildTimelinePanel(theme, isLoaded),
           onClose: () {
-            widget.config.onCancel?.call();
-            Navigator.pop(context);
+            unawaited(_cancelAndClose());
           },
           onExport: _exportVideo,
           activeNavTool: _activeNavTool,
@@ -1598,7 +1953,7 @@ ProcessingPhase.decoding => 'Decoding',
                   setState(() {});
                 }
               : null,
-          onSpeed: () => _showMoreSheet(),
+          onSpeed: () => _onNavToolChanged(EditorNavTool.effects),
           canSplit: isLoaded && _timeline.videoClips.isNotEmpty,
           canDelete: _timeline.selectedVideoClipId != null ||
               _timeline.selectedOverlayId != null ||
@@ -1702,8 +2057,7 @@ ProcessingPhase.decoding => 'Decoding',
                   leading: IconButton(
                     icon: const Icon(Icons.arrow_back, color: LuminaTokens.onSurface, size: 20),
                     onPressed: () {
-                      widget.config.onCancel?.call();
-                      Navigator.pop(context);
+                      unawaited(_cancelAndClose());
                     },
                   ),
                   actions: [
@@ -1852,38 +2206,78 @@ ProcessingPhase.decoding => 'Decoding',
           ListenableBuilder(
             listenable: _timeline,
             builder: (context, _) {
-              return ValueListenableBuilder<double>(
-                valueListenable: _playheadNotifier,
-                builder: (context, playheadSec, _) {
-                  final rustBackend = _backend as RustPlaybackBackend?;
-                  if (rustBackend == null) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  }
-                  return RustVideoCanvas(
-                    key: ValueKey(widget.initialPath),
-                    backend: rustBackend,
-                    overlays: _timeline.overlays,
-                    timelinePlayheadMs: (playheadSec * 1000).round(),
-                    selectedOverlayId: _timeline.selectedOverlayId,
-                    onSelectOverlay: (id) {
-                      _timeline.selectOverlay(id);
-                      if (id != null) {
-                        _timeline.selectVideoClip(null);
-                        _timeline.selectAudioClip(null);
+              return ValueListenableBuilder<ClipEffectsPreview?>(
+                valueListenable: _clipEffectsSession.preview,
+                builder: (context, _, __) {
+                  return ValueListenableBuilder<double>(
+                    valueListenable: _playheadNotifier,
+                    builder: (context, playheadSec, _) {
+                      final rustBackend = _backend as RustPlaybackBackend?;
+                      if (rustBackend == null) {
+                        return const Center(
+                          child: CircularProgressIndicator(color: Colors.white),
+                        );
                       }
-                      setState(() {});
+                      final timelineMs = (playheadSec * 1000).round();
+                      final previewClip =
+                          _timeline.clipAtTimelineMs(timelineMs);
+                      final previewEffects = previewClip != null
+                          ? _clipEffectsSession.effectsForClip(previewClip)
+                          : null;
+                      final showEffects = previewEffects != null &&
+                          !ClipEffectsKit.isIdentity(previewEffects);
+                      final targetClip = _effectsTargetClip;
+                      final gestureEnabled = targetClip != null &&
+                          _selectedTextOverlay == null &&
+                          _timeline.selectedOverlayId == null;
+                      Widget canvas = RustVideoCanvas(
+                        key: ValueKey(_previewSessionId),
+                        backend: rustBackend,
+                        overlays: _timeline.overlays,
+                        timelinePlayheadMs: timelineMs,
+                        clipEffects: showEffects ? previewEffects : null,
+                        clipLocalMs: previewClip != null
+                            ? ClipEffectsKit.localTimelineMs(
+                                previewClip,
+                                timelineMs,
+                              )
+                            : 0,
+                        selectedOverlayId: _timeline.selectedOverlayId,
+                        onSelectOverlay: (id) {
+                          _timeline.selectOverlay(id);
+                          if (id != null) {
+                            _timeline.selectVideoClip(null);
+                            _timeline.selectAudioClip(null);
+                          }
+                          setState(() {});
+                        },
+                        onOverlayChanged: (item) {
+                          _timeline.updateOverlay(item);
+                          setState(() {});
+                        },
+                        onTapTextOverlay: _cycleTextStyleOnTap,
+                        onDoubleTapTextOverlay: _openTextEditorForOverlay,
+                        onDeleteOverlay: _deleteOverlay,
+                        showDeleteZone: _selectedTextOverlay != null,
+                        showDiagnostics: _showDiagnostics,
+                      );
+                      if (gestureEnabled) {
+                        final gestureEffects =
+                            _clipEffectsSession.effectsForClip(targetClip);
+                        canvas = ClipTransformGestureLayer(
+                          effects: gestureEffects,
+                          enabled: true,
+                          onPreview: (fx) =>
+                              _previewClipEffects(fx, clipId: targetClip.id),
+                          onCommit: (fx) => _applyClipEffectsCommit(
+                            fx,
+                            clipId: targetClip.id,
+                          ),
+                          child: canvas,
+                        );
+                      }
+                      return canvas;
                     },
-                    onOverlayChanged: (item) {
-                      _timeline.updateOverlay(item);
-                      setState(() {});
-                    },
-                    onTapTextOverlay: _cycleTextStyleOnTap,
-                    onDoubleTapTextOverlay: _openTextEditorForOverlay,
-                    onDeleteOverlay: _deleteOverlay,
-                    showDeleteZone: _selectedTextOverlay != null,
-                    showDiagnostics: _showDiagnostics,
                   );
                 },
               );
@@ -2016,6 +2410,31 @@ ProcessingPhase.decoding => 'Decoding',
                 ),
               );
             },
+          ),
+          const SizedBox(width: 8),
+          // Loop toggle
+          InkWell(
+            onTap: () async {
+              setState(() => _isLooping = !_isLooping);
+              await _backend?.setLooping(_isLooping);
+              debugPrint('[EditorChrome] loop toggled=$_isLooping');
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: _isLooping
+                    ? LuminaTokens.accent.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.repeat,
+                color: _isLooping ? LuminaTokens.accent : Colors.white38,
+                size: 18,
+              ),
+            ),
           ),
           const SizedBox(width: 12),
           // Playhead timestamp
@@ -2769,6 +3188,19 @@ ProcessingPhase.decoding => 'Decoding',
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        Card(
+          color: const Color(0xFF18181A),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Colors.white10),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: _buildClipEffectsEditor(clip),
+          ),
+        ),
       ],
     );
   }
@@ -2812,7 +3244,14 @@ ProcessingPhase.decoding => 'Decoding',
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text('Project Settings', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                const Text(
+                  'Select a video clip on the timeline to edit zoom, rotation, and speed '
+                  'for that segment only.',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
                 const SizedBox(height: 12),
+                const Divider(color: Colors.white10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -2833,30 +3272,6 @@ ProcessingPhase.decoding => 'Decoding',
                         return DropdownMenuItem<CompressionPreset>(
                           value: preset,
                           child: Text(preset.label),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ),
-                const Divider(color: Colors.white10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Playback Speed', style: TextStyle(color: Colors.white54, fontSize: 12)),
-                    DropdownButton<double>(
-                      dropdownColor: const Color(0xFF1E1E1F),
-                      value: _playbackRate,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                      underline: const SizedBox(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          _updatePlaybackRate(v);
-                        }
-                      },
-                      items: [0.5, 1.0, 1.5, 2.0].map((rate) {
-                        return DropdownMenuItem<double>(
-                          value: rate,
-                          child: Text('${rate}x'),
                         );
                       }).toList(),
                     ),

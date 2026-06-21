@@ -19,11 +19,37 @@ private enum UploadLayout: String {
 }
 
 private final class RustGpuPixelTexture: NSObject, FlutterTexture {
-  var pixelBuffer: CVPixelBuffer?
+  private let lock = NSLock()
+  private var pixelBuffer: CVPixelBuffer?
+  private var isInvalidated = false
 
   func copyPixelBuffer() -> Unmanaged<CVPixelBuffer>? {
-    guard let pixelBuffer else { return nil }
-    return Unmanaged.passRetained(pixelBuffer)
+    lock.lock()
+    defer { lock.unlock() }
+    if isInvalidated { return nil }
+    guard let pb = pixelBuffer else { return nil }
+    return Unmanaged.passRetained(pb)
+  }
+
+  func setPixelBuffer(_ pb: CVPixelBuffer?) {
+    lock.lock()
+    defer { lock.unlock() }
+    if isInvalidated { return }
+    pixelBuffer = pb
+  }
+
+  func currentPixelBuffer() -> CVPixelBuffer? {
+    lock.lock()
+    defer { lock.unlock() }
+    if isInvalidated { return nil }
+    return pixelBuffer
+  }
+
+  func invalidate() {
+    lock.lock()
+    defer { lock.unlock() }
+    isInvalidated = true
+    pixelBuffer = nil
   }
 }
 
@@ -75,7 +101,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       let tex = RustGpuPixelTexture()
       let pb = dequeueFromPool(width: width, height: height)
         ?? Self.createPixelBufferDirect(width: width, height: height)
-      tex.pixelBuffer = pb
+      tex.setPixelBuffer(pb)
       let texId = registry.register(tex)
       textures[handle] = tex
       textureIds[handle] = texId
@@ -88,7 +114,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
             let handle = Self.handleFromArgs(args["handle"]),
             let data = args["pixels"] as? FlutterStandardTypedData,
             let tex = textures[handle],
-            let pb = tex.pixelBuffer,
+            let pb = tex.currentPixelBuffer(),
             let registry = textureRegistry,
             let texId = textureIds[handle]
       else {
@@ -185,7 +211,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
         // Zero-copy adoption: the Flutter display texture's pixel buffer
         // is now backed by the caller's BGRA/IOSurface/Metal-compatible
         // buffer. The next frame is the caller's bytes verbatim.
-        tex.pixelBuffer = srcPb
+        tex.setPixelBuffer(srcPb)
         registry.textureFrameAvailable(texId)
         NSLog("[PixelSurface] present adopted handle=%lld %dx%d", handle, width, height)
         result(nil)
@@ -199,7 +225,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       }
       // The pool handed us a +1; release our local handle when the
       // reference goes out of scope, and assign to the Flutter texture.
-      tex.pixelBuffer = dstPb
+      tex.setPixelBuffer(dstPb)
       if !Self.copyPixelBufferContents(from: srcPb, to: dstPb) {
         result(FlutterError(code: "blit_failed", message: "CVPixelBuffer copy failed", details: nil))
         return
@@ -225,7 +251,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "create_failed", message: "Metal CVPixelBuffer alloc failed", details: nil))
         return
       }
-      tex.pixelBuffer = newPb
+      tex.setPixelBuffer(newPb)
       // Drop every buffer that the new pool is not actively using; the
       // Flutter side does not keep a +1 on the old buffer once we
       // overwrite the pointer, so a non-reusable flush is safe.
@@ -246,8 +272,11 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
         result(nil)
         return
       }
-      textures.removeValue(forKey: handle)
+      if let tex = textures.removeValue(forKey: handle) {
+        tex.invalidate()
+      }
       registry.unregisterTexture(texId)
+      NSLog("[PixelSurface] dispose handle=%lld id=%lld", handle, texId)
       result(nil)
 
     case "getMetalTexturePtr":
@@ -258,7 +287,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       guard let args = call.arguments as? [String: Any],
             let handle = Self.handleFromArgs(args["handle"]),
             let tex = textures[handle],
-            let pb = tex.pixelBuffer
+            let pb = tex.currentPixelBuffer()
       else {
         result(FlutterError(code: "bad_args", message: "handle/pixelBuffer not found", details: nil))
         return
@@ -294,7 +323,7 @@ public class RustGpuTexturePlugin: NSObject, FlutterPlugin {
       guard let args = call.arguments as? [String: Any],
             let handle = Self.handleFromArgs(args["handle"]),
             let tex = textures[handle],
-            let _ = tex.pixelBuffer,
+            let _ = tex.currentPixelBuffer(),
             let registry = textureRegistry,
             let texId = textureIds[handle]
       else {

@@ -142,6 +142,11 @@ class MediaPlaybackPresenter {
     _lastGpuLogPtsMs = -1;
   }
 
+  Future<void> disposeAsync() async {
+    await _gpu.disposeAsync();
+    cpuImage.dispose();
+  }
+
   void dispose() {
     _gpu.dispose();
     cpuImage.dispose();

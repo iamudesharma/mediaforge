@@ -21,6 +21,7 @@ class CompressOptionsBuilder {
     this.burnInOverlays = const [],
     this.audioTracks = const [],
     this.muteOriginalAudio = false,
+    this.clipEffects,
   });
 
   final String inputPath;
@@ -41,6 +42,7 @@ class CompressOptionsBuilder {
   List<BurnInOverlay> burnInOverlays;
   List<AudioTrackInput> audioTracks;
   bool muteOriginalAudio;
+  ClipEffects? clipEffects;
 
   CompressOptions build() => CompressOptions(
         inputPath: inputPath,
@@ -61,5 +63,6 @@ class CompressOptionsBuilder {
         burnInOverlays: burnInOverlays,
         audioTracks: audioTracks,
         muteOriginalAudio: muteOriginalAudio,
+        clipEffects: clipEffects,
       );
 }

@@ -80,6 +80,11 @@ class _VideoForgeEditorWidgetState extends State<VideoForgeEditorWidget> {
     }
 
     final theme = widget.config.theme ?? AppTheme.dark();
+    debugPrint(
+      '[VideoEditor] config forwarded autoPlay=${widget.config.autoPlay} '
+      'loopOnFinish=${widget.config.loopOnFinish} '
+      'previewMaxEdge=${widget.config.previewMaxEdge}',
+    );
     final config = VideoForgeEditorConfig(
       title: widget.config.title,
       theme: theme,
@@ -87,6 +92,8 @@ class _VideoForgeEditorWidgetState extends State<VideoForgeEditorWidget> {
       session: _session,
       showDiagnostics: widget.config.showDiagnostics,
       previewMaxEdge: widget.config.previewMaxEdge,
+      autoPlay: widget.config.autoPlay,
+      loopOnFinish: widget.config.loopOnFinish,
       onExport: widget.config.onExport,
       onCancel: widget.config.onCancel,
       cacheSegment: widget.config.cacheSegment,

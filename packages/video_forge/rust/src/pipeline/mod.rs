@@ -1,4 +1,5 @@
 pub mod audio_mix;
+pub mod clip_transform;
 pub mod compress;
 pub mod metadata;
 pub mod overlay_burn;
@@ -11,6 +12,8 @@ pub mod preview;
 #[cfg(any(target_os = "ios", target_os = "macos"))]
 pub mod preview_hw;
 pub mod streaming;
+pub mod speed_ramp;
+pub mod concat;
 pub mod thumbnail;
 pub mod transcode;
 
@@ -24,3 +27,4 @@ pub use thumbnail::{
     extract_batch_thumbnail_bytes, extract_batch_thumbnails, extract_thumbnail,
     extract_thumbnail_bytes,
 };
+pub use concat::concat_video_files;

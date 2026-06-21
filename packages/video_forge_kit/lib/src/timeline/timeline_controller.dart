@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:video_forge/video_forge.dart';
 
 import '../compositor/video_overlay_item.dart';
 import 'timeline_models.dart';
@@ -185,6 +186,14 @@ class TimelineController extends ChangeNotifier {
     if (i < 0) return;
     _videoClips[i] = clip;
     normalizeVideoTimelineOffsets();
+    notifyListeners();
+  }
+
+  /// Update only clip effects — no timeline relayout (hot path for live preview commit).
+  void updateVideoClipEffects(String clipId, ClipEffects effects) {
+    final i = _videoClips.indexWhere((c) => c.id == clipId);
+    if (i < 0) return;
+    _videoClips[i] = _videoClips[i].copyWith(effects: effects);
     notifyListeners();
   }
 

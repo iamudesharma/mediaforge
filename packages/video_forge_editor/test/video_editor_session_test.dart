@@ -6,6 +6,12 @@ import 'package:video_forge_kit/video_forge_kit.dart';
 
 void main() {
   group('VideoEditorSession', () {
+    test('loopOnFinish defaults to false', () {
+      final session = VideoEditorSession();
+      expect(session.loopOnFinish, false);
+      session.dispose();
+    });
+
     test('exportTrimMs intersects filmstrip with timeline range', () {
       final session = VideoEditorSession();
       session.timeline.loadPrimaryVideo(
@@ -24,6 +30,23 @@ void main() {
       final (startMs, endMs) = session.exportTrimMs();
       expect(startMs, 2000);
       expect(endMs, 7000);
+      session.dispose();
+    });
+
+    test('exportClipEffects returns null for identity effects', () {
+      final session = VideoEditorSession();
+      expect(session.exportClipEffects(), isNull);
+      session.dispose();
+    });
+
+    test('exportClipEffects returns effects when speed changed', () {
+      final session = VideoEditorSession();
+      session.clipEffects = ClipEffectsKit.withSpeed(
+        ClipEffectsKit.identity(),
+        2.0,
+      );
+      expect(session.exportClipEffects(), isNotNull);
+      expect(session.exportClipEffects()!.speed, 2.0);
       session.dispose();
     });
 

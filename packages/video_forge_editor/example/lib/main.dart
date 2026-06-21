@@ -24,7 +24,7 @@ class VideoEditorExampleApp extends StatelessWidget {
 class ExampleHomePage extends StatelessWidget {
   const ExampleHomePage({super.key});
 
-  Future<void> _pickAndEdit(BuildContext context) async {
+  Future<void> _pickAndEdit(BuildContext context, {bool autoPlay = false}) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.video,
       allowCompression: false,
@@ -39,6 +39,7 @@ class ExampleHomePage extends StatelessWidget {
           config: VideoForgeEditorConfig(
             title: VideoInput.displayName(path),
             initialVideoPath: path,
+            autoPlay: autoPlay,
             onExport: (r) => Navigator.pop(context, r),
           ),
         ),
@@ -61,9 +62,15 @@ class ExampleHomePage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             FilledButton.icon(
-              onPressed: () => _pickAndEdit(context),
+              onPressed: () => _pickAndEdit(context, autoPlay: false),
               icon: const Icon(Icons.video_library_outlined),
               label: const Text('Pick video to edit'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _pickAndEdit(context, autoPlay: true),
+              icon: const Icon(Icons.play_circle_outline),
+              label: const Text('Pick video (auto-play)'),
             ),
             const SizedBox(height: 16),
             const Padding(

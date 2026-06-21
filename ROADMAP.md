@@ -2,9 +2,9 @@
 
 Performance and architecture plan for reaching native-editor responsiveness (GPU-resident editing, texture display, preview/export split).
 
-**Current sprint:** Sprint V1 (Video media runtime & texture preview)  
-**Status:** Sprint 22 + P0 **done** — beauty GPU texture path; image/video package split documented  
-**Next:** V0 pub.dev — [V0_ACCEPTANCE.md](docs/V0_ACCEPTANCE.md) · Sprint 21 (background swap / AI hooks)
+**Current sprint:** Sprint V2 (Edits-style clip effects & multi-clip export)  
+**Status:** Sprint V1 + Sprint 22 + P0 **done** — MediaRuntime texture preview; beauty GPU path; package split documented  
+**Next:** Sprint V2 implementation (clip transform / speed ramp / segmented export) · then Sprint V3 (multi-clip playback clock)
 
 ---
 
@@ -515,7 +515,37 @@ Example recipes (face-only, not global grade):
 
 ---
 
-## Sprint V1 — Video media runtime & texture preview (planned)
+## Instagram Edits alignment (reference)
+
+Mapping from Meta's dual-tier creator stack to **our** packages. Out of scope: social feed Hero Player, retention telemetry, generative Ideas tab, interactive link overlays, storyboard sticky notes.
+
+| Instagram capability | Our target | Package(s) | Sprint |
+|----------------------|------------|------------|--------|
+| In-app Reels composer (fast, single-track) | Trim + compress SDK, filmstrip scrub | `video_forge_kit` | V0/V1 ✓ |
+| Edits multi-clip timeline (split, arrange) | `TimelineController` + split/merge/delete | `video_forge_kit`, `video_forge_editor` | 20 ✓ |
+| Frame-accurate clip transform (zoom/pan/rotate) | `ClipEffects` + keyframed `TransformTracks` | `video_forge`, `video_forge_editor` | **V2** |
+| Variable speed / speed ramp | `SpeedSegment` + `SpeedController` export; preview rate | `video_forge`, `media_forge` | **V2** / V3 |
+| Gesture transform on preview canvas | `ClipTransformGestureLayer` + debounced session | `video_forge_editor` | **V2** |
+| Multi-clip master export (single upload) | Per-segment encode → stream-copy concat | `video_forge`, `video_forge_kit` | **V2** |
+| Audio master clock (sync under load) | `PlaybackClock` + cpal mixer; drop video if behind | `media_forge` | V1 ✓ / **V3** |
+| L-cut / J-cut (audio leads or lags video) | Independent audio `timelineStartMs` / `durationMs` | `video_forge_kit` | V3 |
+| Clip transitions (cross-dissolve, wipe) | Dual-decode overlap window at boundaries | `video_forge` | V4 |
+| Reels ingestion spec (H.264, 48 kHz AAC, 9:16) | `CompressionPreset.instagram` tuning + docs | `video_forge_kit` | V5 |
+| Avoid double-compression trap | One timeline bake → direct upload path | `video_forge_kit` | **V2** / V5 |
+| GPU color grade (curves, LUT) | Reuse `image_forge` LUT/adjust on export frame | `video_forge` (+ optional `image_forge`) | V6 |
+| Beat-sync cuts | Waveform beat markers + snap split to beat | `video_forge_kit`, `video_forge_editor` | V7 |
+| Frame-align capture overlay | Last-frame ghost on camera feed | `image_forge_camera` | Future |
+| Feed prefetch / player pool | Hot/warm/cold cache tiers for vertical feed | `video_forge_cache` | Future (host app) |
+
+**Architectural parallels we already match:**
+
+- **WebCodecs pattern:** decode → GPU texture → shader/composite → encode once — our `media_forge` VT path + `pixel_surface` texture bridge.
+- **Audio as master clock:** `media_forge` `PlaybackClock` + cpal callback (same role as `AudioContext` in browser editors).
+- **Preview vs export split:** Flutter overlay preview at edit resolution; Rust FFmpeg transcode at full res on export (same as Edits localized render vs upload ingest).
+
+---
+
+## Sprint V1 — Video media runtime & texture preview (done)
 
 **Goal:** Stream-centric preview with explicit **MediaRuntime** ownership, **decoder-clock** playback, **texture lifecycle**, and a **bounded frame queue** — using FFmpeg + `pixel_surface`, **not** a custom full video engine.
 
@@ -533,7 +563,7 @@ Example recipes (face-only, not global grade):
 | **V1.6** | Android zero-copy preview (MediaCodec → SurfaceTexture) | **Done** | `decodePreviewToSurface`; ≤ `previewMaxEdge`; RGBA fallback for 4K+ |
 | **V1.7** | Perf matrix I/J/K + leak checks on open/dispose | **Done** | `MediaRuntimeMetrics`, `MediaRuntimePerf`; example **Preview** tab |
 
-**Future (not V1):** Render graph (V2), HDR/color pipeline (V3), audio master clock + mixer (V2–V3) — see design doc §5–7.
+**Future (post-V1):** Clip effects export (Sprint V2), multi-clip playback (V3), transitions (V4), HDR/color (V6) — see [`docs/VIDEO_MEDIA_RUNTIME.md`](docs/VIDEO_MEDIA_RUNTIME.md) §5–7.
 
 **Acceptance (cumulative):**
 
@@ -545,7 +575,116 @@ Example recipes (face-only, not global grade):
 
 ---
 
-## Sprint 20 — Video Clips & Audio Timeline Editors
+## Sprint V2 — Edits-style clip effects & multi-clip export (current)
+
+**Goal:** Close the gap between Instagram **Edits** clip tooling and our editor: per-clip transform + keyframed motion + speed ramp on **preview and export**, multi-clip timeline bake as **one master file** (avoid double-compression), with debounced live editing like `image_forge_editor`.
+
+**Design principle (from Instagram ingest research):** Export one H.264/AAC master at Reels-friendly specs; do not re-encode in the host upload flow.
+
+**Depends on:** Sprint V1 (`media_forge` playback), Sprint 20 (`TimelineController`).
+
+**Implement one row below per PR** — same discipline as V1.
+
+| Phase | Deliverable | Status | Package(s) | Notes |
+|-------|-------------|--------|------------|-------|
+| **V2.1** | `ClipEffects` FRB types (`ClipTransformBase`, `TransformTracks`, `SpeedSegment`) | In progress | `video_forge` | `types.rs` + FRB codegen |
+| **V2.2** | Export: `ClipTransformProcessor` (CPU YUV↔RGBA) in transcode | In progress | `video_forge` | `pipeline/clip_transform.rs` |
+| **V2.3** | Export: `SpeedController` frame selection + output timeline | In progress | `video_forge` | `pipeline/speed_ramp.rs` |
+| **V2.4** | Multi-clip: per-segment encode → `concat_video_files` stream-copy | In progress | `video_forge`, `video_forge_kit` | `pipeline/concat.rs`, `TimelineExportService` |
+| **V2.5** | Preview: `ClipTransformPreview` + gesture layer on canvas | In progress | `video_forge_editor` | Flutter `Transform` mirror of Rust eval |
+| **V2.6** | Preview: `ClipEffectsSession` debounced commit + motion presets | In progress | `video_forge_editor` | Ken Burns / pan presets; split-at-playhead |
+| **V2.7** | Playback: per-clip `setPlaybackRate` from `effectiveSpeedAt` | In progress | `video_forge_editor`, `media_forge` | Speed changes at clip boundary / ramp segment |
+| **V2.8** | Editor export path → `TimelineExportService.compressTimeline` | Planned | `video_forge_editor`, `video_forge_kit` | Overlays per clip; Instagram preset default |
+| **V2.9** | Tests + perf matrix **L** / **M** | Planned | all touched | See perf matrix below |
+
+**Acceptance (cumulative):**
+
+- **L** — Single clip: pinch-zoom preview matches exported frame (±1 px at 1080p) for static transform.
+- **M** — Two-clip timeline with 2× speed on clip B: export duration correct; concat plays without A/V glitch.
+- Regression: Rust playback (`RustPlaybackBackend`), overlay audio mix, text/sticker burn-in unchanged.
+
+**Out of scope for V2:** Clip-boundary transitions (V4), L-cut/J-cut (V3), GPU transform on texture (Flutter overlay is sufficient), color curves (V6), beat snap (V7).
+
+---
+
+## Sprint V3 — Multi-clip timeline playback & editorial audio (planned)
+
+**Goal:** Instagram Edits **frame-accurate sequencing** in preview — not only export. One **master playback clock** drives video across clip boundaries; audio can lead/lag video (L-cut / J-cut).
+
+**Depends on:** Sprint V2 (clip model + speed semantics).
+
+| Phase | Deliverable | Package(s) | Instagram parallel |
+|-------|-------------|------------|-------------------|
+| **V3.1** | Timeline-native playhead: map global ms → active clip + source ms | `video_forge_kit`, `video_forge_editor` | Multi-layer stacked timeline scrub |
+| **V3.2** | Seamless clip boundary: reopen/seek demuxer or gapless segment index | `media_forge` | Straight cut between scenes |
+| **V3.3** | Audio-master sync: drop/skip video frames when decode lags clock | `media_forge` | `t_frame ≤ t_playback` drop policy |
+| **V3.4** | L-cut / J-cut: audio clip window independent of video clip end | `video_forge_kit` | Asymmetric A/V track offsets |
+| **V3.5** | Multi-clip overlay audio mix under single master clock | `media_forge` | BGM + source across edits |
+| **V3.6** | Perf matrix **N** / **O** | all | See perf matrix |
+
+**Acceptance:**
+
+- **N** — Three-clip timeline play 30 s: no audible pop at boundaries; playhead monotonic.
+- **O** — L-cut: video cuts early, audio tail plays 500 ms over next clip.
+
+---
+
+## Sprint V4 — Clip transitions (planned)
+
+**Goal:** Edits-style **scheduled overlap** of outgoing/incoming clips at boundaries (cross-dissolve first; wipe later).
+
+| Phase | Deliverable | Package(s) |
+|-------|-------------|------------|
+| **V4.1** | `TransitionSpec` on clip join (type, durationMs) | `video_forge_kit` |
+| **V4.2** | Export: dual-decode overlap + alpha blend in transcode | `video_forge` |
+| **V4.3** | Preview: crossfade between textures or Flutter opacity ramp | `video_forge_editor` |
+| **V4.4** | Wipe / offscreen mask (shader or CPU) | `video_forge` |
+
+**Instagram note:** Transitions are dual-render windows — budget GPU/CPU for 2× decode during overlap.
+
+---
+
+## Sprint V5 — Reels ingestion & single-pass export (planned)
+
+**Goal:** Align export with Instagram **ingestion targets** and document the **double-compression trap**.
+
+| Phase | Deliverable | Package(s) |
+|-------|-------------|------------|
+| **V5.1** | Audit `CompressionPreset.instagram`: 1080×1920, 30 fps, 3–6 Mbps H.264 High, AAC-LC 48 kHz 128–192 kbps | `video_forge_kit`, `video_forge` |
+| **V5.2** | `faststart` + single mux pass; log `[TimelineExport]` stage milestones | `video_forge_kit` |
+| **V5.3** | Kit README: pre-mix audio in editor, upload master (bypass platform re-encode) | `video_forge_kit` |
+| **V5.4** | Optional: multi-lane encode (decode once → parallel resolution rungs) for batch SDK | `video_forge` |
+
+---
+
+## Sprint V6 — Video color grade (planned)
+
+**Goal:** Edits **parametric color** on export path (SDR first); probe HDR metadata for later.
+
+| Phase | Deliverable | Package(s) |
+|-------|-------------|------------|
+| **V6.0** | Probe `color_primaries` / `color_trc` in `MediaInfo` (HDR-0) | `video_forge` |
+| **V6.1** | Per-clip or global `ColorGrade` op (brightness/contrast/sat + 33³ LUT) | `video_forge` |
+| **V6.2** | Export-only CPU/GPU grade in transcode loop | `video_forge` |
+| **V6.3** | Editor Effects panel: grade sliders (reuse Lumina tokens) | `video_forge_editor` |
+
+**Boundary:** Do not depend on `image_forge` `GpuEditSurface` in hot preview loop — grade on export first.
+
+---
+
+## Sprint V7 — Beat sync & pacing aids (planned)
+
+**Goal:** Edits / Reels **beat-aligned cuts** for short-form pacing.
+
+| Phase | Deliverable | Package(s) |
+|-------|-------------|------------|
+| **V7.1** | Audio waveform + beat peak detection (Rust or Dart) | `video_forge` or `video_forge_kit` |
+| **V7.2** | Timeline beat markers + snap split/playhead to nearest beat | `video_forge_editor` |
+| **V7.3** | Optional auto-cut template (N clips → beat grid) | `video_forge_editor` |
+
+---
+
+## Sprint 20 — Video Clips & Audio Timeline Editors (done)
 
 **Goal:** Implement multi-track video trimming, audio mixing, and timeline-aligned layer visibility.
 
@@ -648,6 +787,10 @@ Run in **rust_image Studio** after changes; record status-line timings.
 | I | 720p video | Scrub playhead 5 s | texture | &lt; 300 ms debounced frame (Sprint V1) |
 | J | 720p video | Play 10 s trim range | decoder clock | ≥ 24 fps preview (Sprint V1) |
 | K | 720p video | Open/dispose ×10 | — | No texture leaks (Sprint V1) |
+| L | 1080p single clip | Pinch transform preview vs export still | texture + export | Pixel-aligned ±1 px (Sprint V2) |
+| M | 720p two-clip | 2× speed clip B + concat export | export | Duration ±2%; playable MP4 (Sprint V2) |
+| N | 720p three-clip | Play 30 s across boundaries | rust playback | No pop; monotonic playhead (Sprint V3) |
+| O | 720p L-cut | Audio tail 500 ms over next clip | rust playback + mix | Audible tail; video already cut (Sprint V3) |
 
 ## References
 
@@ -658,8 +801,20 @@ Run in **rust_image Studio** after changes; record status-line timings.
 - Flutter state / rebuild rules: [docs/FLUTTER_STATE.md](docs/FLUTTER_STATE.md)
 - Beauty GPU plan: [docs/BEAUTY_GPU.md](docs/BEAUTY_GPU.md)
 - Video media runtime: [docs/VIDEO_MEDIA_RUNTIME.md](docs/VIDEO_MEDIA_RUNTIME.md)
+- Video package split: [docs/VIDEO_PACKAGE_SPLIT.md](docs/VIDEO_PACKAGE_SPLIT.md)
 - GPU notes: Metal via wgpu when `gpu` feature enabled
+
+### Package ownership (video stack)
+
+| Package | Owns | Next sprint touchpoints |
+|---------|------|-------------------------|
+| **`pixel_surface`** | Flutter `Texture`, CVPixelBuffer / SurfaceTexture registry | V2: none (stable) |
+| **`video_forge`** | FFmpeg decode/encode, `ClipEffects` export, concat, speed ramp | **V2.1–V2.4** |
+| **`video_forge_cache`** | Filmstrip disk LRU, thumbnail batch | V2: none; V7 beat peaks cache optional |
+| **`video_forge_kit`** | `TimelineController`, `TimelineExportService`, compress presets | **V2.4**, **V2.8** |
+| **`media_forge`** | Real-time playback engine, audio master clock, overlay mix | **V2.7**; V3 boundary seek |
+| **`video_forge_editor`** | CapCut/Edits UI shell, gesture transform, effects panels | **V2.5–V2.8** |
 
 ---
 
-*Last updated: Sprint V1.7 (preview perf matrix) done; Sprint 22 + P0 done*
+*Last updated: Sprint V2 planned (Instagram Edits alignment); Sprint V1.7 + Sprint 22 + P0 done*
