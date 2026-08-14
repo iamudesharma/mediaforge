@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'image_forge_core'
-  s.version          = '1.0.0'
+  s.version          = '1.0.1'
   s.summary          = 'Lightweight Rust image processing engine for Flutter (resize, crop, rotate, compress, EXIF, filters, GPU compute).'
   s.description      = <<-DESC
 Lightweight Rust image processing engine for Flutter. Core operations only:

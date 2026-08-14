@@ -1,3 +1,7 @@
+## 1.0.1
+
+- Fix pub.dev publish: include `cargokit/` in the published tarball so consumer iOS/macOS/Android/Linux/Windows builds succeed ([#5](https://github.com/iamudesharma/mediaforge/issues/5)).
+
 ## 1.0.0
 
 - Initial release: lightweight Rust image processing engine for Flutter.
