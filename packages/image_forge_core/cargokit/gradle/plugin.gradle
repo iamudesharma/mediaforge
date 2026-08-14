@@ -1,6 +1,3 @@
-/// CargoKit Gradle integration (patched for Gradle 9: Project.exec removed).
-/// Upstream: https://github.com/irondash/cargokit
-
 import java.nio.file.Paths
 import javax.inject.Inject
 import org.apache.tools.ant.taskdefs.condition.Os
@@ -18,7 +15,7 @@ class CargoKitExtension {
 abstract class CargoKitBuildTask extends DefaultTask {
 
     @Inject
-    protected abstract ExecOperations getExecOperations()
+    abstract ExecOperations getExecOperations()
 
     @Input
     String buildMode
@@ -57,37 +54,8 @@ abstract class CargoKitBuildTask extends DefaultTask {
             throw new GradleException("Property 'libname' must be set on cargokit extension");
         }
 
-        def libFileName = "lib${project.cargokit.libname}.so"
-        def prebuiltBase = new File(project.projectDir, "src/main/jniLibs")
-        def jniAbiDir = { String flutterPlatform ->
-            switch (flutterPlatform) {
-                case "android-arm": return "armeabi-v7a"
-                case "android-arm64": return "arm64-v8a"
-                case "android-x64": return "x86_64"
-                default: return flutterPlatform
-            }
-        }
-        def allPrebuiltPresent = targetPlatforms.every { platform ->
-            new File(prebuiltBase, "${jniAbiDir(platform)}/${libFileName}").exists()
-        }
-        if (allPrebuiltPresent) {
-            println "CargoKit: using prebuilt JNI from ${prebuiltBase} (skipping cargo)"
-            targetPlatforms.each { platform ->
-                def abi = jniAbiDir(platform)
-                def destDir = new File(outputDir, abi)
-                destDir.mkdirs()
-                def src = new File(prebuiltBase, "${abi}/${libFileName}")
-                java.nio.file.Files.copy(
-                    src.toPath(),
-                    new File(destDir, libFileName).toPath(),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING
-                )
-            }
-            return
-        }
-
         def executableName = Os.isFamily(Os.FAMILY_WINDOWS) ? "run_build_tool.cmd" : "run_build_tool.sh"
-        def path = Paths.get(new File(pluginFile).parent, "..", executableName).toString();
+        def path = Paths.get(new File(pluginFile).parent, "..", executableName);
 
         def manifestDir = Paths.get(project.buildscript.sourceFile.parent, project.cargokit.manifestDir)
 
@@ -114,8 +82,6 @@ abstract class CargoKitBuildTask extends DefaultTask {
             environment "CARGOKIT_MIN_SDK_VERSION", minSdkVersion
             environment "CARGOKIT_TARGET_PLATFORMS", targetPlatforms.join(",")
             environment "CARGOKIT_JAVA_HOME", System.properties['java.home']
-            // image_forge + rav1e/wgpu can OOM on laptops when building all ABIs.
-            environment "CARGO_BUILD_JOBS", System.getenv("CARGO_BUILD_JOBS") ?: "2"
         }
     }
 }
@@ -154,7 +120,7 @@ class CargoKitPlugin implements Plugin<Project> {
             return;
         }
 
-        def cargoBuildDir = "${project.layout.buildDirectory.get()}/build"
+        def cargoBuildDir = "${project.buildDir}/build"
 
         // Determine if the project is an application or library
         def isApplication = plugin.project.plugins.hasPlugin('com.android.application')
@@ -164,7 +130,7 @@ class CargoKitPlugin implements Plugin<Project> {
 
             final buildType = variant.buildType.name
 
-            def cargoOutputDir = "${project.layout.buildDirectory.get()}/jniLibs/${buildType}";
+            def cargoOutputDir = "${project.buildDir}/jniLibs/${buildType}";
             def jniLibs = project.android.sourceSets.maybeCreate(buildType).jniLibs;
             jniLibs.srcDir(new File(cargoOutputDir))
 
@@ -175,9 +141,11 @@ class CargoKitPlugin implements Plugin<Project> {
                 platforms = plugin.getTargetPlatforms().collect()
             }
 
-            // Do not force x86 ABIs here: rav1e (AVIF) asm fails on x86_64-linux-android.
-            // To build for emulators, set ndk { abiFilters "x86_64" } on the app; Flutter
-            // will include those platforms via getTargetPlatforms above.
+            // Same thing addFlutterDependencies does in flutter.gradle
+            if (buildType == "debug") {
+                platforms.add("android-x86")
+                platforms.add("android-x64")
+            }
 
             // The task name depends on plugin properties, which are not available
             // at this point
@@ -192,14 +160,6 @@ class CargoKitPlugin implements Plugin<Project> {
                     throw new GradleException("Please set 'android.ndkVersion' in 'app/build.gradle'.")
                 }
 
-                def compileSdk = plugin.project.android.compileSdkVersion
-                def compileSdkInt
-                if (compileSdk instanceof Integer) {
-                    compileSdkInt = compileSdk as int
-                } else {
-                    compileSdkInt = compileSdk.toString().replace("android-", "") as int
-                }
-
                 def task = project.tasks.create(taskName, CargoKitBuildTask.class) {
                     buildMode = variant.buildType.name
                     buildDir = cargoBuildDir
@@ -207,7 +167,7 @@ class CargoKitPlugin implements Plugin<Project> {
                     ndkVersion = plugin.project.android.ndkVersion
                     sdkDirectory = plugin.project.android.sdkDirectory
                     minSdkVersion = plugin.project.android.defaultConfig.minSdkVersion.apiLevel as int
-                    compileSdkVersion = compileSdkInt
+                    compileSdkVersion = plugin.project.android.compileSdkVersion.substring(8) as int
                     targetPlatforms = platforms
                     pluginFile = CargoKitPlugin.file
                 }
