@@ -54,9 +54,21 @@ prefetch_rust_artifacts() {
   )
 }
 
+persist_path() {
+  local line='export PATH="${HOME}/flutter/bin:${HOME}/.cargo/bin:${PATH}"'
+  for f in "${HOME}/.profile" "${HOME}/.bashrc"; do
+    touch "$f"
+    if ! grep -qF 'flutter/bin' "$f" 2>/dev/null; then
+      echo "$line" >> "$f"
+    fi
+  done
+  export PATH="${HOME}/flutter/bin:${HOME}/.cargo/bin:${PATH}"
+}
+
 install_flutter
 configure_rust
 bootstrap_workspace
 prefetch_rust_artifacts
+persist_path
 
 echo "[cloud-agent-install] done flutter=$(flutter --version | head -1) rustc=$(rustc --version)"
