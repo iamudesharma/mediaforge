@@ -385,3 +385,21 @@ Use `debugPrint('[Tag] event key=value')` style for these.
 ## **CI**
 
 `.github/workflows/ci.yml` runs on `ubuntu-latest`: melos bootstrap → per-package analyze → per-package test → Rust video test. No native build step in CI (Dart-only checks). `media_forge` is **not in CI** — run it manually: `cd packages/media_forge && flutter analyze --no-fatal-infos` and `cd packages/media_forge/rust && cargo test`.
+
+## Cursor Cloud specific instructions
+
+Cloud Agent setup is defined in `.cursor/environment.json` and `scripts/cloud-agent-install.sh` (Flutter stable, Rust/Android targets, melos bootstrap, FFmpeg dev libs).
+
+**Linux limitations on this branch:**
+
+- `pixel_surface` `gpu` is **Apple-only** today. On Linux, build/test `image_forge` Rust with CPU features only: `cargo test --features blurhash --no-default-features` (omit default `gpu`/`avif`). AVIF needs NASM (`nasm` package) when enabled.
+- `examples/image_editor` Linux desktop builds pull `image_forge` default features and fail until GPU is ported to Vulkan on Linux. Use Dart/widget tests and the Rust CLI benchmark instead.
+
+**Quick health checks (Linux cloud agent):**
+
+```bash
+bash scripts/cloud-agent-install.sh          # idempotent bootstrap
+dart run melos exec --scope=image_forge_editor -- flutter test
+cd packages/video_forge && cargo test -p video_forge
+cd packages/image_forge/rust && cargo run --release --features blurhash --no-default-features --bin image_forge_benchmark -- --synthetic -n 3
+```
