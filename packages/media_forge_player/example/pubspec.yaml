@@ -1,0 +1,24 @@
+name: media_forge_player_example
+resolution: workspace
+description: Example app for media_forge_player (file + HTTP range streaming).
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  media_forge: ^0.1.0
+  media_forge_player:
+    path: ..
+  file_picker:
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

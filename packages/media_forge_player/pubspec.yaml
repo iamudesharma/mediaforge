@@ -1,0 +1,35 @@
+name: media_forge_player
+resolution: workspace
+description: >
+  Production-ready Flutter video player SDK built on media_forge
+  (FFmpeg demux/decode, audio-master clock) and pixel_surface
+  (GPU presentation). Supports local files and seekable HTTP/HTTPS
+  streams (byte-range), with HW decode + zero-copy where available.
+version: 0.1.0
+license: Apache-2.0
+homepage: https://github.com/iamudesharma/mediaforge
+repository: https://github.com/iamudesharma/mediaforge
+issue_tracker: https://github.com/iamudesharma/mediaforge/issues
+
+topics:
+  - video
+  - player
+  - ffmpeg
+  - streaming
+  - hls
+
+environment:
+  sdk: ^3.12.0
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  media_forge: ^0.1.0
+  pixel_surface: ^1.0.0
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
