@@ -4041,4 +4041,41 @@ mod tests {
     fn test_hw_device_name_nonempty() {
         assert!(!crate::vt_hw_decode::hw_device_name().is_empty());
     }
+
+    /// The HTTP protocol stack must be linked: opening garbage bytes over
+    /// loopback HTTP must fail probe ("Invalid data"-class), never with
+    /// "Protocol not found" (minimal `--disable-everything` builds once
+    /// dropped the whole network stack — see PeerStream localhost streams).
+    #[test]
+    fn test_open_url_rejects_garbage_over_http() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept");
+            let mut request = [0u8; 4096];
+            let _ = stream.read(&mut request);
+            let header = b"HTTP/1.0 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: 131072\r\nConnection: close\r\n\r\n";
+            stream.write_all(header).expect("write header");
+            // 128 KiB of non-media bytes: probing must conclude, not hang.
+            let garbage = vec![0xABu8; 131072];
+            let _ = stream.write_all(&garbage);
+            // Drop => EOF so avformat_open_input returns promptly.
+        });
+
+        let engine = MediaPlaybackEngine::new(0, 2000, 720);
+        let url = format!("http://127.0.0.1:{}/garbage.mp4", port);
+        let err = engine
+            .open_url(url, NetworkOptions::default())
+            .expect_err("garbage bytes must not open");
+        let message = format!("{:?}", err);
+        assert!(
+            !message.contains("Protocol not found"),
+            "HTTP stack missing: {}",
+            message
+        );
+        let _ = server.join();
+    }
 }

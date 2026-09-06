@@ -7,9 +7,10 @@ Engines: FFmpeg demux + decode inside `media_forge`; presentation via
 
 | Container | File | HTTP(S) + Range | HLS (`m3u8`) |
 | --- | --- | --- | --- |
-| MP4 / MOV / M4V | ✅ (boosted probe) | ✅ `openUrl` + headers/timeout/reconnect | ➖ options plumbed; playback verified per-fixture, not claimed here |
+| MP4 / MOV / M4V | ✅ (boosted probe) | ✅ `openUrl` + headers/timeout/reconnect | ✅ demuxer in archives; playback pending fixture runs |
 | MKV | ✅ | ✅ | n/a |
 | WebM | ✅ | ✅ | n/a |
+| HLS (`m3u8`, TS segments) | n/a | ✅ HTTP stack link regression-tested; `hls`/`mpegts` in archives, playback pending fixture runs | — |
 | Others FFmpeg supports | ✅ best-effort | ✅ best-effort | ➖ unverified |
 
 ## Video codecs
