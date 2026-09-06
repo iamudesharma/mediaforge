@@ -145,7 +145,20 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
 
       final target = await _resolveTarget(media);
       debugPrint('[MediaForgePlayer] opening target=$target');
-      await _engine!.openFile(path: target);
+      final network = media is MediaForgeNetwork ? media : null;
+      if (network != null) {
+        await _engine!.openUrl(
+          url: target,
+          options: mf.NetworkOptions(
+            headers: network.headers,
+            userAgent: network.userAgent,
+            timeoutMs: BigInt.from(network.timeout.inMilliseconds),
+            reconnect: network.reconnect,
+          ),
+        );
+      } else {
+        await _engine!.openFile(path: target);
+      }
       final durationMs = (await _engine!.getDurationMs()).toInt();
       debugPrint(
           '[MediaForgePlayer] opened duration=${durationMs}ms target=$target');
@@ -160,14 +173,21 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
         position: Duration.zero,
         buffered: Duration.zero,
         isCompleted: false,
-        // v1 engine exposes a single best audio/video stream; track
-        // discovery APIs exist but report empty until the engine adds
-        // stream listing (see README gap table).
         audioTracks: const [],
         subtitleTracks: const [],
         selectedAudioTrackId: null,
         selectedSubtitleTrackId: null,
       );
+      await _refreshTracks();
+      // Push retained audio state into the fresh engine session.
+      if (_engineReady) {
+        await _engine!.setVolume(volume: value.volume);
+        await _engine!.setMuted(muted: value.isMuted);
+        await _engine!.setSubtitlesEnabled(enabled: value.subtitlesEnabled);
+        await _engine!.setSubtitleDelayMs(
+          delayMs: value.subtitleDelay.inMilliseconds,
+        );
+      }
       _emit(const MediaForgeEvent(MediaForgeEventType.opened));
       _startLoops();
       if (play || autoPlay) {
@@ -207,11 +227,9 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
           throw ArgumentError('Network source must be http(s): $url');
         }
         if (headers.isNotEmpty) {
-          // v1 engine has no header plumbing; log loudly so PeerStream
-          // auth headers are not silently dropped from debugging.
           debugPrint(
-            '[MediaForgePlayer] network headers pending engine open_url '
-            'count=${headers.length} url=$url',
+            '[MediaForgePlayer] network open headers=${headers.keys.join(',')} '
+            'url=$url',
           );
         }
         return url;
@@ -312,18 +330,13 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     debugPrint('[MediaForgePlayer] rate=$clamped');
   }
 
-  /// Master volume 0..1.
-  ///
-  /// v1 engine exposes mute switches only, so volume maps to
-  /// `setMuted(volume == 0 || muted)`; the value is retained and applied
-  /// to a future `setVolume` engine API without breaking changes.
+  /// Master volume 0..1 — engine-side gain (source + overlays).
   Future<void> setVolume(double volume) async {
     if (_disposed) return;
     final clamped = volume.clamp(0.0, 1.0);
     value = value.copyWith(volume: clamped);
     if (_engineReady) {
-      final mute = clamped == 0 || value.isMuted;
-      await _engine!.setMuted(muted: mute);
+      await _engine!.setVolume(volume: clamped);
     }
     debugPrint('[MediaForgePlayer] volume=$clamped');
   }
@@ -332,8 +345,7 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     if (_disposed) return;
     value = value.copyWith(isMuted: muted);
     if (_engineReady) {
-      final effective = muted || value.volume == 0;
-      await _engine!.setMuted(muted: effective);
+      await _engine!.setMuted(muted: muted);
     }
     debugPrint('[MediaForgePlayer] muted=$muted');
   }
@@ -347,36 +359,121 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
 
   // ---------------------------------------------------------------- tracks ---
 
-  /// Select an audio track by id. Stored locally in v1; the engine plays
-  /// its single best stream until stream switching lands (logged).
+  static String? _nonEmpty(String s) => s.isEmpty ? null : s;
+
+  /// Rebuild track lists from `listStreams()` (called after every open).
+  /// External (sidecar) tracks already in [value] are preserved.
+  Future<void> _refreshTracks() async {
+    final engine = _engine;
+    if (engine == null) return;
+    late final List<mf.MediaStreamInfo> streams;
+    try {
+      streams = await engine.listStreams();
+    } catch (e) {
+      debugPrint('[MediaForgePlayer] listStreams failed: $e');
+      return;
+    }
+    final audio = <MediaForgeAudioTrack>[];
+    final subs = <MediaForgeSubtitleTrack>[];
+    for (final s in streams) {
+      switch (s.kind) {
+        case mf.StreamKind.audio:
+          audio.add(MediaForgeAudioTrack(
+            id: s.index,
+            language: _nonEmpty(s.language),
+            label: _nonEmpty(s.title) ??
+                _nonEmpty(s.language) ??
+                'Audio ${s.index}',
+            codec: s.codecName,
+            bitrate: s.bitrate.toInt(),
+            isDefault: s.isDefault,
+            isForced: s.isForced,
+            channels: s.channels == 0 ? null : s.channels,
+            sampleRate: s.sampleRate == 0 ? null : s.sampleRate,
+          ));
+        case mf.StreamKind.subtitle:
+          subs.add(MediaForgeSubtitleTrack(
+            id: s.index,
+            language: _nonEmpty(s.language),
+            label: _nonEmpty(s.title) ??
+                _nonEmpty(s.language) ??
+                'Subtitle ${s.index}',
+            codec: s.codecName,
+            bitrate: s.bitrate.toInt(),
+            isDefault: s.isDefault,
+            isForced: s.isForced,
+          ));
+        case mf.StreamKind.video:
+          break;
+      }
+    }
+    final external =
+        value.subtitleTracks.where((t) => !t.isEmbedded).toList();
+    value = value.copyWith(
+      audioTracks: audio,
+      subtitleTracks: [...subs, ...external],
+    );
+    debugPrint('[MediaForgePlayer] tracks audio=${audio.length} '
+        'subtitle=${subs.length} external=${external.length}');
+  }
+
+  /// Select an audio track by stream index. Switches the live decoder.
   Future<void> selectAudioTrack(int? id) async {
     if (id != null &&
         value.audioTracks.isNotEmpty &&
         value.audioTracks.every((t) => t.id != id)) {
       throw RangeError('Unknown audio track id=$id');
     }
+    if (id != null && _engineReady) {
+      try {
+        await _engine!.selectAudioStream(index: id);
+      } catch (e, st) {
+        debugPrint('[MediaForgePlayer] selectAudioStream failed: $e\n$st');
+        rethrow;
+      }
+    }
     value = value.copyWith(selectedAudioTrackId: id);
-    debugPrint('[MediaForgePlayer] audio track selected id=$id '
-        '(engine switch pending stream-listing support)');
+    debugPrint('[MediaForgePlayer] audio track selected id=$id');
   }
 
-  /// Select a subtitle track by id (`null` = off). Rendering is a v1 gap:
-  /// the selection is retained for UI state; no overlay is drawn yet.
+  /// Select an embedded subtitle track (`null` = off). Switches live.
   Future<void> selectSubtitleTrack(int? id) async {
     if (id != null &&
         value.subtitleTracks.isNotEmpty &&
         value.subtitleTracks.every((t) => t.id != id)) {
       throw RangeError('Unknown subtitle track id=$id');
     }
+    if (_engineReady) {
+      final embedded = id == null ||
+          value.subtitleTracks.any((t) => t.id == id && t.isEmbedded);
+      try {
+        if (id != null && embedded) {
+          await _engine!.selectSubtitleStream(index: id);
+        } else if (id == null) {
+          // Off (or external-only): stop embedded forwarding.
+          await _engine!.selectSubtitleStream(index: -1);
+        }
+      } catch (e, st) {
+        debugPrint('[MediaForgePlayer] selectSubtitleStream failed: $e\n$st');
+        rethrow;
+      }
+    }
     value = value.copyWith(selectedSubtitleTrackId: id);
-    debugPrint('[MediaForgePlayer] subtitle track selected id=$id '
-        '(rendering pending; embedded/external demux not in engine yet)');
+    debugPrint('[MediaForgePlayer] subtitle track selected id=$id');
   }
 
-  /// Register an external (sidecar) subtitle file for UI state.
-  /// Returns the synthetic track id. Rendering follows in a later release.
+  /// Register an external (sidecar) subtitle file/URL and decode it into
+  /// the shared cue queue. Returns the synthetic track id.
   Future<int> addExternalSubtitle(Uri uri, {String? language}) async {
     final id = 1000 + value.subtitleTracks.length;
+    if (_engineReady) {
+      try {
+        await _engine!.openExternalSubtitle(pathOrUrl: '$uri');
+      } catch (e, st) {
+        debugPrint('[MediaForgePlayer] openExternalSubtitle failed: $e\n$st');
+        rethrow;
+      }
+    }
     final track = MediaForgeSubtitleTrack(
       id: id,
       language: language,
@@ -388,6 +485,56 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
         subtitleTracks: [...value.subtitleTracks, track]);
     debugPrint('[MediaForgePlayer] external subtitle added id=$id uri=$uri');
     return id;
+  }
+
+  /// Stop the sidecar session and drop external tracks from state.
+  Future<void> closeExternalSubtitles() async {
+    if (_engineReady) {
+      try {
+        await _engine!.closeExternalSubtitle();
+      } catch (e) {
+        debugPrint('[MediaForgePlayer] closeExternalSubtitle failed: $e');
+      }
+    }
+    final selectedGone = value.selectedSubtitleTrackId != null &&
+        value.subtitleTracks.any((t) =>
+            t.id == value.selectedSubtitleTrackId && !t.isEmbedded);
+    value = value.copyWith(
+      subtitleTracks:
+          value.subtitleTracks.where((t) => t.isEmbedded).toList(),
+      clearSubtitleSelection: selectedGone,
+    );
+  }
+
+  /// Active cue text at [position] (`null` when none).
+  Future<String?> subtitleTextAt(Duration position) async {
+    if (!_engineReady) return null;
+    try {
+      return await _engine!
+          .pollSubtitleText(timeMs: BigInt.from(position.inMilliseconds));
+    } catch (e) {
+      debugPrint('[MediaForgePlayer] pollSubtitleText failed: $e');
+      return null;
+    }
+  }
+
+  /// User subtitle delay (signed; applied by the engine at cue ingest).
+  Future<void> setSubtitleDelay(Duration delay) async {
+    value = value.copyWith(subtitleDelay: delay);
+    if (_engineReady) {
+      await _engine!.setSubtitleDelayMs(delayMs: delay.inMilliseconds);
+    }
+    debugPrint(
+        '[MediaForgePlayer] subtitle delay=${delay.inMilliseconds}ms');
+  }
+
+  /// Enable/disable cue delivery (decoding continues while disabled).
+  Future<void> setSubtitlesEnabled(bool enabled) async {
+    value = value.copyWith(subtitlesEnabled: enabled);
+    if (_engineReady) {
+      await _engine!.setSubtitlesEnabled(enabled: enabled);
+    }
+    debugPrint('[MediaForgePlayer] subtitles enabled=$enabled');
   }
 
   // ------------------------------------------------------- presentation ------
@@ -481,8 +628,12 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
       if (buffering && !value.isBuffering) {
         _emit(const MediaForgeEvent(MediaForgeEventType.buffering));
       }
-      // Forward buffer estimate: ~40ms per queued video frame+packet.
-      final bufferedMs = mediaMs + (vq + vpq) * 40;
+      // Forward buffer estimate prefers the engine's decoded-ahead figure;
+      // fall back to queue-depth heuristic when it is zero.
+      final engineBufferedMs = snap.bufferedDurationMs.toInt();
+      final bufferedMs = engineBufferedMs > 0
+          ? mediaMs + engineBufferedMs
+          : mediaMs + (vq + vpq) * 40;
       final durationMs = value.duration.inMilliseconds;
       value = value.copyWith(
         position: Duration(milliseconds: mediaMs),
@@ -492,7 +643,14 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
                 : bufferedMs.clamp(0, durationMs)),
         isBuffering: buffering,
       );
-      final caps = await MediaForgeCapabilities.probe();
+      MediaForgeCapabilities? caps;
+      try {
+        caps = await MediaForgeCapabilities.probe();
+      } catch (e) {
+        debugPrint('[MediaForgePlayer] capabilities probe failed: $e');
+      }
+      final engineDecoder = snap.activeVideoDecoder;
+      final fallbackDecoder = caps?.decoderLabelFor() ?? 'unknown';
       final diag = MediaForgeDiagnostics(
         state: snap.state,
         mediaTimeMs: mediaMs,
@@ -508,10 +666,19 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
         decodedFps: _decodedFps,
         presentedFps: _presentedFps,
         droppedFrames: _droppedFrames,
-        bufferedDurationMs: (bufferedMs - mediaMs).clamp(0, 1 << 31),
-        activeDecoder: caps.decoderLabelFor(),
-        hwDecode: caps.hwDecodeAvailable,
-        networkBytesRead: null, // pending engine socket stats
+        bufferedDurationMs: engineBufferedMs,
+        activeDecoder: engineDecoder.isEmpty || engineDecoder == 'none'
+            ? fallbackDecoder
+            : engineDecoder,
+        hwDecode: snap.hwDecodeActive,
+        networkBytesRead: snap.bytesRead.toInt(),
+        bytesRead: snap.bytesRead.toInt(),
+        readBitrateBps: snap.readBitrateBps.toInt(),
+        decoderDroppedFrames: snap.droppedVideoFrames.toInt(),
+        subtitleCuesPending: snap.subtitleCuesPending.toInt(),
+        selectedVideoIndex: snap.selectedVideoIndex,
+        selectedAudioIndex: snap.selectedAudioIndex,
+        selectedSubtitleIndex: snap.selectedSubtitleIndex,
       );
       _lastDiagnostics = diag;
       if (!_diagnostics.isClosed) _diagnostics.add(diag);
@@ -535,6 +702,10 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
       debugPrint('[MediaForgePlayer] diagnostics tick failed: $e');
     }
   }
+
+  /// Test hook: run one diagnostics tick on demand.
+  @visibleForTesting
+  Future<void> diagnosticsTickForTest() => _diagnosticsTick();
 
   // ------------------------------------------------------------------ misc ---
 

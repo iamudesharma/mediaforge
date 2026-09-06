@@ -122,6 +122,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  Map<String, String> dco_decode_Map_String_String_None(dynamic raw);
+
+  @protected
   AudioRuntime
   dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAudioRuntime(
     dynamic raw,
@@ -191,6 +194,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MediaVideoFrame dco_decode_box_autoadd_media_video_frame(dynamic raw);
 
   @protected
+  NetworkOptions dco_decode_box_autoadd_network_options(dynamic raw);
+
+  @protected
   PixelBufferHandoff dco_decode_box_autoadd_pixel_buffer_handoff(dynamic raw);
 
   @protected
@@ -209,16 +215,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  List<MediaStreamInfo> dco_decode_list_media_stream_info(dynamic raw);
+
+  @protected
   Float32List dco_decode_list_prim_f_32_strict(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
+
+  @protected
   MediaPacket dco_decode_media_packet(dynamic raw);
 
   @protected
+  MediaStreamInfo dco_decode_media_stream_info(dynamic raw);
+
+  @protected
   MediaVideoFrame dco_decode_media_video_frame(dynamic raw);
+
+  @protected
+  NetworkOptions dco_decode_network_options(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
 
   @protected
   QueuePacket?
@@ -242,6 +266,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlaybackState dco_decode_playback_state(dynamic raw);
+
+  @protected
+  (String, String) dco_decode_record_string_string(dynamic raw);
+
+  @protected
+  StreamKind dco_decode_stream_kind(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -334,6 +364,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  Map<String, String> sse_decode_Map_String_String_None(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   AudioRuntime
   sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAudioRuntime(
     SseDeserializer deserializer,
@@ -402,6 +437,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  NetworkOptions sse_decode_box_autoadd_network_options(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PixelBufferHandoff sse_decode_box_autoadd_pixel_buffer_handoff(
     SseDeserializer deserializer,
   );
@@ -426,16 +466,38 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  List<MediaStreamInfo> sse_decode_list_media_stream_info(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Float32List sse_decode_list_prim_f_32_strict(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<(String, String)> sse_decode_list_record_string_string(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MediaPacket sse_decode_media_packet(SseDeserializer deserializer);
 
   @protected
+  MediaStreamInfo sse_decode_media_stream_info(SseDeserializer deserializer);
+
+  @protected
   MediaVideoFrame sse_decode_media_video_frame(SseDeserializer deserializer);
+
+  @protected
+  NetworkOptions sse_decode_network_options(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
   QueuePacket?
@@ -465,6 +527,14 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlaybackState sse_decode_playback_state(SseDeserializer deserializer);
+
+  @protected
+  (String, String) sse_decode_record_string_string(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  StreamKind sse_decode_stream_kind(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -572,6 +642,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_Map_String_String_None(
+    Map<String, String> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void
   sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerAudioRuntime(
     AudioRuntime self,
@@ -655,6 +731,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_network_options(
+    NetworkOptions self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_pixel_buffer_handoff(
     PixelBufferHandoff self,
     SseSerializer serializer,
@@ -682,6 +764,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_media_stream_info(
+    List<MediaStreamInfo> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_f_32_strict(
     Float32List self,
     SseSerializer serializer,
@@ -694,13 +785,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_record_string_string(
+    List<(String, String)> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_media_packet(MediaPacket self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_media_stream_info(
+    MediaStreamInfo self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_media_video_frame(
     MediaVideoFrame self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_network_options(
+    NetworkOptions self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
   void
@@ -735,6 +847,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_playback_state(PlaybackState self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_record_string_string(
+    (String, String) self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_stream_kind(StreamKind self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

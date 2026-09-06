@@ -7,7 +7,7 @@ Engines: FFmpeg demux + decode inside `media_forge`; presentation via
 
 | Container | File | HTTP(S) + Range | HLS (`m3u8`) |
 | --- | --- | --- | --- |
-| MP4 / MOV / M4V | ✅ (boosted probe) | ✅ FFmpeg reads URL directly | ➖ relayed to FFmpeg; needs R1 verification |
+| MP4 / MOV / M4V | ✅ (boosted probe) | ✅ `openUrl` + headers/timeout/reconnect | ➖ options plumbed; playback verified per-fixture, not claimed here |
 | MKV | ✅ | ✅ | n/a |
 | WebM | ✅ | ✅ | n/a |
 | Others FFmpeg supports | ✅ best-effort | ✅ best-effort | ➖ unverified |
@@ -16,23 +16,29 @@ Engines: FFmpeg demux + decode inside `media_forge`; presentation via
 
 | Codec | macOS | iOS | Android | Fallback |
 | --- | --- | --- | --- | --- |
-| H.264 | ✅ VideoToolbox (`h264_videotoolbox`, zero-copy adopt) | ✅ VideoToolbox | ➖ SW today; MediaCodec streaming path = R4 | SW FFmpeg RGBA |
-| HEVC/H.265 | ✅ VT when `readyForHevcHw`, else SW | ✅ VT where device allows | ➖ SW today; R4 | SW FFmpeg RGBA |
-| AV1 | ➖ SW | ➖ SW | ➖ SW | SW FFmpeg RGBA |
-| VP9 | ➖ SW | ➖ SW | ➖ SW | SW FFmpeg RGBA |
+| H.264 | ✅ VideoToolbox (`h264-videotoolbox`, zero-copy adopt) | ✅ VideoToolbox | ✅ MediaCodec `hw_device_ctx` (device validation pending) | SW FFmpeg RGBA |
+| HEVC/H.265 | ✅ VT when `readyForHevcHw`, else SW | ✅ VT where device allows | ✅ MediaCodec `hw_device_ctx` (device validation pending) | SW FFmpeg RGBA |
+| AV1 | ➖ SW | ➖ SW | ✅ MediaCodec attempt, SW fallback | SW FFmpeg RGBA |
+| VP9 | ➖ SW | ➖ SW | ✅ MediaCodec attempt, SW fallback | SW FFmpeg RGBA |
 
-Probe with `MediaForgeCapabilities.probe()`; kill-switches
-`VFP_DISABLE_HW_DECODE=1`, `MEDIA_DISABLE_VT_ZERO_COPY=1` are honoured.
+Probe with `MediaForgeCapabilities.probe()`; kill-switch
+`VFP_DISABLE_HW_DECODE=1` is honoured. The active pipeline is reported
+per-session as `activeVideoDecoder` (e.g. `hevc-videotoolbox`) with
+`hwDecodeActive`.
 
 ## Audio / subtitles
 
 * Audio decode: best-stream selection (AAC/MP3/FLAC/Opus/Vorbis/PCM
   preferred, else first audio) → cpal mix, audio-master clock.
-* Multiple audio tracks: API exists (`audioTracks`, `selectAudioTrack`);
-  engine switching needs R2.
-* Subtitles: API exists (`subtitleTracks`, `selectSubtitleTrack`,
-  `addExternalSubtitle`); rendering needs R2.
-* Volume: `setVolume` retained; v1 maps to mute switches (R3 adds gain).
+* Multiple audio tracks: `listStreams` + live `selectAudioStream`
+  (decoder reopen + re-seek resync).
+* Multiple video tracks: `selectVideoStream` (pipeline reopen on Flush).
+* Subtitles: embedded text/ASS decode → cue queue → `pollSubtitleText`
+  (renders in `MediaForgeVideo` caption overlay); sidecar files/URLs via
+  `openExternalSubtitle`; `setSubtitleDelayMs`, `setSubtitlesEnabled`.
+  Bitmap subtitles (dvd/vobsub, pgssub) report timing with empty text.
+* Volume: engine-side master gain (`setVolume`) + `setMuted` (all) +
+  `setSourceMuted` (source only) + per-overlay volume.
 
 ## Platforms
 
@@ -40,6 +46,6 @@ Probe with `MediaForgeCapabilities.probe()`; kill-switches
 | --- | --- |
 | macOS | ✅ primary (VT zero-copy + RGBA fallback) |
 | iOS | ✅ (VT path; device-dependent HEVC) |
-| Android | ✅ file + HTTP via SW/RGBA; MediaCodec zero-copy = R4 |
+| Android | ✅ file + HTTP; MediaCodec HW decode compiled in with SW fallback (on-device validation pending) |
 | Windows / Linux | 🔜 API is platform-neutral; engine FFI plugin already declares both — needs native FFmpeg/cpal validation |
 | Web | ❌ no FFI; out of scope for v1 |

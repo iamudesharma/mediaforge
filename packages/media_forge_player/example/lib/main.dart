@@ -110,8 +110,63 @@ class _PlayerPageState extends State<PlayerPage> {
                 icon: Icon(v.isMuted ? Icons.volume_off : Icons.volume_up),
                 onPressed: () => _controller.setMuted(!v.isMuted),
               ),
+              Expanded(
+                child: Slider(
+                  min: 0,
+                  max: 1,
+                  value: v.volume,
+                  onChanged: (x) => _controller.setVolume(x),
+                ),
+              ),
             ],
           ),
+          if (v.audioTracks.isNotEmpty || v.subtitleTracks.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  if (v.audioTracks.isNotEmpty)
+                    Expanded(
+                      child: DropdownButton<int?>(
+                        value: v.selectedAudioTrackId,
+                        hint: const Text('Audio'),
+                        isExpanded: true,
+                        items: v.audioTracks
+                            .map((t) => DropdownMenuItem<int?>(
+                                  value: t.id,
+                                  child: Text(
+                                      t.label ?? t.language ?? 'Track ${t.id}'),
+                                ))
+                            .toList(),
+                        onChanged: (id) => _controller.selectAudioTrack(id),
+                      ),
+                    ),
+                  if (v.subtitleTracks.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButton<int?>(
+                        value: v.selectedSubtitleTrackId,
+                        hint: const Text('Subtitles off'),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem<int?>(
+                              value: null, child: Text('Off')),
+                          ...v.subtitleTracks.map((t) =>
+                              DropdownMenuItem<int?>(
+                                value: t.id,
+                                child: Text(t.label ??
+                                    t.language ??
+                                    'Track ${t.id}'),
+                              )),
+                        ],
+                        onChanged: (id) =>
+                            _controller.selectSubtitleTrack(id),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.all(12),
             child: Row(

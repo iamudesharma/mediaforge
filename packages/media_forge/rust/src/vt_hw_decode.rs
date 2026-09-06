@@ -78,9 +78,37 @@ fn platform_device_type() -> Option<ffi::AVHWDeviceType> {
     {
         Some(ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_VIDEOTOOLBOX)
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[cfg(target_os = "android")]
+    {
+        Some(ffi::AVHWDeviceType::AV_HWDEVICE_TYPE_MEDIACODEC)
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "android"
+    )))]
     {
         None
+    }
+}
+
+/// Short device name for diagnostics labels (`hevc-videotoolbox`, …).
+pub fn hw_device_name() -> &'static str {
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        "videotoolbox"
+    }
+    #[cfg(target_os = "android")]
+    {
+        "mediacodec"
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "android"
+    )))]
+    {
+        "hw"
     }
 }
 
@@ -157,7 +185,11 @@ unsafe extern "C" fn hw_get_format(
 fn attach_hw_device_ctx(dec_ctx: &mut CodecContext) -> Option<HwFrameTransfer> {
     let device_type = platform_device_type()?;
     let codec_id = dec_ctx.id();
-    if !matches!(codec_id, Id::H264 | Id::HEVC) {
+    // H.264/HEVC everywhere; VP9/AV1 additionally on Android MediaCodec.
+    // Anything else falls through to None → software pipeline.
+    let android_extra =
+        cfg!(target_os = "android") && matches!(codec_id, Id::VP9 | Id::AV1);
+    if !matches!(codec_id, Id::H264 | Id::HEVC) && !android_extra {
         return None;
     }
 
@@ -200,9 +232,15 @@ fn attach_hw_device_ctx(dec_ctx: &mut CodecContext) -> Option<HwFrameTransfer> {
             return None;
         }
 
+        // Preferred SW format after hwframe transfer: NV12 on MediaCodec,
+        // YUV420P on VideoToolbox (matches the downstream RGBA scaler).
+        #[cfg(target_os = "android")]
+        let sw_format = Pixel::NV12;
+        #[cfg(not(target_os = "android"))]
+        let sw_format = Pixel::YUV420P;
         Some(HwFrameTransfer {
             _device: device,
-            sw_format: Pixel::YUV420P,
+            sw_format,
             opaque,
         })
     }

@@ -65,6 +65,16 @@ class PlaybackDiagnostics {
     required this.audioPacketsInQueue,
     required this.videoFramesInQueue,
     required this.audioFramesInQueue,
+    this.bytesRead = 0,
+    this.readBitrateBps = 0,
+    this.bufferedDurationMs = 0,
+    this.droppedVideoFrames = 0,
+    this.activeVideoDecoder = '',
+    this.hwDecodeActive = false,
+    this.subtitleCuesPending = 0,
+    this.selectedVideoIndex = -1,
+    this.selectedAudioIndex = -1,
+    this.selectedSubtitleIndex = -1,
   });
 
   /// Convert from FRB-generated snapshot (BigInt fields → int fields).
@@ -81,6 +91,16 @@ class PlaybackDiagnostics {
       audioPacketsInQueue: snap.audioPacketsInQueue.toInt(),
       videoFramesInQueue: snap.videoFramesInQueue.toInt(),
       audioFramesInQueue: snap.audioFramesInQueue.toInt(),
+      bytesRead: snap.bytesRead.toInt(),
+      readBitrateBps: snap.readBitrateBps.toInt(),
+      bufferedDurationMs: snap.bufferedDurationMs.toInt(),
+      droppedVideoFrames: snap.droppedVideoFrames.toInt(),
+      activeVideoDecoder: snap.activeVideoDecoder,
+      hwDecodeActive: snap.hwDecodeActive,
+      subtitleCuesPending: snap.subtitleCuesPending.toInt(),
+      selectedVideoIndex: snap.selectedVideoIndex,
+      selectedAudioIndex: snap.selectedAudioIndex,
+      selectedSubtitleIndex: snap.selectedSubtitleIndex,
     );
   }
 
@@ -96,6 +116,33 @@ class PlaybackDiagnostics {
   final int videoFramesInQueue;
   final int audioFramesInQueue;
 
+  /// Container bytes demuxed since open.
+  final int bytesRead;
+
+  /// Demuxed-bytes read bitrate estimate (bits/s).
+  final int readBitrateBps;
+
+  /// Decoded-ahead-of-presentation buffer (ms).
+  final int bufferedDurationMs;
+
+  /// Pre-decode video drops (stale generation + catch-up policy).
+  final int droppedVideoFrames;
+
+  /// e.g. `hevc-videotoolbox`, `h264-software`.
+  final String activeVideoDecoder;
+  final bool hwDecodeActive;
+
+  /// Cues currently held for polling.
+  final int subtitleCuesPending;
+
+  /// Selected stream indices (−1 = none/off).
+  final int selectedVideoIndex;
+  final int selectedAudioIndex;
+  final int selectedSubtitleIndex;
+
   bool get videoStarved =>
       videoFramesInQueue == 0 && videoPacketsInQueue == 0;
+
+  /// Decoder cannot keep up: dropping frames while starved.
+  bool get decoderStarved => videoStarved && droppedVideoFrames > 0;
 }

@@ -78,21 +78,23 @@ Nothing was copied; the player depends on `media_forge` + `pixel_surface`.
 
 ## Gaps → Rust work items
 
-* **R1 — `open_url`**: `open_url(url, headers, user_agent, timeout_ms,
-  max_retries)` → FFmpeg `Dictionary` (`headers`, `user_agent`,
-  `timeout`, `reconnect*`); surface `networkBytesRead` + demuxer buffered
-  estimate; HLS (`m3u8`) verified where FFmpeg protocol support exists.
-* **R2 — tracks**: `list_streams()` (index/kind/codec/lang/channels/size) +
-  `select_audio_stream(i)` + `select_subtitle_stream(i)` + subtitle
-  demux/decode/render or sidecar `.vtt/.srt` feed to Dart.
-* **R3 — volume**: master gain in cpal callback (`set_volume`), distinct
-  from `setMuted` (all) / `setSourceMuted` (source only).
-* **R4 — Android zero-copy playback**: port `video_forge_kit`'s
-  MediaCodec→SurfaceTexture path into the `media_forge` video pipeline
-  (continuous `releaseOutputBuffer(render=true)` to the Flutter surface,
-  SW RGBA fallback, `VFP_DISABLE_HW_DECODE` preserved).
-* **R5 — telemetry**: per-stream decoder name, dropped-frame counters,
-  `presentedFps`/`decodedFps` from Rust, socket bytes, stall events.
+* **R1 — `open_url`: DONE.** `open_url(url, NetworkOptions{headers,
+  user_agent, timeout_ms, reconnect})` → FFmpeg dict (`headers`,
+  `user_agent`, `rw_timeout`, `reconnect*`, `protocol_whitelist`,
+  boosted probe). `bytesRead` counts demuxed container bytes.
+* **R2 — tracks: DONE (text subtitles).** `list_streams()` +
+  `select_audio_stream` / `select_video_stream` / `select_subtitle_stream`
+  (±sidecar `open/close_external_subtitle`, delay, enable, poll).
+  Bitmap subtitle rendering still open.
+* **R3 — volume: DONE.** Master gain in the cpal callback (`set_volume`),
+  distinct from `setMuted` (all) / `setSourceMuted` (source only).
+* **R4 — Android HW: decode DONE, device validation PENDING.**
+  MediaCodec `hw_device_ctx` + `get_format` + `transfer_to_sw` (NV12) +
+  `JNI_OnLoad` registration, mirroring `video_forge`. Presentation still
+  uploads frames; Java MediaCodec → SurfaceTexture zero-copy is future.
+* **R5 — telemetry: DONE (demuxed-bytes basis).** Decoder label,
+  dropped-frame counters, buffered-ahead, read bitrate, cue backlog,
+  selected indices. Socket-level bytes not reported.
 
 ## Test strategy
 

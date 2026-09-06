@@ -31,10 +31,11 @@ Sources: `MediaForgeMedia.file(...)`, `.network(...)`, `.asset(...)`.
 
 ## Network design (PeerStream)
 
-FFmpeg inside `media_forge` reads HTTP URLs directly, so seeking issues
-HTTP Range requests against localhost torrent servers. Dart never fetches
-bytes or pushes them over FFI. Custom headers are stored on the source and
-logged; header forwarding lands with the engine `open_url` work item below.
+FFmpeg inside `media_forge` reads HTTP URLs directly via `openUrl` with
+`NetworkOptions` (headers, user-agent, timeout, reconnect, HLS-friendly
+protocol whitelist), so seeking issues HTTP Range requests against
+localhost torrent servers. Dart never fetches bytes or pushes them over
+FFI.
 
 ## What is reused vs new
 
@@ -48,32 +49,53 @@ Reused (depend, do not copy):
   `GpuTextureView`.
 * `video_forge_editor`: `PlaybackBackend` interface patterns (open/play/pause/
   seek/trim/mute/rate) informed the controller shape.
+* `video_forge`: MediaCodec `hw_device_ctx` + `get_format` + `JNI_OnLoad`
+  pattern informed the Android HW path in `media_forge`.
+
+New in the engine (`media_forge`, this branch):
+
+* `openUrl(url, NetworkOptions)` — headers, user-agent, timeout, reconnect,
+  redirect/HLS-friendly options; direct FFmpeg reads (Range preserved).
+* `listStreams()` — video/audio/subtitle table (codec, language, title,
+  bitrate, dimensions, channels/rate, default/forced).
+* `selectAudioStream` / `selectVideoStream` — live switching via params +
+  decoder epoch + re-seek through the normal Flush machinery.
+* Embedded subtitle worker (text/ASS → cues, bitmap timing only) +
+  `selectSubtitleStream(-1 = off)`, `setSubtitleDelayMs`,
+  `setSubtitlesEnabled`, `pollSubtitleText`.
+* `openExternalSubtitle` / `closeExternalSubtitle` sidecar sessions.
+* Engine master `setVolume`/`getVolume` gain in the cpal mixer.
+* Android MediaCodec `hw_device_ctx` decode (H.264/HEVC/VP9/AV1) with
+  transfer-to-SW presentation + `av_jni_set_java_vm` registration.
+* Extended `DiagnosticsSnapshot`: bytes read, read bitrate, buffered
+  duration, dropped frames, active decoder + HW flag, cue backlog,
+  selected indices.
 
 New in this package:
 
-* `MediaForgeMedia` source abstraction (file/network/asset).
+* `MediaForgeMedia` source abstraction (file/network/asset, timeout,
+  reconnect, user-agent).
 * `MediaForgePlayerController` (`ValueNotifier<MediaForgePlayerValue>`,
-  play/pause/stop/seek/rate/volume/mute, track selection, vsync loop,
-  500 ms diagnostics, events + diagnostics streams).
-* `MediaForgeVideo` fullscreen-friendly widget.
+  play/pause/stop/seek/rate/volume/mute, live track + subtitle APIs,
+  vsync loop, 500 ms diagnostics, events + diagnostics streams).
+* `MediaForgeVideo` fullscreen-friendly widget with caption overlay.
 * `MediaForgeTexturePresenter` (stable handle, `resizeTexture` in place,
   zero-copy first, BGRA-ready, pool flush on memory pressure).
 * `MediaForgeCapabilities` (probe + fallback flags) and
   `MediaForgeDiagnostics` (drift, FPS, dropped, queue depth, buffered,
-  decoder, HW/SW).
+  decoder, HW/SW, stream bytes).
 
-## Current gaps (engine work items, tracked in docs/ARCHITECTURE.md)
+## Remaining gaps (honest)
 
-1. Engine `open_url(url, headers, timeout)` with HTTP options/HLS headers.
-2. Stream listing + `select_audio/subtitle_track` in Rust (multi-audio,
-   embedded/external subtitles, HLS variants).
-3. Master `set_volume` gain in the cpal callback (v1 maps volume→mute).
-4. Socket stats (`networkBytesRead`) + buffered-duration from the demuxer.
-5. Android MediaCodec→SurfaceTexture zero-copy in the `media_forge` path
-   (today: Apple VT zero-copy + RGBA fallback; Android continuous playback
-   still uploads frames — port the `video_forge_kit`/`pixel_surface`
-   `decodePreviewToSurface` single-frame path to a streaming path).
-6. Per-stream decoder labels in diagnostics (v1 infers from capabilities).
+1. Android MediaCodec path is compiled in with soft SW fallback but needs
+   on-device validation (no Android CI device in this environment).
+2. Bitmap subtitles (dvd/vobsub, pgssub) report timing with empty text —
+   no bitmap rendering yet.
+3. `bytesRead` counts demuxed container bytes, not socket bytes; per-host
+   bandwidth accounting is not reported.
+4. True zero-copy Android presentation (Java MediaCodec → SurfaceTexture)
+   is future work; the current path uploads decoded frames.
+5. Benchmark numbers are not claimed — see `docs/BENCHMARKS.md`.
 
 See `docs/ARCHITECTURE.md`, `docs/SUPPORTED_FORMATS.md`,
 `docs/BENCHMARKS.md`.

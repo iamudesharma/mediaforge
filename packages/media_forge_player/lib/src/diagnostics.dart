@@ -26,6 +26,13 @@ class MediaForgeDiagnostics {
     this.activeDecoder = 'unknown',
     this.hwDecode = false,
     this.networkBytesRead,
+    this.bytesRead = 0,
+    this.readBitrateBps = 0,
+    this.decoderDroppedFrames = 0,
+    this.subtitleCuesPending = 0,
+    this.selectedVideoIndex = -1,
+    this.selectedAudioIndex = -1,
+    this.selectedSubtitleIndex = -1,
   });
 
   final PlaybackState state;
@@ -58,9 +65,25 @@ class MediaForgeDiagnostics {
   final String activeDecoder;
   final bool hwDecode;
 
-  /// Reserved for the future `open_url` engine path that reports socket
-  /// bytes (FFmpeg `avio_size` / interrupt stats). `null` until wired.
+  /// Container bytes demuxed since open (engine reporting).
   final int? networkBytesRead;
+
+  /// Same counter as [networkBytesRead], non-nullable engine field.
+  final int bytesRead;
+
+  /// Demuxed-bytes read bitrate estimate (bits/s).
+  final int readBitrateBps;
+
+  /// Pre-decode video drops reported by the engine (stale + catch-up).
+  final int decoderDroppedFrames;
+
+  /// Cues currently held for polling.
+  final int subtitleCuesPending;
+
+  /// Selected stream indices (−1 = none/off).
+  final int selectedVideoIndex;
+  final int selectedAudioIndex;
+  final int selectedSubtitleIndex;
 
   /// Total decoder queue depth (packets + frames, video + audio).
   int get decoderQueueDepth =>

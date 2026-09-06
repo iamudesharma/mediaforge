@@ -12,6 +12,9 @@ abstract class MediaForgeTrack {
     this.language,
     this.label,
     this.codec,
+    this.bitrate = 0,
+    this.isDefault = false,
+    this.isForced = false,
   });
 
   /// Stable id for [MediaForgePlayerController.selectAudioTrack] etc.
@@ -21,6 +24,11 @@ abstract class MediaForgeTrack {
   final String? language;
   final String? label;
   final String? codec;
+
+  /// Bits per second (0 when the container does not report it).
+  final int bitrate;
+  final bool isDefault;
+  final bool isForced;
 }
 
 /// Audio track discovered in the opened media.
@@ -31,6 +39,9 @@ class MediaForgeAudioTrack extends MediaForgeTrack {
     super.language,
     super.label,
     super.codec,
+    super.bitrate,
+    super.isDefault,
+    super.isForced,
     this.channels,
     this.sampleRate,
   }) : super(kind: MediaTrackKind.audio);
@@ -47,6 +58,9 @@ class MediaForgeSubtitleTrack extends MediaForgeTrack {
     super.language,
     super.label,
     super.codec,
+    super.bitrate,
+    super.isDefault,
+    super.isForced,
     this.isEmbedded = true,
     this.externalUri,
   }) : super(kind: MediaTrackKind.subtitle);
@@ -66,6 +80,9 @@ class MediaForgeVideoTrack extends MediaForgeTrack {
     super.language,
     super.label,
     super.codec,
+    super.bitrate,
+    super.isDefault,
+    super.isForced,
     this.width,
     this.height,
   }) : super(kind: MediaTrackKind.video);

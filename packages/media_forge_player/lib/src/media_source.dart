@@ -14,12 +14,15 @@ sealed class MediaForgeMedia {
 
   /// Seekable HTTP/HTTPS URL, including localhost range servers.
   ///
-  /// [headers] are stored on the source and forwarded to the engine once
-  /// `media_forge` gains an `open_url` with options (v1 logs them and
-  /// opens the URL directly; FFmpeg sends default Range headers).
+  /// [headers] are forwarded to FFmpeg's HTTP reader. [timeout] bounds the
+  /// open handshake; [reconnect] enables libavformat reconnect options for
+  /// flaky links (HLS/live).
   const factory MediaForgeMedia.network(
     String url, {
     Map<String, String> headers,
+    String userAgent,
+    Duration timeout,
+    bool reconnect,
   }) = MediaForgeNetwork._;
 
   /// Flutter asset (`assets/...` or `packages/...`). Copied to a temp file
@@ -37,10 +40,18 @@ final class MediaForgeFile extends MediaForgeMedia {
 /// Seekable network source.
 @immutable
 final class MediaForgeNetwork extends MediaForgeMedia {
-  const MediaForgeNetwork._(this.url, {this.headers = const {}})
-    : assert(url.length > 0);
+  const MediaForgeNetwork._(
+    this.url, {
+    this.headers = const {},
+    this.userAgent = '',
+    this.timeout = Duration.zero,
+    this.reconnect = false,
+  }) : assert(url.length > 0);
   final String url;
   final Map<String, String> headers;
+  final String userAgent;
+  final Duration timeout;
+  final bool reconnect;
 
   /// `true` for PeerStream-style localhost servers.
   bool get isLoopback {

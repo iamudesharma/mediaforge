@@ -34,9 +34,11 @@
 ## v1 status
 
 No numbers are claimed here — fixtures and CI devices vary. The
-diagnostics plumbing (`MediaForgeDiagnostics`, `debugStats`, Range
-contract test) is the instrumentation this benchmark runs on. Fill the
-table below with measured runs before publishing:
+diagnostics plumbing (`MediaForgeDiagnostics`: `bytesRead`,
+`readBitrateBps`, `bufferedDurationMs`, engine `decoderDroppedFrames`,
+`activeDecoder`/`hwDecode`, `decoderQueueDepth`, A/V drift, plus the
+localhost Range contract test) is the instrumentation this benchmark
+runs on. Fill the table below with measured runs before publishing:
 
 | Fixture | Path | CPU | Mem Δ | Dropped | presFps | Seek p95 | Drift p95 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
