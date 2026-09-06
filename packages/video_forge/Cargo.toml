@@ -16,7 +16,7 @@ uuid = { version = "1.11", features = ["v4"] }
 parking_lot = "0.12"
 mp4parse = "0.17.0"
 memmap2 = "0.9.10"
-flutter_rust_bridge = "2.12.0"
+flutter_rust_bridge = "2.13.0"
 ffmpeg-next = "8.1.0"
 log = "0.4"
 env_logger = "0.11"

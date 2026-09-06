@@ -15,7 +15,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_rust_bridge: 2.12.0
+  flutter_rust_bridge: ^2.13.0
   video_forge:
     path: ../video_forge
   crypto: ^3.0.6

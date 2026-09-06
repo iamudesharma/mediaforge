@@ -16,7 +16,7 @@ dependencies:
     sdk: flutter
   image_forge:
   pixel_surface:
-  flutter_rust_bridge: 2.12.0
+  flutter_rust_bridge: ^2.13.0
   camera: ^0.11.1
   permission_handler: ^11.4.0
 

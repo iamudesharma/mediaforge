@@ -179,6 +179,22 @@ After editing `rust/src/api/*.rs`, regenerate Dart bindings:
 
 FRB config per package: `flutter_rust_bridge.yaml` (rust_input: `crate::api`, dart_output varies by package).
 
+**Version lockstep (hard requirement):** FRB refuses to initialize when versions
+differ (`codegen version X should be the same as runtime version Y`), which
+surfaces in apps as "Rust initialization failed" with a Default-backend
+fallback. The Dart `^x.y.z` constraint allows drift, so when upgrading, bump
+all three together and re-verify: (1) the codegen binary
+(`cargo install flutter_rust_bridge_codegen --version '=X.Y.Z'`), (2) every Rust
+`flutter_rust_bridge = "=X.Y.Z"` pin (four crates plus `video/Cargo.toml`
+workspace deps), (3) every Dart `flutter_rust_bridge: ^X.Y.Z` constraint
+(including `benchmark/` and `packages/*/example/` or `dart pub get` fails) —
+then regenerate **all four** FRB packages (codegen 2.13+ deletes unowned
+`*.freezed.dart` files in the output dir; restore via git and re-run
+`build_runner` if `@freezed` models are still referenced) and run each
+package's Rust (`cargo test`) + Dart (`flutter analyze`, `flutter test`).
+Never leave generated code at version N while the lockfile resolves the
+runtime to N+1.
+
 ## **media_forge: real-time audio mixing**
 
 `media_forge` provides real-time overlay audio mixing via cpal (cross-platform audio I/O). The cpal callback mixes source video audio with overlay tracks in-process.
