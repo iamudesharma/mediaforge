@@ -16,6 +16,7 @@ export 'src/capabilities.dart';
 export 'src/diagnostics.dart';
 export 'src/media_source.dart';
 export 'src/player_controller.dart';
+export 'src/player_ui/player_ui.dart';
 export 'src/player_value.dart';
 export 'src/texture_presenter.dart';
 export 'src/track_info.dart';

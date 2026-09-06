@@ -194,8 +194,16 @@ class MediaForgeTexturePresenter {
   void dispose() {
     _disposed = true;
     disposeTexture();
-    textureId.dispose();
-    frameSize.dispose();
-    cpuImage.dispose();
+    // NOTE: the ValueNotifiers are intentionally left undisposed. Widgets
+    // (MediaForgeVideo, captions) may still be mounted during route
+    // transitions when the controller is released; notifying/disposed
+    // asserts would crash them. The notifiers hold no native resources
+    // and are GC-safe once unreferenced — only the GPU texture needs
+    // explicit release (above).
+    textureId.value = null;
+    frameSize.value = Size.zero;
+    final old = cpuImage.value;
+    cpuImage.value = null;
+    old?.dispose();
   }
 }

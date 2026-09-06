@@ -23,8 +23,10 @@ class MediaForgePlayerValue {
     this.errorDescription,
     this.audioTracks = const [],
     this.subtitleTracks = const [],
+    this.videoTracks = const [],
     this.selectedAudioTrackId,
     this.selectedSubtitleTrackId,
+    this.selectedVideoTrackId,
     this.subtitleDelay = Duration.zero,
     this.subtitlesEnabled = true,
   });
@@ -51,6 +53,10 @@ class MediaForgePlayerValue {
 
   final List<MediaForgeAudioTrack> audioTracks;
   final List<MediaForgeSubtitleTrack> subtitleTracks;
+
+  /// Discovered video tracks (codec/dims for the info panel).
+  final List<MediaForgeVideoTrack> videoTracks;
+  final int? selectedVideoTrackId;
   final int? selectedAudioTrackId;
   final int? selectedSubtitleTrackId;
 
@@ -91,12 +97,15 @@ class MediaForgePlayerValue {
     bool clearError = false,
     List<MediaForgeAudioTrack>? audioTracks,
     List<MediaForgeSubtitleTrack>? subtitleTracks,
+    List<MediaForgeVideoTrack>? videoTracks,
     int? selectedAudioTrackId,
     int? selectedSubtitleTrackId,
+    int? selectedVideoTrackId,
     Duration? subtitleDelay,
     bool? subtitlesEnabled,
     bool clearAudioSelection = false,
     bool clearSubtitleSelection = false,
+    bool clearVideoSelection = false,
   }) {
     return MediaForgePlayerValue(
       isInitialized: isInitialized ?? this.isInitialized,
@@ -116,12 +125,16 @@ class MediaForgePlayerValue {
           clearError ? null : (errorDescription ?? this.errorDescription),
       audioTracks: audioTracks ?? this.audioTracks,
       subtitleTracks: subtitleTracks ?? this.subtitleTracks,
+      videoTracks: videoTracks ?? this.videoTracks,
       selectedAudioTrackId: clearAudioSelection
           ? null
           : (selectedAudioTrackId ?? this.selectedAudioTrackId),
       selectedSubtitleTrackId: clearSubtitleSelection
           ? null
           : (selectedSubtitleTrackId ?? this.selectedSubtitleTrackId),
+      selectedVideoTrackId: clearVideoSelection
+          ? null
+          : (selectedVideoTrackId ?? this.selectedVideoTrackId),
       subtitleDelay: subtitleDelay ?? this.subtitleDelay,
       subtitlesEnabled: subtitlesEnabled ?? this.subtitlesEnabled,
     );
@@ -146,13 +159,15 @@ class MediaForgePlayerValue {
       other.errorDescription == errorDescription &&
       listEquals(other.audioTracks, audioTracks) &&
       listEquals(other.subtitleTracks, subtitleTracks) &&
+      listEquals(other.videoTracks, videoTracks) &&
       other.selectedAudioTrackId == selectedAudioTrackId &&
       other.selectedSubtitleTrackId == selectedSubtitleTrackId &&
+      other.selectedVideoTrackId == selectedVideoTrackId &&
       other.subtitleDelay == subtitleDelay &&
       other.subtitlesEnabled == subtitlesEnabled;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
         isInitialized,
         isPlaying,
         isBuffering,
@@ -169,9 +184,11 @@ class MediaForgePlayerValue {
         errorDescription,
         Object.hashAll(audioTracks),
         Object.hashAll(subtitleTracks),
+        Object.hashAll(videoTracks),
         selectedAudioTrackId,
         selectedSubtitleTrackId,
+        selectedVideoTrackId,
         subtitleDelay,
         subtitlesEnabled,
-      );
+      ]);
 }

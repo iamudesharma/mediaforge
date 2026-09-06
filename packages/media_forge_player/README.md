@@ -29,6 +29,46 @@ MediaForgeVideo(controller: controller, fit: BoxFit.contain)
 
 Sources: `MediaForgeMedia.file(...)`, `.network(...)`, `.asset(...)`.
 
+## Player UI (`player_ui/`)
+
+A complete VLC-grade player experience that consumes only the public
+controller/value/diagnostics APIs:
+
+```dart
+MediaPlayerScreen(
+  controller: controller,
+  title: 'Big Buck Bunny',
+  onPickExternalSubtitle: pickSrtFile, // app file picker, optional
+  torrentStats: peerStreamStats,        // ValueListenable, optional
+  onPrevious: playPrevious,             // playlist hooks, optional
+  onNext: playNext,
+  onToggleFullscreen: toggleFullscreen,
+  onPictureInPicture: enterPip,
+)
+```
+
+* Immersive auto-hiding chrome (top bar + timeline + transport).
+* Center play/pause/±10s, double-tap seek, tap to show/hide, horizontal
+  drag scrub with preview, right-side vertical drag volume, mouse-wheel
+  volume, right-click context menu (desktop).
+* VLC/mpv shortcuts: Space, ←/→/J/L seek, ↑/↓ volume, M mute, F
+  fullscreen, S subtitles toggle, A audio panel, +/− speed, Home/End,
+  Esc.
+* Settings (bottom sheet / side panel): speed presets, repeat, fit
+  (fit/fill/stretch/1:1), display rotation, A/V drift readout, full
+  audio-track list with metadata, subtitle tracks + delay + appearance
+  (size/bold/background/position), detected video info.
+* Media information panel: source, video/audio/subtitle details,
+  playback stats (FPS, dropped, queues, buffered, drift, bytes,
+  bitrate, render path) plus an optional app-provided swarm section.
+* Streaming states: loading, buffering/seeking spinners, error card
+  with retry, end-of-stream replay.
+
+Every control maps to a real engine capability. Deliberately absent
+(no engine support): audio delay, brightness, cast, container/chapter/
+thumbnail metadata (chapters + thumbnails are optional app-injected
+hooks instead), HDR/pixel-format metadata.
+
 ## Network design (PeerStream)
 
 FFmpeg inside `media_forge` reads HTTP URLs directly via `openUrl` with

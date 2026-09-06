@@ -16,7 +16,12 @@ class PlayerExampleApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'media_forge_player',
-      theme: ThemeData.dark(),
+      theme: ThemeData.dark().copyWith(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF4EDEA3),
+          brightness: Brightness.dark,
+        ),
+      ),
       home: const PlayerPage(),
     );
   }
@@ -35,39 +40,38 @@ class _PlayerPageState extends State<PlayerPage> {
   final _url = TextEditingController(
     text: 'http://127.0.0.1:8080/stream',
   );
-  String _diag = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(_onValue);
-    _controller.diagnostics.listen((d) {
-      if (mounted) setState(() => _diag = d.toString());
-    });
-  }
-
-  void _onValue() {
-    if (mounted) setState(() {});
-  }
+  String _fileName = '';
 
   Future<void> _pickFile() async {
     final r =
         await FilePicker.platform.pickFiles(type: FileType.video);
     final path = r?.files.single.path;
     if (path == null) return;
+    setState(() => _fileName = r?.files.single.name ?? path);
     await _controller.open(MediaForgeMedia.file(path), play: true);
   }
 
   Future<void> _openUrl() async {
+    final url = _url.text.trim();
+    setState(() => _fileName = url);
     await _controller.open(
-      MediaForgeMedia.network(_url.text.trim()),
+      MediaForgeMedia.network(url, reconnect: true),
       play: true,
     );
   }
 
+  Future<Uri?> _pickSubtitle() async {
+    final r = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['srt', 'vtt', 'ass', 'ssa'],
+    );
+    final path = r?.files.single.path;
+    if (path == null) return null;
+    return Uri.file(path);
+  }
+
   @override
   void dispose() {
-    _controller.removeListener(_onValue);
     _controller.dispose();
     _url.dispose();
     super.dispose();
@@ -75,117 +79,54 @@ class _PlayerPageState extends State<PlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final v = _controller.value;
     return Scaffold(
-      appBar: AppBar(title: const Text('media_forge_player')),
-      body: Column(
-        children: [
-          AspectRatio(
-            aspectRatio: v.aspectRatio,
-            child: MediaForgeVideo(controller: _controller),
-          ),
-          Slider(
-            min: 0,
-            max: v.duration.inMilliseconds.toDouble().clamp(1, 1e12),
-            value: v.position.inMilliseconds
-                .toDouble()
-                .clamp(0, v.duration.inMilliseconds.toDouble().clamp(1, 1e12)),
-            onChanged: (ms) =>
-                _controller.seek(Duration(milliseconds: ms.round())),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                icon: Icon(
-                    v.isPlaying ? Icons.pause : Icons.play_arrow),
-                onPressed: () =>
-                    v.isPlaying ? _controller.pause() : _controller.play(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.stop),
-                onPressed: _controller.stop,
-              ),
-              IconButton(
-                icon: Icon(v.isMuted ? Icons.volume_off : Icons.volume_up),
-                onPressed: () => _controller.setMuted(!v.isMuted),
-              ),
-              Expanded(
-                child: Slider(
-                  min: 0,
-                  max: 1,
-                  value: v.volume,
-                  onChanged: (x) => _controller.setVolume(x),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('media_forge_player'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.link_outlined),
+            tooltip: 'Open stream URL',
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => AlertDialog(
+                title: const Text('Open network stream'),
+                content: TextField(
+                  controller: _url,
+                  decoration: const InputDecoration(
+                    hintText: 'http://127.0.0.1:8080/stream',
+                  ),
                 ),
-              ),
-            ],
-          ),
-          if (v.audioTracks.isNotEmpty || v.subtitleTracks.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  if (v.audioTracks.isNotEmpty)
-                    Expanded(
-                      child: DropdownButton<int?>(
-                        value: v.selectedAudioTrackId,
-                        hint: const Text('Audio'),
-                        isExpanded: true,
-                        items: v.audioTracks
-                            .map((t) => DropdownMenuItem<int?>(
-                                  value: t.id,
-                                  child: Text(
-                                      t.label ?? t.language ?? 'Track ${t.id}'),
-                                ))
-                            .toList(),
-                        onChanged: (id) => _controller.selectAudioTrack(id),
-                      ),
-                    ),
-                  if (v.subtitleTracks.isNotEmpty) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: DropdownButton<int?>(
-                        value: v.selectedSubtitleTrackId,
-                        hint: const Text('Subtitles off'),
-                        isExpanded: true,
-                        items: [
-                          const DropdownMenuItem<int?>(
-                              value: null, child: Text('Off')),
-                          ...v.subtitleTracks.map((t) =>
-                              DropdownMenuItem<int?>(
-                                value: t.id,
-                                child: Text(t.label ??
-                                    t.language ??
-                                    'Track ${t.id}'),
-                              )),
-                        ],
-                        onChanged: (id) =>
-                            _controller.selectSubtitleTrack(id),
-                      ),
-                    ),
-                  ],
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      _openUrl();
+                    },
+                    child: const Text('Open'),
+                  ),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(child: TextField(controller: _url)),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                    onPressed: _openUrl, child: const Text('Open URL')),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                    onPressed: _pickFile, child: const Text('File')),
-              ],
-            ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(_diag, style: const TextStyle(fontSize: 11)),
+          IconButton(
+            icon: const Icon(Icons.video_library_outlined),
+            tooltip: 'Open file',
+            onPressed: _pickFile,
           ),
         ],
+      ),
+      body: MediaPlayerScreen(
+        controller: _controller,
+        title: _fileName.isEmpty ? 'No media' : _fileName,
+        subtitle: _fileName.isEmpty
+            ? 'Open a file or stream to start'
+            : null,
+        onPickExternalSubtitle: _pickSubtitle,
       ),
     );
   }

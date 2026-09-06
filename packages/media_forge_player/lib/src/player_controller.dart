@@ -175,8 +175,10 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
         isCompleted: false,
         audioTracks: const [],
         subtitleTracks: const [],
-        selectedAudioTrackId: null,
-        selectedSubtitleTrackId: null,
+        videoTracks: const [],
+        clearAudioSelection: true,
+        clearSubtitleSelection: true,
+        clearVideoSelection: true,
       );
       await _refreshTracks();
       // Push retained audio state into the fresh engine session.
@@ -375,6 +377,7 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     }
     final audio = <MediaForgeAudioTrack>[];
     final subs = <MediaForgeSubtitleTrack>[];
+    final videos = <MediaForgeVideoTrack>[];
     for (final s in streams) {
       switch (s.kind) {
         case mf.StreamKind.audio:
@@ -404,7 +407,17 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
             isForced: s.isForced,
           ));
         case mf.StreamKind.video:
-          break;
+          videos.add(MediaForgeVideoTrack(
+            id: s.index,
+            language: _nonEmpty(s.language),
+            label: _nonEmpty(s.title) ?? 'Video ${s.index}',
+            codec: s.codecName,
+            bitrate: s.bitrate.toInt(),
+            isDefault: s.isDefault,
+            isForced: s.isForced,
+            width: s.width == 0 ? null : s.width,
+            height: s.height == 0 ? null : s.height,
+          ));
       }
     }
     final external =
@@ -412,9 +425,32 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     value = value.copyWith(
       audioTracks: audio,
       subtitleTracks: [...subs, ...external],
+      videoTracks: videos,
+      clearVideoSelection: value.selectedVideoTrackId != null &&
+          videos.every((t) => t.id != value.selectedVideoTrackId),
     );
     debugPrint('[MediaForgePlayer] tracks audio=${audio.length} '
-        'subtitle=${subs.length} external=${external.length}');
+        'subtitle=${subs.length} video=${videos.length} '
+        'external=${external.length}');
+  }
+
+  /// Select a video track by stream index. Switches the live pipeline.
+  Future<void> selectVideoTrack(int? id) async {
+    if (id != null &&
+        value.videoTracks.isNotEmpty &&
+        value.videoTracks.every((t) => t.id != id)) {
+      throw RangeError('Unknown video track id=$id');
+    }
+    if (id != null && _engineReady) {
+      try {
+        await _engine!.selectVideoStream(index: id);
+      } catch (e, st) {
+        debugPrint('[MediaForgePlayer] selectVideoStream failed: $e\n$st');
+        rethrow;
+      }
+    }
+    value = value.copyWith(selectedVideoTrackId: id);
+    debugPrint('[MediaForgePlayer] video track selected id=$id');
   }
 
   /// Select an audio track by stream index. Switches the live decoder.
