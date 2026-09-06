@@ -332,7 +332,7 @@ If audio sequence appears but source audio is silent while overlay plays, check 
 - `dart run` **does not work** for FRB-based benchmarks or apps. Always use `flutter run` or `flutter test`.
 - **First Android build** compiles Rust for each ABI — can take several minutes.
 - **Melos bootstrap** required after cloning: `dart pub get && dart run melos bootstrap`.
-- **media_forge needs FFmpeg with VideoToolbox** for HW decode on macOS. Run `bash scripts/build-ffmpeg-macos-vt.sh` first, then `bash scripts/run-rust-media-macos.sh`. Homebrew FFmpeg works for SW decode but lacks `hevc_videotoolbox` HW accel.
+- **media_forge needs FFmpeg with VideoToolbox** for HW decode on macOS. Run `bash scripts/build-ffmpeg-macos-vt.sh` first, then `bash scripts/run-rust-media-macos.sh`. Homebrew FFmpeg works for SW decode but lacks `hevc_videotoolbox` HW accel. The script builds **static** archives by default — required for sandboxed/distributed apps (shared dylibs fail at `dlopen` with absolute paths); the build hook prefers the static prefix automatically.
 - **media_forge is not yet in CI** — `.github/workflows/ci.yml` does not include `media_forge` analyze/test steps. Run them manually: `cd packages/media_forge && flutter analyze --no-fatal-infos` and `cd packages/media_forge/rust && cargo test`.
 
 ## **image_forge_editor UI conventions**

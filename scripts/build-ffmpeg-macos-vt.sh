@@ -4,17 +4,33 @@
 # FFmpeg 8 registers VideoToolbox as hwaccel (hevc decoder + hevc_videotoolbox hwaccel),
 # not as standalone decoders named hevc_videotoolbox.
 #
-#   bash scripts/build-ffmpeg-macos-vt.sh
+# Linkage (important for sandboxed/distributed apps): macOS App Sandbox blocks
+# loading dylibs by absolute dev-machine path, so a `--enable-shared` FFmpeg
+# can NEVER ship inside an app bundle. Default here is a STATIC build
+# (`--enable-static --disable-shared --enable-pic`) whose archives link
+# directly into libmedia_forge.dylib — no runtime dylib dependency at all
+# (verify with `otool -L`). Only system libs (/usr/lib) remain dynamic.
+#
+#   bash scripts/build-ffmpeg-macos-vt.sh            # static (default, shippable)
+#   FFMPEG_SHARED=1 bash scripts/build-ffmpeg-macos-vt.sh   # shared (fast dev iteration only)
 #   bash scripts/run-rust-media-macos.sh
 #
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FFMPEG_VERSION="${FFMPEG_VERSION:-8.0}"
-INSTALL_PREFIX="${FFMPEG_INSTALL_PREFIX:-${HOME}/.cache/rust_image/ffmpeg-macos-vt}"
+if [[ "${FFMPEG_SHARED:-0}" == "1" ]]; then
+  INSTALL_PREFIX="${FFMPEG_INSTALL_PREFIX:-${HOME}/.cache/rust_image/ffmpeg-macos-vt}"
+  SHARED_FLAGS=(--enable-shared --disable-static)
+  VARIANT="shared (dev only — NOT shippable in sandboxed apps)"
+else
+  INSTALL_PREFIX="${FFMPEG_INSTALL_PREFIX:-${HOME}/.cache/rust_image/ffmpeg-macos-vt-static}"
+  SHARED_FLAGS=(--disable-shared --enable-static --enable-pic)
+  VARIANT="static (shippable)"
+fi
 BUILD_DIR="${FFMPEG_BUILD_DIR:-${HOME}/.cache/rust_image/ffmpeg-macos-vt-build}"
 
-echo "==> Building FFmpeg ${FFMPEG_VERSION} with VideoToolbox hwaccels"
+echo "==> Building FFmpeg ${FFMPEG_VERSION} with VideoToolbox hwaccels [${VARIANT}]"
 echo "    install prefix=${INSTALL_PREFIX}"
 echo "    build dir=${BUILD_DIR}"
 
@@ -39,8 +55,7 @@ fi
 
 ./configure \
   --prefix="${INSTALL_PREFIX}" \
-  --enable-shared \
-  --disable-static \
+  "${SHARED_FLAGS[@]}" \
   --disable-everything \
   --enable-ffmpeg \
   --disable-ffplay \
@@ -66,7 +81,11 @@ make -j"$(sysctl -n hw.ncpu)"
 make install
 
 CONFIG_H="${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION}/config.h"
-LIBAVCODEC="$(echo "${INSTALL_PREFIX}"/lib/libavcodec.*)"
+if [[ "${FFMPEG_SHARED:-0}" == "1" ]]; then
+  LIBAVCODEC="$(ls "${INSTALL_PREFIX}"/lib/libavcodec.*.dylib 2>/dev/null | head -1)"
+else
+  LIBAVCODEC="${INSTALL_PREFIX}/lib/libavcodec.a"
+fi
 verify_ok=0
 
 # FFmpeg 8: -hwaccels lists the device ("videotoolbox"), not per-codec names.
@@ -92,6 +111,9 @@ if [[ "${verify_ok}" -eq 0 ]]; then
 fi
 
 REPO_LINK="${REPO_ROOT}/tools/ffmpeg/dist/macos-vt"
+if [[ "${FFMPEG_SHARED:-0}" != "1" ]]; then
+  REPO_LINK="${REPO_ROOT}/tools/ffmpeg/dist/macos-vt-static"
+fi
 mkdir -p "$(dirname "${REPO_LINK}")"
 ln -sfn "${INSTALL_PREFIX}" "${REPO_LINK}"
 

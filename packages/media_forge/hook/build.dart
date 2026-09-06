@@ -184,7 +184,20 @@ void _applyFfmpegDistEnv(
     return;
   }
   final home = Platform.environment['HOME'];
+  // Static prefixes FIRST: archives link into the cdylib, leaving no
+  // runtime dylib dependency (required for sandboxed/distributed apps —
+  // absolute-path .dylib loads are sandbox-blocked). Shared prefixes are
+  // a fast-iteration fallback for local dev only.
   final candidates = <String>[
+    if (home != null && home.isNotEmpty)
+      p.join(home, '.cache', 'rust_image', 'ffmpeg-macos-vt-static'),
+    p.join(
+      workspaceRoot.toFilePath(),
+      'tools',
+      'ffmpeg',
+      'dist',
+      'macos-vt-static',
+    ),
     if (home != null && home.isNotEmpty)
       p.join(home, '.cache', 'rust_image', 'ffmpeg-macos-vt'),
     p.join(
@@ -224,9 +237,46 @@ void _applyFfmpegDistEnv(
           ? pkgConfig
           : '$pkgConfig:$existing';
     }
-    stderr.writeln('media_forge: using FFMPEG_DIR=$dir');
+    final staticLibs = _isStaticFfmpegDir(dir);
+    if (staticLibs) {
+      // Static archives don't carry their system deps (shared dylibs do
+      // via LC_LOAD_DYLIB). avformat/avcodec need these; all /usr/lib
+      // system libs, safe under App Sandbox.
+      const args = ' -C link-arg=-lbz2 -C link-arg=-lz -C link-arg=-liconv';
+      final existing = env['RUSTFLAGS'] ?? '';
+      if (!existing.contains('link-arg=-lz')) {
+        env['RUSTFLAGS'] = '$existing$args';
+      }
+    }
+    stderr.writeln(
+        'media_forge: using FFMPEG_DIR=$dir (static=$staticLibs)');
+    if (!staticLibs) {
+      stderr.writeln(
+        'media_forge: WARNING: shared FFmpeg dylibs load by absolute path '
+        'and fail dlopen() in sandboxed/distributed apps. For a shippable '
+        'build, run scripts/build-ffmpeg-macos-vt.sh (static default).',
+      );
+    }
     return;
   }
+}
+
+/// True when [dir]/lib holds static archives without shared dylibs.
+bool _isStaticFfmpegDir(String dir) {
+  final libDir = Directory(p.join(dir, 'lib'));
+  if (!libDir.existsSync()) return false;
+  var hasArchive = false;
+  var hasDylib = false;
+  for (final entity in libDir.listSync()) {
+    final name = p.basename(entity.path);
+    if (name.startsWith('libavcodec.') || name.startsWith('libavutil.')) {
+      if (name.endsWith('.a')) hasArchive = true;
+      if (name.endsWith('.dylib') || name.contains('.dylib.')) {
+        hasDylib = true;
+      }
+    }
+  }
+  return hasArchive && !hasDylib;
 }
 
 Future<String?> _cargoBuild({
@@ -249,6 +299,26 @@ Future<String?> _cargoBuild({
   final env = _cargoEnvironment();
   if (os == OS.macOS || os == OS.iOS) {
     _applyFfmpegDistEnv(env, workspaceRoot, triple);
+    // Explicit FFMPEG_DIR pointing at static archives needs the same
+    // system link args (the auto-detect path above already added them).
+    final explicit = env['FFMPEG_DIR'];
+    if (explicit != null &&
+        explicit.isNotEmpty &&
+        _isStaticFfmpegDir(explicit)) {
+      const args = ' -C link-arg=-lbz2 -C link-arg=-lz -C link-arg=-liconv';
+      final existing = env['RUSTFLAGS'] ?? '';
+      if (!existing.contains('link-arg=-lz')) {
+        env['RUSTFLAGS'] = '$existing$args';
+      }
+      stderr.writeln(
+          'media_forge: static FFMPEG_DIR detected, added system link args');
+    } else if (explicit != null && explicit.isNotEmpty) {
+      stderr.writeln(
+        'media_forge: WARNING: explicit FFMPEG_DIR=$explicit is shared; '
+        'the bundled binary will fail dlopen() in sandboxed apps. '
+        'Use a static prefix (scripts/build-ffmpeg-macos-vt.sh).',
+      );
+    }
   }
 
   final result = await Process.run(
