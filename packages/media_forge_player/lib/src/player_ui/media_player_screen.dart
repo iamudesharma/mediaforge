@@ -710,13 +710,18 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                             !(value.isBuffering &&
                                 value.isPlaying) &&
                             value.isInitialized)
-                          CenterPlaybackControls(
-                            isPlaying: value.isPlaying,
-                            onPlayPause: _togglePlayPause,
-                            onReplay10: () => _seekBy(
-                                const Duration(seconds: -10)),
-                            onForward10: () => _seekBy(
-                                const Duration(seconds: 10)),
+                          // Center wrapper is load-bearing: a bare Row
+                          // child of StackFit.expand fills the width and
+                          // packs its buttons to the left edge.
+                          Center(
+                            child: CenterPlaybackControls(
+                              isPlaying: value.isPlaying,
+                              onPlayPause: _togglePlayPause,
+                              onReplay10: () => _seekBy(
+                                  const Duration(seconds: -10)),
+                              onForward10: () => _seekBy(
+                                  const Duration(seconds: 10)),
+                            ),
                           ),
                         _StateLayer(
                           value: value,

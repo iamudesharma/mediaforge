@@ -86,6 +86,27 @@ void main() {
       await endTest(tester, controller);
     });
 
+    testWidgets('center controls are horizontally centered',
+        (tester) async {
+      final (controller, _) = makeOpen();
+      await controller.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/v'),
+      );
+      await pumpScreen(tester, controller);
+
+      // Default 800x600 test surface: the middle (play) button of the
+      // cluster must sit mid-screen. (Asserting on the button, not the
+      // Row: a bare Row child of StackFit.expand fills the width even
+      // when its buttons pack against the left edge.)
+      final playButton = find.descendant(
+        of: find.byType(CenterPlaybackControls),
+        matching: find.byIcon(Icons.play_arrow),
+      );
+      expect(playButton, findsOneWidget);
+      expect(tester.getCenter(playButton).dx, closeTo(400, 4));
+      await endTest(tester, controller);
+    });
+
     testWidgets('timeline drag commits a seek', (tester) async {
       final (controller, fake) = makeOpen();
       await controller.open(
