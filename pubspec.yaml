@@ -23,6 +23,8 @@ workspace:
   - packages/video_forge_cache
   - packages/media_forge
   - packages/media_forge/example
+  - packages/media_forge_player
+  - packages/media_forge_player/example
   - examples/media_studio
   - examples/image_editor
   - benchmark

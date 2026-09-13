@@ -224,7 +224,7 @@ print('hevc_videotoolbox=${caps.hevcVideotoolbox}');
 | `PacketQueue` | Custom packet queue for pipeline experiments |
 | `MediaVideoFrame` / `AudioFrame` | Decoded frame data |
 | `DiagnosticsSnapshot` | Full runtime snapshot from Rust |
-| `PlaybackState` | `idle`, `playing`, `paused`, `seeking`, `ended` |
+| `PlaybackState` | `idle`, `playing`, `paused`, `seeking`, `ended`, `rebuffering` |
 
 ### Flutter presentation layer
 
@@ -261,6 +261,21 @@ export FFMPEG_DIR="/path/to/ffmpeg/prefix"
 export PKG_CONFIG_PATH="$FFMPEG_DIR/lib/pkgconfig"
 flutter run
 ```
+
+> **Distribution / App Sandbox:** the bundled `libmedia_forge` must NOT
+> depend on FFmpeg `.dylib` files — macOS App Sandbox blocks absolute-path
+> `dlopen` and the failure surfaces as "Rust initialization failed".
+> Always build against the **static** prefix so the archives link into the
+> binary (verify with `otool -L libmedia_forge.dylib`: only `/usr/lib` and
+> `/System/Library/Frameworks` entries may remain):
+>
+> ```bash
+> bash scripts/build-ffmpeg-macos-vt.sh   # static by default (shippable)
+> ```
+>
+> The build hook prefers `ffmpeg-macos-vt-static` automatically and adds
+> the required system link args (`-lbz2 -lz -liconv`). `FFMPEG_SHARED=1`
+> selects the shared prefix — local dev iteration only, never ship it.
 
 ### 3. Apple VideoToolbox (macOS / iOS, 4K HEVC)
 

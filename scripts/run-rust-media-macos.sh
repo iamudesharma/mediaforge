@@ -32,7 +32,7 @@ ffmpeg_prefix_valid() {
 probe_vt_in_prefix() {
   local dir="$1"
   local libav
-  libav="$(find "${dir}/lib" -maxdepth 1 \( -name 'libavcodec*.dylib' -o -name 'libavcodec*.so' \) 2>/dev/null | head -1)"
+  libav="$(find "${dir}/lib" -maxdepth 1 \( -name 'libavcodec*.dylib' -o -name 'libavcodec*.so' -o -name 'libavcodec.a' \) 2>/dev/null | head -1)"
   if [[ -n "${libav}" && -f "${libav}" ]] \
     && strings "${libav}" 2>/dev/null | grep -q hevc_videotoolbox; then
     return 0
@@ -42,6 +42,8 @@ probe_vt_in_prefix() {
 
 if [[ -z "${FFMPEG_DIR:-}" ]]; then
   for candidate in \
+    "${HOME}/.cache/rust_image/ffmpeg-macos-vt-static" \
+    "${TOOLS}/ffmpeg/dist/macos-vt-static" \
     "${HOME}/.cache/rust_image/ffmpeg-macos-vt" \
     "${TOOLS}/ffmpeg/dist/macos-vt" \
     "${TOOLS}/ffmpeg/dist/apple/${TRIPLE}" \

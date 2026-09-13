@@ -89,7 +89,8 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
         fun release(bitmap: Bitmap) {
             if (bitmap.isRecycled) return
             synchronized(lock) {
-                val key = Key(bitmap.width, bitmap.height, bitmap.config)
+                val key = Key(bitmap.width, bitmap.height,
+                    bitmap.config ?: Bitmap.Config.ARGB_8888)
                 val list = pools.getOrPut(key) { mutableListOf() }
                 if (list.size < 3) {
                     list.add(bitmap)
@@ -317,11 +318,13 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
     }
 
     private fun uploadFastPath(bitmap: Bitmap, pixels: ByteArray, layout: Layout) {
-        if (layout == Layout.Rgba8888) {
-            // Tightly packed RGBA8888 bytes upload directly to the native config.
+        // ARGB_8888 bitmaps are B,G,R,A byte order in memory (little-endian),
+        // so only BGRA8888 uploads directly; RGBA8888 must swap Red/Blue first
+        // (mirrors uploadLegacy, which normalizes both layouts to ARGB words).
+        if (layout == Layout.Bgra8888) {
             bitmap.copyPixelsFromBuffer(ByteBuffer.wrap(pixels))
         } else {
-            // For BGRA8888, swap Red and Blue bytes in-place.
+            // For RGBA8888, swap Red and Blue bytes in-place.
             for (i in 0 until pixels.size step 4) {
                 val b = pixels[i]
                 pixels[i] = pixels[i + 2]
@@ -442,18 +445,14 @@ class RustGpuTexturePlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Com
     }
 
     /**
-     * Allocate the backing bitmap. API 26+ uses `RGBA_8888` so callers can
-     * push pixels via `copyPixelsFromBuffer` directly. API 21–25 uses
-     * `ARGB_8888` (the only four-channel config available before O) and
-     * relies on the legacy `IntArray` swizzle path.
+     * Allocate the backing bitmap. Always `ARGB_8888`: it is the only 8-bit
+     * four-channel config on every API level (`Bitmap.Config` has no
+     * `RGBA_8888` — verified against API 34/35/36 android.jar, which only
+     * carry `ARGB_8888`, `RGBA_F16`, `RGBA_1010102`). Upload paths normalize
+     * both layouts to this config (see [uploadFastPath], [uploadLegacy]).
      */
     private fun createBackingBitmap(width: Int, height: Int): Bitmap {
-        val config = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Bitmap.Config.RGBA_8888
-        } else {
-            Bitmap.Config.ARGB_8888
-        }
-        return bitmapPool.acquire(width, height, config)
+        return bitmapPool.acquire(width, height, Bitmap.Config.ARGB_8888)
     }
 
     // ----- Memory pressure handling -------------------------------------------

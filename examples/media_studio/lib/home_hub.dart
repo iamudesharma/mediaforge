@@ -174,13 +174,20 @@ class _HomeHubState extends State<HomeHub> {
     }
   }
 
-  Future<void> _launchVideoCreator(String path, {String? displayName}) async {
+  Future<void> _launchVideoCreator(
+    String path, {
+    String? displayName,
+    Duration? initialPosition,
+    String? cacheKey,
+  }) async {
     final result = await Navigator.push<VideoExportResult?>(
       context,
       MaterialPageRoute(
         builder: (context) => VideoEditorFlow(
           initialPath: path,
           displayName: displayName,
+          initialPosition: initialPosition,
+          cacheKey: cacheKey,
         ),
       ),
     );
@@ -245,7 +252,14 @@ class _HomeHubState extends State<HomeHub> {
 
       if (ingestResult.phase == MediaIngestPhase.ready && ingestResult.stablePath != null) {
         if (mounted) {
-          await _launchVideoCreator(ingestResult.stablePath!, displayName: 'Big Buck Bunny');
+          await _launchVideoCreator(
+            ingestResult.stablePath!,
+            displayName: 'Big Buck Bunny',
+            initialPosition: ingestResult.resumePositionMs > 0
+                ? Duration(milliseconds: ingestResult.resumePositionMs)
+                : null,
+            cacheKey: ingestResult.cacheKey,
+          );
         }
       } else {
         _showSnack(ingestResult.error ?? 'Ingest failed', error: true);

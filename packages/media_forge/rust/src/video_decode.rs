@@ -156,7 +156,17 @@ pub struct HwPipeline {
     pub out_h: u32,
 }
 
+/// Native preservation edge forwarded by Dart for
+/// `MediaForgeDecodeResolution.native` (never a public sentinel).
+pub const NATIVE_PRESERVATION_EDGE: u32 = 8192;
+
 fn output_dims(in_w: u32, in_h: u32, max_edge: u32) -> (u32, u32) {
+    // Native: preserve source width/height through decode and presentation.
+    // Never auto-scale 4K → 1080 and never reduce under load — fallback is
+    // by decoder/render implementation, not resolution.
+    if max_edge >= NATIVE_PRESERVATION_EDGE {
+        return (in_w, in_h);
+    }
     if in_w > in_h {
         if in_w > max_edge {
             (max_edge, (in_h as f64 * max_edge as f64 / in_w as f64) as u32)
@@ -527,6 +537,30 @@ pub fn push_rgba_frame(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_resolution_preserves_4k() {
+        // Native (8192) preserves source dims; 1080 preview scales 4K down
+        // while leaving sub-1080 sources untouched.
+        assert_eq!(output_dims(3840, 2160, NATIVE_PRESERVATION_EDGE), (3840, 2160));
+        assert_eq!(output_dims(640, 480, 1080), (640, 480));
+        let (w, h) = output_dims(3840, 2160, 1080);
+        assert_eq!(w, 1080);
+        assert!(h < 2160);
+    }
+
+    #[test]
+    fn no_automatic_reduction_under_load() {
+        // Same input + same edge always yields same output (no load-based scaling).
+        let a = output_dims(3840, 2160, 1080);
+        let b = output_dims(3840, 2160, 1080);
+        assert_eq!(a, b);
+        let n1 = output_dims(3840, 2160, NATIVE_PRESERVATION_EDGE);
+        let n2 = output_dims(3840, 2160, NATIVE_PRESERVATION_EDGE);
+        assert_eq!(n1, n2);
+        assert_eq!(n1, (3840, 2160));
+    }
+
 
     #[test]
     fn catchup_drops_non_key_when_lagging() {

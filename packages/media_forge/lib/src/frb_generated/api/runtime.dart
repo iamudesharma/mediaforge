@@ -6,11 +6,11 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `ffmpeg_version_string`, `find_best_audio_stream`, `hw_decode_enabled`, `log_decode_capabilities`, `probe_decode_capabilities_inner`, `release_media_video_frame_pixel_buffer`, `stop_demuxer_session`, `update_time_internal`, `video_frame_queue_capacity`
-// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AudioPlayerState`, `DecoderRecoveryState`, `FrameQueue`, `OverlayAudioState`, `OverlayAudioTrack`, `PacketQueueInner`, `PlaybackClockInner`, `PlaybackSession`, `SendSafeStream`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
-// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `new`, `new`, `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`
-// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `dequeue_best_for_time`, `dequeue`, `enqueue_video`, `enqueue`, `flush_video`, `flush`, `is_empty`, `latest_pts`, `len`, `max_size`, `new`, `open`, `set_volume`, `stop`, `volume_f32`
+// These functions are ignored because they are not marked as `pub`: `audio_stream_format`, `begin_open`, `build_stream_table`, `byte_size`, `ffmpeg_version_string`, `find_best_audio_stream`, `hw_decode_enabled`, `is_full_locked`, `log_decode_capabilities`, `metadata_complete`, `notify_frame_ready`, `notify_ready`, `open_audio_decoder`, `open_common`, `open_input_with_fast_fallback`, `probe_decode_capabilities_inner`, `pts_ms_opt`, `release_media_video_frame_pixel_buffer`, `start_subtitle_worker`, `stop_demuxer_session`, `stop_subtitle_worker`, `stop`, `strip_ass_overrides`, `subtitle_text`, `update_time_internal`, `video_decoder_label`, `video_frame_queue_capacity_sw`, `video_frame_queue_capacity`, `video_stream_dims`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AudioPlayerState`, `DecoderRecoveryState`, `ExternalSubtitleSession`, `FrameQueue`, `OverlayAudioState`, `OverlayAudioTrack`, `PacketQueueInner`, `PlaybackClockInner`, `PlaybackSession`, `SendSafeStream`, `SubtitleCue`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `is_cancelled`, `new`, `new`, `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`, `set_frame_ready`, `set_notify`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `dequeue_best_for_time`, `dequeue`, `enqueue_video`, `enqueue`, `flush_video`, `flush`, `frame_memory_bytes`, `is_empty`, `latest_pts`, `len`, `max_size`, `new`, `open`, `overflow_count`, `set_volume`, `stop`, `volume_f32`
 
 /// Probe linked FFmpeg once (safe to call from Dart at startup).
 Future<DecodeCapabilities> probeDecodeCapabilities() =>
@@ -44,6 +44,9 @@ abstract class AudioRuntime implements RustOpaqueInterface {
   /// Flush all overlay frame queues (called on seek).
   Future<void> flushOverlayQueues();
 
+  /// Current master gain 0.0..=1.0.
+  Future<double> getVolume();
+
   /// Returns true when the audio clock has reached the trim end point.
   Future<bool> isTrimEndReached();
 
@@ -64,6 +67,10 @@ abstract class AudioRuntime implements RustOpaqueInterface {
   /// Set the trim end point in ms. The cpal callback monitors the audio
   /// clock and sets `trim_end_reached` when it reaches this value.
   Future<void> setTrimEndMs({required BigInt endMs});
+
+  /// Master output gain 0.0..=1.0 applied to source + overlay mix in the
+  /// cpal callback. Independent from [`AudioRuntime::set_muted`].
+  Future<void> setVolume({required double volume});
 
   Future<void> start();
 
@@ -91,6 +98,20 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
     required BigInt durationMs,
     required BigInt sourceStartMs,
   });
+
+  Future<BigInt> audioQueueBytes();
+
+  Future<BigInt> audioQueueDurationMs();
+
+  Future<BigInt> catchupDrops();
+
+  Future<void> clearCancel();
+
+  /// Stop and drop the external subtitle session (cues already ingested stay).
+  Future<void> closeExternalSubtitle();
+
+  /// Retained decoded-frame memory in bytes (observable, §3/§16).
+  Future<BigInt> frameMemoryBytes();
 
   /// Audio clock in ms (for Dart diagnostics / A/V drift display).
   /// Returns 0 until audio begins playing.
@@ -130,6 +151,8 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
 
   Future<PlaybackState> getPlaybackState();
 
+  Future<PlatformInt64> getSubtitleDelayMs();
+
   Future<BigInt> getTrimEndMs();
 
   Future<BigInt> getTrimStartMs();
@@ -138,11 +161,16 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
 
   Future<BigInt> getVideoPacketQueueLen();
 
+  Future<double> getVolume();
+
   /// Wall-clock playback position (Instant-based), without audio preference.
   Future<BigInt> getWallClockMs();
 
   /// Audio-vs-presented drift (ms) that triggers automatic demuxer hard resync.
   Future<BigInt> hardResyncDriftThresholdMs();
+
+  /// All streams discovered at open time (video/audio/subtitle).
+  Future<List<MediaStreamInfo>> listStreams();
 
   // HINT: Make it `#[frb(sync)]` to let it become the default constructor of Dart class.
   static Future<MediaPlaybackEngine> newInstance({
@@ -155,21 +183,75 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
     previewMaxEdge: previewMaxEdge,
   );
 
+  /// Open an external (sidecar) subtitle file or URL.
+  ///
+  /// Demuxed + decoded on its own thread into the shared cue queue, so it
+  /// mixes with (or replaces) embedded cues. Times are used as-is plus
+  /// [`MediaPlaybackEngine::set_subtitle_delay_ms`].
+  Future<void> openExternalSubtitle({required String pathOrUrl});
+
   Future<void> openFile({required String path});
+
+  /// Open an HTTP/HTTPS URL (streaming, HLS, localhost range servers).
+  ///
+  /// FFmpeg reads the URL directly — redirects, Range seeks, and HLS
+  /// segment fetches all happen inside libavformat, so Dart never fetches
+  /// bytes. Headers are forwarded as one `headers` dict entry
+  /// (`"Name: Value\r\n"` per FFmpeg http conventions).
+  Future<void> openUrl({required String url, required NetworkOptions options});
 
   Future<void> pause();
 
+  /// Active cue text at `time_ms` (lines joined with `\n`), or None.
+  ///
+  /// Prunes cues long past their end time to bound memory.
+  Future<String?> pollSubtitleText({required BigInt timeMs});
+
   /// Presenter tick interval in ms (~30 fps).
   Future<BigInt> presenterIntervalMs();
+
+  Future<BigInt> probeDurationMs();
 
   Future<bool> pushAudioPacket({required MediaPacket packet});
 
   Future<bool> pushVideoPacket({required MediaPacket packet});
 
+  /// Split drop counters (§6): overflow vs catch-up vs decoder.
+  /// Empty polls are never counted — only actual discards.
+  Future<BigInt> queueOverflowDrops();
+
+  Future<BigInt> reconnectCount();
+
   /// Remove an overlay audio track by ID.
   Future<void> removeOverlayAudio({required BigInt id});
 
+  /// Exact active rendering path (§8). Never claims zero-copy unless the
+  /// VT IOSurface adoption path is actually active.
+  Future<String> renderingPath();
+
+  /// Request cancellation of blocked open/probe/network reads (§12).
+  /// Tied to controller/source generation, seek replacement and disposal.
+  Future<void> requestCancel();
+
+  /// Resume a suspended session (§13).
+  Future<void> resume();
+
   Future<void> seek({required BigInt timeMs});
+
+  /// Switch the audio track during playback.
+  ///
+  /// Updates the decoder params, bumps the decoder epoch (the audio
+  /// thread reopens its codec), and re-seeks to the current position so
+  /// queues and clocks resync through the normal Flush machinery.
+  Future<void> selectAudioStream({required int index});
+
+  /// Select the embedded subtitle track (`-1` disables). Clears queued
+  /// cues and re-seeks so the demuxer forwards the new stream.
+  Future<void> selectSubtitleStream({required int index});
+
+  /// Switch the video track during playback (params + re-seek; the video
+  /// thread reopens its pipelines on the Flush sentinel).
+  Future<void> selectVideoStream({required int index});
 
   Future<void> setMuted({required bool muted});
 
@@ -181,23 +263,52 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
   /// Mute only embedded source audio during preview (overlay BGM keeps playing).
   Future<void> setSourceMuted({required bool muted});
 
+  /// User subtitle delay in ms (signed; applied when cues are ingested).
+  Future<void> setSubtitleDelayMs({required PlatformInt64 delayMs});
+
+  /// Enable/disable cue delivery (decoding continues; polling returns None).
+  Future<void> setSubtitlesEnabled({required bool enabled});
+
   /// Set the trim range in ms. Packets outside this range are skipped by
   /// the demuxer, and playback auto-pauses when reaching `end_ms`.
   Future<void> setTrimRange({required BigInt startMs, required BigInt endMs});
+
+  /// Master output gain 0.0..=1.0 (source + overlays) in the cpal mixer.
+  Future<void> setVolume({required double volume});
+
+  Future<BigInt> staleDrops();
 
   Future<void> start();
 
   Future<void> stop();
 
+  /// Lifecycle suspension (§13): park the presentation pump, audio device,
+  /// diagnostics cadence and subtitle wakeups; retain the session for resume.
+  /// No bridge frame calls are emitted while suspended.
+  Future<void> suspend();
+
   Future<AudioFrame?> takeAudioFrame();
 
-  /// Returns the frame selected by [`PresenterRuntime`] (~30 fps), not the raw decode queue.
+  /// Returns the frame selected by [`PresenterRuntime`] (frame-ready pump),
+  /// not the raw decode queue. Counts bridge calls vs presented frames
+  /// separately (§6): empty polls return None and are never drops.
   Future<MediaVideoFrame?> takeVideoFrame();
+
+  /// Compressed packet bytes currently buffered (video/audio).
+  Future<BigInt> videoQueueBytes();
+
+  Future<BigInt> videoQueueDurationMs();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<PacketQueue>>
 abstract class PacketQueue implements RustOpaqueInterface {
+  /// Current buffered bytes (observable via diagnostics).
+  Future<BigInt> bytes();
+
   Future<void> close();
+
+  /// Current buffered span in ms (max PTS − min PTS, 0 when <2 timed packets).
+  Future<BigInt> durationMs();
 
   Future<void> flush();
 
@@ -209,14 +320,34 @@ abstract class PacketQueue implements RustOpaqueInterface {
   static Future<PacketQueue> newInstance({required BigInt maxSize}) =>
       RustLib.instance.api.crateApiRuntimePacketQueueNew(maxSize: maxSize);
 
+  /// Budget-aware constructor: count AND bytes AND duration all bound.
+  static Future<PacketQueue> newWithBudgets({
+    required BigInt maxSize,
+    required BigInt maxBytes,
+    required BigInt maxDurationMs,
+  }) => RustLib.instance.api.crateApiRuntimePacketQueueNewWithBudgets(
+    maxSize: maxSize,
+    maxBytes: maxBytes,
+    maxDurationMs: maxDurationMs,
+  );
+
   Future<QueuePacket?> pop();
 
   Future<bool> push({required QueuePacket packet});
+
+  /// Non-blocking pop for frame-ready pump integration (returns None when
+  /// empty instead of blocking). Used by interrupt-aware paths.
+  Future<QueuePacket?> tryPop();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<PlaybackClock>>
 abstract class PlaybackClock implements RustOpaqueInterface {
   Future<void> advancePresentedPts({required BigInt ptsMs});
+
+  /// Freeze media time during a transient video starvation. This is a
+  /// state transition only: it deliberately does not seek, flush queues,
+  /// reopen the source, or reset the last presented PTS.
+  Future<void> enterRebuffering();
 
   Future<BigInt> getLastPresentedPtsMs();
 
@@ -232,6 +363,9 @@ abstract class PlaybackClock implements RustOpaqueInterface {
 
   /// Clears a stale presented PTS after backward seek (presented >> audio).
   Future<void> resetPresentedPtsForSeek({required BigInt toMs});
+
+  /// Resume a previously starved session from the exact frozen media time.
+  Future<void> resumeFromRebuffering();
 
   Future<void> seek({required BigInt timeMs});
 
@@ -364,6 +498,32 @@ class DiagnosticsSnapshot {
   final BigInt videoFramesInQueue;
   final BigInt audioFramesInQueue;
 
+  /// Container bytes demuxed since open.
+  final BigInt bytesRead;
+
+  /// Demuxed-bytes read bitrate estimate (bits/s, 0 until 500 ms elapsed).
+  final BigInt readBitrateBps;
+
+  /// Decoded-ahead-of-presentation buffer (latest decoded − presented).
+  final BigInt bufferedDurationMs;
+
+  /// Pre-decode video drops (stale generation + catch-up policy).
+  final BigInt droppedVideoFrames;
+
+  /// e.g. `hevc-videotoolbox`, `h264-software`, `none` before first open.
+  final String activeVideoDecoder;
+
+  /// True when the active video pipeline is hardware decode.
+  final bool hwDecodeActive;
+
+  /// Cues currently held for polling.
+  final BigInt subtitleCuesPending;
+
+  /// Selected stream indices (−1 = none/off).
+  final int selectedVideoIndex;
+  final int selectedAudioIndex;
+  final int selectedSubtitleIndex;
+
   const DiagnosticsSnapshot({
     required this.state,
     required this.mediaTimeMs,
@@ -376,6 +536,16 @@ class DiagnosticsSnapshot {
     required this.audioPacketsInQueue,
     required this.videoFramesInQueue,
     required this.audioFramesInQueue,
+    required this.bytesRead,
+    required this.readBitrateBps,
+    required this.bufferedDurationMs,
+    required this.droppedVideoFrames,
+    required this.activeVideoDecoder,
+    required this.hwDecodeActive,
+    required this.subtitleCuesPending,
+    required this.selectedVideoIndex,
+    required this.selectedAudioIndex,
+    required this.selectedSubtitleIndex,
   });
 
   @override
@@ -390,7 +560,17 @@ class DiagnosticsSnapshot {
       videoPacketsInQueue.hashCode ^
       audioPacketsInQueue.hashCode ^
       videoFramesInQueue.hashCode ^
-      audioFramesInQueue.hashCode;
+      audioFramesInQueue.hashCode ^
+      bytesRead.hashCode ^
+      readBitrateBps.hashCode ^
+      bufferedDurationMs.hashCode ^
+      droppedVideoFrames.hashCode ^
+      activeVideoDecoder.hashCode ^
+      hwDecodeActive.hashCode ^
+      subtitleCuesPending.hashCode ^
+      selectedVideoIndex.hashCode ^
+      selectedAudioIndex.hashCode ^
+      selectedSubtitleIndex.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -407,7 +587,17 @@ class DiagnosticsSnapshot {
           videoPacketsInQueue == other.videoPacketsInQueue &&
           audioPacketsInQueue == other.audioPacketsInQueue &&
           videoFramesInQueue == other.videoFramesInQueue &&
-          audioFramesInQueue == other.audioFramesInQueue;
+          audioFramesInQueue == other.audioFramesInQueue &&
+          bytesRead == other.bytesRead &&
+          readBitrateBps == other.readBitrateBps &&
+          bufferedDurationMs == other.bufferedDurationMs &&
+          droppedVideoFrames == other.droppedVideoFrames &&
+          activeVideoDecoder == other.activeVideoDecoder &&
+          hwDecodeActive == other.hwDecodeActive &&
+          subtitleCuesPending == other.subtitleCuesPending &&
+          selectedVideoIndex == other.selectedVideoIndex &&
+          selectedAudioIndex == other.selectedAudioIndex &&
+          selectedSubtitleIndex == other.selectedSubtitleIndex;
 }
 
 /// A simplified demuxed media packet.
@@ -444,6 +634,80 @@ class MediaPacket {
           streamIndex == other.streamIndex &&
           isKeyframe == other.isKeyframe &&
           data == other.data;
+}
+
+/// One stream discovered in the opened container or network input.
+///
+/// Built by [`MediaPlaybackEngine::list_streams`] from FFmpeg stream
+/// parameters + metadata (language/title) + disposition (default/forced).
+class MediaStreamInfo {
+  /// FFmpeg stream index (stable for the open session).
+  final int index;
+  final StreamKind kind;
+  final String codecName;
+  final String language;
+  final String title;
+
+  /// Bits per second (0 when the container does not report it).
+  final BigInt bitrate;
+
+  /// Video dimensions (0 for non-video).
+  final int width;
+  final int height;
+
+  /// Audio channels / sample rate (0 for non-audio).
+  final int channels;
+  final int sampleRate;
+  final bool isDefault;
+  final bool isForced;
+
+  const MediaStreamInfo({
+    required this.index,
+    required this.kind,
+    required this.codecName,
+    required this.language,
+    required this.title,
+    required this.bitrate,
+    required this.width,
+    required this.height,
+    required this.channels,
+    required this.sampleRate,
+    required this.isDefault,
+    required this.isForced,
+  });
+
+  @override
+  int get hashCode =>
+      index.hashCode ^
+      kind.hashCode ^
+      codecName.hashCode ^
+      language.hashCode ^
+      title.hashCode ^
+      bitrate.hashCode ^
+      width.hashCode ^
+      height.hashCode ^
+      channels.hashCode ^
+      sampleRate.hashCode ^
+      isDefault.hashCode ^
+      isForced.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MediaStreamInfo &&
+          runtimeType == other.runtimeType &&
+          index == other.index &&
+          kind == other.kind &&
+          codecName == other.codecName &&
+          language == other.language &&
+          title == other.title &&
+          bitrate == other.bitrate &&
+          width == other.width &&
+          height == other.height &&
+          channels == other.channels &&
+          sampleRate == other.sampleRate &&
+          isDefault == other.isDefault &&
+          isForced == other.isForced;
 }
 
 /// Decoded video frame for presentation.
@@ -489,6 +753,51 @@ class MediaVideoFrame {
           seekGeneration == other.seekGeneration;
 }
 
+/// HTTP(S) open options for [`MediaPlaybackEngine::open_url`].
+///
+/// FFmpeg reads the URL directly (redirects + Range seeks included), so
+/// Dart never fetches bytes. Headers use exact `Name: Value` pairs.
+class NetworkOptions {
+  /// Extra HTTP headers (e.g. `Authorization`, `Cookie`).
+  final Map<String, String> headers;
+
+  /// `User-Agent` override ("" = FFmpeg default).
+  final String userAgent;
+
+  /// Read timeout in ms (0 = FFmpeg default).
+  final BigInt timeoutMs;
+
+  /// Enable `reconnect`/`reconnect_streamed` for flaky links (HLS/live).
+  final bool reconnect;
+
+  const NetworkOptions({
+    required this.headers,
+    required this.userAgent,
+    required this.timeoutMs,
+    required this.reconnect,
+  });
+
+  static Future<NetworkOptions> default_() =>
+      RustLib.instance.api.crateApiRuntimeNetworkOptionsDefault();
+
+  @override
+  int get hashCode =>
+      headers.hashCode ^
+      userAgent.hashCode ^
+      timeoutMs.hashCode ^
+      reconnect.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NetworkOptions &&
+          runtimeType == other.runtimeType &&
+          headers == other.headers &&
+          userAgent == other.userAgent &&
+          timeoutMs == other.timeoutMs &&
+          reconnect == other.reconnect;
+}
+
 /// Hand off `CVPixelBuffer` to Flutter without releasing on [MediaVideoFrame] drop.
 class PixelBufferHandoff {
   final BigInt ptsMs;
@@ -526,4 +835,18 @@ class PixelBufferHandoff {
 }
 
 /// State of the playback clock.
-enum PlaybackState { idle, playing, paused, seeking, ended }
+enum PlaybackState {
+  idle,
+  playing,
+  paused,
+  seeking,
+  ended,
+
+  /// Playback is temporarily starved of presentable video frames. The
+  /// demux/decode session stays open; the clock and audio output are held
+  /// until the recovery buffer is ready.
+  rebuffering,
+}
+
+/// Kind of a container stream discovered at open time.
+enum StreamKind { video, audio, subtitle }

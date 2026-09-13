@@ -22,6 +22,7 @@ import 'package:video_forge_editor/src/playback/rust_playback_backend.dart';
 import 'package:video_forge_editor/src/services/audio_picker.dart';
 import 'package:video_forge_editor/src/services/editor_output_paths.dart';
 import 'package:video_forge_editor/src/services/media_ingest.dart';
+import 'package:video_forge_editor/src/services/remote_ingest_cache.dart';
 import 'package:video_forge_editor/src/theme/lumina_tokens.dart';
 import 'package:video_forge_editor/src/widgets/audio_waveform_visualizer.dart';
 import 'package:video_forge_editor/src/widgets/editor_bottom_nav.dart';
@@ -116,6 +117,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
 
   @override
   void dispose() {
+    _persistResumePosition();
     _progressSub?.cancel();
     _timeline.removeListener(_onTimelineUpdated);
     if (_session == null) {
@@ -126,6 +128,21 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
       _backend?.dispose();
     }
     super.dispose();
+  }
+
+  /// Remember the playhead for URL-cached sources so the next open can
+  /// resume where playback stopped (saved on teardown/dispose, not per
+  /// frame — callers throttle by only invoking here).
+  void _persistResumePosition() {
+    final key = widget.config.cacheKey;
+    final backend = _backend;
+    if (key == null || key.isEmpty || backend == null || !backend.isOpen) {
+      return;
+    }
+    final pos = backend.positionMs;
+    if (pos <= 0) return;
+    debugPrint('[VideoEditor] persist resume key=$key pos=${pos}ms');
+    unawaited(RemoteIngestCache.savePosition(key, pos));
   }
 
   void _syncSession() {
@@ -290,6 +307,7 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
   Future<void> _tearDownBackend() async {
     final backend = _backend;
     if (backend == null) return;
+    _persistResumePosition();
     backend.removeListener(_onBackendUpdated);
     backend.pause();
     await backend.close();
@@ -339,7 +357,18 @@ class _VideoEditorScreenState extends State<VideoEditorScreen> {
         startMs: (_startSec * 1000).round(),
         endMs: (_endSec * 1000).round(),
       );
-      await _applySeekFromTimelineMs(0);
+      // Resume where playback stopped for cached remote sources; the
+      // position was persisted on teardown/dispose and the bytes are
+      // already on disk, so no re-download happens here.
+      final resumeMs = (widget.config.initialPosition?.inMilliseconds ?? 0)
+          .clamp(0, durationMs > 0 ? durationMs : 0);
+      if (resumeMs > 0) {
+        debugPrint('[VideoEditor] resume seek=${resumeMs}ms');
+        _playheadSec = resumeMs / 1000.0;
+        await _applySeekFromTimelineMs(resumeMs);
+      } else {
+        await _applySeekFromTimelineMs(0);
+      }
 
       await _buildFilmstrip();
     } catch (e) {

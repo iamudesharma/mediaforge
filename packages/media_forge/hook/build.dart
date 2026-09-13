@@ -181,10 +181,24 @@ void _applyFfmpegDistEnv(
   String triple,
 ) {
   if (env.containsKey('FFMPEG_DIR') && env['FFMPEG_DIR']!.isNotEmpty) {
+    _sanitizeAppleBuildEnv(env, env['FFMPEG_DIR']!);
     return;
   }
   final home = Platform.environment['HOME'];
+  // Static prefixes FIRST: archives link into the cdylib, leaving no
+  // runtime dylib dependency (required for sandboxed/distributed apps —
+  // absolute-path .dylib loads are sandbox-blocked). Shared prefixes are
+  // a fast-iteration fallback for local dev only.
   final candidates = <String>[
+    if (home != null && home.isNotEmpty)
+      p.join(home, '.cache', 'rust_image', 'ffmpeg-macos-vt-static'),
+    p.join(
+      workspaceRoot.toFilePath(),
+      'tools',
+      'ffmpeg',
+      'dist',
+      'macos-vt-static',
+    ),
     if (home != null && home.isNotEmpty)
       p.join(home, '.cache', 'rust_image', 'ffmpeg-macos-vt'),
     p.join(
@@ -217,16 +231,115 @@ void _applyFfmpegDistEnv(
       continue;
     }
     env['FFMPEG_DIR'] = dir;
-    final pkgConfig = p.join(dir, 'lib', 'pkgconfig');
-    if (Directory(pkgConfig).existsSync()) {
-      final existing = env['PKG_CONFIG_PATH'];
-      env['PKG_CONFIG_PATH'] = existing == null || existing.isEmpty
-          ? pkgConfig
-          : '$pkgConfig:$existing';
+    _sanitizeAppleBuildEnv(env, dir);
+    final staticLibs = _isStaticFfmpegDir(dir);
+    if (staticLibs) {
+      // Static archives don't carry their system deps (shared dylibs do
+      // via LC_LOAD_DYLIB). avformat/avcodec need these; all /usr/lib
+      // system libs, safe under App Sandbox.
+      const args = ' -C link-arg=-lbz2 -C link-arg=-lz -C link-arg=-liconv';
+      final existing = env['RUSTFLAGS'] ?? '';
+      if (!existing.contains('link-arg=-lz')) {
+        env['RUSTFLAGS'] = '$existing$args';
+      }
     }
-    stderr.writeln('media_forge: using FFMPEG_DIR=$dir');
+    stderr.writeln(
+        'media_forge: using FFMPEG_DIR=$dir (static=$staticLibs)');
+    if (!staticLibs) {
+      stderr.writeln(
+        'media_forge: WARNING: shared FFmpeg dylibs load by absolute path '
+        'and fail dlopen() in sandboxed/distributed apps. For a shippable '
+        'build, run scripts/build-ffmpeg-macos-vt.sh (static default).',
+      );
+    }
     return;
   }
+}
+
+/// §17 build reproducibility: the intended bundled/static FFmpeg must be the
+/// ONLY FFmpeg source. Stale Homebrew library search paths leak into
+/// builds/tests (via PKG_CONFIG_PATH) and pull a foreign FFmpeg 7.x with an
+/// unavailable `libstdc++` link request. Strip them and verify the static
+/// prefix is self-contained.
+void _sanitizeAppleBuildEnv(Map<String, String> env, String ffmpegDir) {
+  // PKG_CONFIG_PATH must resolve ONLY inside the chosen FFmpeg prefix.
+  // Drop every Homebrew entry so pkg-config can never return a foreign
+  // libav* with `-lstdc++` (unavailable on macOS; libc++ is the system
+  // C++ runtime). Local Homebrew installs are never a required build input.
+  final pkgConfig = p.join(ffmpegDir, 'lib', 'pkgconfig');
+  if (Directory(pkgConfig).existsSync()) {
+    env['PKG_CONFIG_PATH'] = pkgConfig;
+    stderr.writeln('media_forge: PKG_CONFIG_PATH=$pkgConfig (Homebrew stripped)');
+  } else {
+    // No pkgconfig dir (e.g. Android NDK prefix): still strip Homebrew.
+    final existing = env['PKG_CONFIG_PATH'] ?? '';
+    final cleaned = existing
+        .split(':')
+        .where((e) =>
+            e.isNotEmpty &&
+            !e.contains('/opt/homebrew') &&
+            !e.contains('/usr/local/Homebrew') &&
+            !e.contains('homebrew'))
+        .join(':');
+    if (cleaned.isEmpty) {
+      env.remove('PKG_CONFIG_PATH');
+    } else {
+      env['PKG_CONFIG_PATH'] = cleaned;
+    }
+  }
+  // Never pass a Homebrew library dir to the linker via LIBRARY_PATH /
+  // LD_LIBRARY_PATH leftovers from a developer shell.
+  for (final key in ['LIBRARY_PATH', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']) {
+    final v = env[key];
+    if (v == null || v.isEmpty) continue;
+    final cleaned = v
+        .split(':')
+        .where((e) =>
+            e.isNotEmpty &&
+            !e.contains('/opt/homebrew') &&
+            !e.contains('/usr/local/Homebrew'))
+        .join(':');
+    if (cleaned.isEmpty) {
+      env.remove(key);
+    } else {
+      env[key] = cleaned;
+    }
+  }
+  // Warn when the chosen prefix itself leaks Homebrew (rebuild FFmpeg with
+  // scripts/build-ffmpeg-macos-vt.sh which isolates pkg-config from Homebrew
+  // and passes --disable-xlib).
+  final libavutilPc = File(p.join(pkgConfig, 'libavutil.pc'));
+  if (libavutilPc.existsSync()) {
+    try {
+      final content = libavutilPc.readAsStringSync();
+      if (content.contains('/opt/homebrew')) {
+        stderr.writeln(
+          'media_forge: WARNING: $pkgConfig/libavutil.pc references /opt/homebrew '
+          '(X11 leakage from FFmpeg configure). Rebuild with '
+          'scripts/build-ffmpeg-macos-vt.sh to remove it. Linking still '
+          'succeeds while Homebrew X11 exists, but the prefix is not hermetic.',
+        );
+      }
+    } catch (_) {}
+  }
+}
+
+/// True when [dir]/lib holds static archives without shared dylibs.
+bool _isStaticFfmpegDir(String dir) {
+  final libDir = Directory(p.join(dir, 'lib'));
+  if (!libDir.existsSync()) return false;
+  var hasArchive = false;
+  var hasDylib = false;
+  for (final entity in libDir.listSync()) {
+    final name = p.basename(entity.path);
+    if (name.startsWith('libavcodec.') || name.startsWith('libavutil.')) {
+      if (name.endsWith('.a')) hasArchive = true;
+      if (name.endsWith('.dylib') || name.contains('.dylib.')) {
+        hasDylib = true;
+      }
+    }
+  }
+  return hasArchive && !hasDylib;
 }
 
 Future<String?> _cargoBuild({
@@ -249,6 +362,26 @@ Future<String?> _cargoBuild({
   final env = _cargoEnvironment();
   if (os == OS.macOS || os == OS.iOS) {
     _applyFfmpegDistEnv(env, workspaceRoot, triple);
+    // Explicit FFMPEG_DIR pointing at static archives needs the same
+    // system link args (the auto-detect path above already added them).
+    final explicit = env['FFMPEG_DIR'];
+    if (explicit != null &&
+        explicit.isNotEmpty &&
+        _isStaticFfmpegDir(explicit)) {
+      const args = ' -C link-arg=-lbz2 -C link-arg=-lz -C link-arg=-liconv';
+      final existing = env['RUSTFLAGS'] ?? '';
+      if (!existing.contains('link-arg=-lz')) {
+        env['RUSTFLAGS'] = '$existing$args';
+      }
+      stderr.writeln(
+          'media_forge: static FFMPEG_DIR detected, added system link args');
+    } else if (explicit != null && explicit.isNotEmpty) {
+      stderr.writeln(
+        'media_forge: WARNING: explicit FFMPEG_DIR=$explicit is shared; '
+        'the bundled binary will fail dlopen() in sandboxed apps. '
+        'Use a static prefix (scripts/build-ffmpeg-macos-vt.sh).',
+      );
+    }
   }
 
   final result = await Process.run(

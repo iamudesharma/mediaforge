@@ -17,7 +17,11 @@ Pod::Spec.new do |s|
   CMD
   s.source_files        = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.platform            = :ios, '16.0'
+  # iOS 15 compatible: audited APIs (CVPixelBufferPool, vImage permute,
+  # CFAbsoluteTime, Metal texture cache) all exist since iOS 9–13. No iOS 16+
+  # API is used, so PeerStream (iOS 15 target) can consume this pod without
+  # raising its deployment target. See docs/IOS15_COMPATIBILITY.md.
+  s.platform            = :ios, '15.0'
   s.swift_version       = '5.0'
   s.frameworks          = 'Accelerate', 'Metal', 'CoreVideo', 'VideoToolbox'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }

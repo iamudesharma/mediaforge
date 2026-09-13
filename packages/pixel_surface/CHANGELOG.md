@@ -1,3 +1,8 @@
+## Unreleased
+
+- iOS deployment target lowered 16.0 → 15.0 (audited: no iOS 16+ API used;
+  see `IOS15_COMPATIBILITY.md`). PeerStream (iOS 15) consumes without changes.
+
 ## 1.1.0-dev.1
 
 - Pre-release aligned with **Flutter 3.47.0** (Dart 3.13.0) verification.
