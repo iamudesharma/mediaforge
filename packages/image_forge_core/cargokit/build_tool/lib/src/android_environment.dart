@@ -1,6 +1,3 @@
-/// This is copied from Cargokit (which is the official way to use it currently)
-/// Details: https://fzyzcjy.github.io/flutter_rust_bridge/manual/integrate/builtin
-
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -82,18 +79,19 @@ class AndroidEnvironment {
   }
 
   Future<Map<String, String>> buildEnvironment() async {
+    final hostArch = Platform.isMacOS
+        ? "darwin-x86_64"
+        : (Platform.isLinux ? "linux-x86_64" : "windows-x86_64");
+
     final ndkPath = path.join(sdkPath, 'ndk', ndkVersion);
-    final prebuiltRoot = path.join(ndkPath, 'toolchains', 'llvm', 'prebuilt');
-    final hostCandidates = Platform.isMacOS
-        ? ['darwin-arm64', 'darwin-x86_64']
-        : (Platform.isLinux ? ['linux-x86_64'] : ['windows-x86_64']);
-    final hostArch = hostCandidates.firstWhere(
-      (arch) => Directory(path.join(prebuiltRoot, arch)).existsSync(),
-      orElse: () => throw Exception(
-        'No NDK LLVM prebuilt found under $prebuiltRoot (tried $hostCandidates)',
-      ),
+    final toolchainPath = path.join(
+      ndkPath,
+      'toolchains',
+      'llvm',
+      'prebuilt',
+      hostArch,
+      'bin',
     );
-    final toolchainPath = path.join(prebuiltRoot, hostArch, 'bin');
 
     final minSdkVersion =
         math.max(target.androidMinSdkVersion!, this.minSdkVersion);
@@ -188,7 +186,16 @@ class AndroidEnvironment {
     if (rustFlags.isNotEmpty) {
       rustFlags = '$rustFlags\x1f';
     }
-    rustFlags = '$rustFlags-L\x1f$workaroundDir';
+    if (["arm64-v8a", "x86_64"].contains(target.android)) {
+      rustFlags = '$rustFlags-L\x1f$workaroundDir\x1f';
+
+      const pageSizeArgs = ["-C", "link-arg=-Wl,--hash-style=both", "-C", "link-arg=-Wl,-z,max-page-size=16384"];
+      final pageSizeArgsString = pageSizeArgs.join("\x1f");
+
+      rustFlags = '$rustFlags$pageSizeArgsString';
+    } else {
+      rustFlags = '$rustFlags-L\x1f$workaroundDir';
+    }
     return rustFlags;
   }
 }

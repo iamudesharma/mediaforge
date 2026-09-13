@@ -2,11 +2,6 @@
 
 set -e
 
-# Gradle/IDE often omits ~/.cargo/bin; Homebrew rustc in PATH breaks Android cross-compile.
-if [ -d "${HOME}/.cargo/bin" ]; then
-  export PATH="${HOME}/.cargo/bin:${PATH}"
-fi
-
 BASEDIR=$(dirname "$0")
 
 mkdir -p "$CARGOKIT_TOOL_TEMP_DIR"

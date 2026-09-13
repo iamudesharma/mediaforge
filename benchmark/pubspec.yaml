@@ -7,7 +7,7 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
-  flutter_rust_bridge: 2.12.0
+  flutter_rust_bridge: ^2.13.0-beta.6
   image_forge_editor:
     path: ../packages/image_forge_editor
 

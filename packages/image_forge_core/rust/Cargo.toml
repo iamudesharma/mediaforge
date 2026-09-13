@@ -19,7 +19,7 @@ gpu = ["wgpu", "pollster", "bytemuck"]
 
 [dependencies]
 
-flutter_rust_bridge = "=2.12.0"
+flutter_rust_bridge = "=2.13.0-beta.6"
 image = { version = "0.25", default-features = false, features = [
     "jpeg",
     "png",

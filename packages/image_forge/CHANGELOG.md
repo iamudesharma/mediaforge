@@ -1,3 +1,9 @@
+## 1.1.0-dev.1
+
+- Pre-release aligned with **Flutter 3.47.0** (Dart 3.13.0) verification.
+- Upgrade `flutter_rust_bridge` to **2.13.0-beta.6** (Dart + Rust + regenerated bindings).
+- Refresh vendored **CargoKit** for Android 16 KB page-size linker flags.
+
 ## 1.0.0
 
 - **Renamed from `rust_image_core` to `image_forge`** — a proper pub.dev package name.
