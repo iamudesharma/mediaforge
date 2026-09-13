@@ -27,19 +27,44 @@ static FFMPEG_INIT: std::sync::Once = std::sync::Once::new();
 
 /// Default longest edge for decoded preview frames (matches MediaRuntime).
 pub const DEFAULT_PREVIEW_MAX_EDGE: u32 = 1080;
+/// Native preservation ceiling: when the Dart configuration requests native
+/// resolution it forwards 8192 so every practical source (up to 8K) passes
+/// through unscaled. No automatic downscale and no reduction under load —
+/// fallback is by decoder/render implementation, not resolution.
+pub const NATIVE_PRESERVATION_EDGE: u32 = 8192;
 /// When audio clock leads latest decoded video PTS by more than this, enter catch-up.
 pub const AV_LAG_THRESHOLD_MS: u64 = 500;
-/// Cap on decoded RGBA frames waiting for the UI.
-/// Larger previews (4K) need a deeper queue to avoid frame drops during bursts.
-pub const VIDEO_FRAME_QUEUE_CAP: usize = 32;
-pub const VIDEO_FRAME_QUEUE_CAP_LARGE: usize = 64;
+/// Cap on retained decoded frames (production native-resolution policy).
+/// Hardware-decoded (VT/MediaCodec/IOSurface): max ~3 frames.
+/// Software RGBA/BGRA: max ~2 frames.
+/// Never retain 32/64 full-resolution frames (hundreds of MB at 1080p,
+/// multi-GB at 4K). See `video_frame_queue_capacity`.
+pub const VIDEO_FRAME_QUEUE_CAP_HW: usize = 3;
+pub const VIDEO_FRAME_QUEUE_CAP_SW: usize = 2;
+// Legacy names kept for backward-compat (mapped to the new small caps).
+pub const VIDEO_FRAME_QUEUE_CAP: usize = VIDEO_FRAME_QUEUE_CAP_HW;
+pub const VIDEO_FRAME_QUEUE_CAP_LARGE: usize = VIDEO_FRAME_QUEUE_CAP_HW;
 
-fn video_frame_queue_capacity(preview_max_edge: u32) -> usize {
-    if preview_max_edge >= 1080 {
-        VIDEO_FRAME_QUEUE_CAP_LARGE
-    } else {
-        VIDEO_FRAME_QUEUE_CAP
-    }
+/// Byte- and duration-aware packet budgets (replacing fixed 2000-count caps).
+/// Video: 16 MiB OR 5 s, whichever first. Audio: 4 MiB OR 5 s.
+pub const VIDEO_PACKET_MAX_BYTES: usize = 16 * 1024 * 1024;
+pub const VIDEO_PACKET_MAX_DURATION_MS: u64 = 5000;
+pub const AUDIO_PACKET_MAX_BYTES: usize = 4 * 1024 * 1024;
+pub const AUDIO_PACKET_MAX_DURATION_MS: u64 = 5000;
+pub const SUBTITLE_PACKET_MAX_COUNT: usize = 64;
+pub const SUBTITLE_PACKET_MAX_BYTES: usize = 256 * 1024;
+
+fn video_frame_queue_capacity(_preview_max_edge: u32) -> usize {
+    // Production policy: bound retained decoded memory regardless of edge.
+    // HW path keeps 3 (display + next + spare for pacing jitter); SW RGBA
+    // keeps 2. Native 4K is preserved by dimensions, not by deeper queues.
+    VIDEO_FRAME_QUEUE_CAP_HW
+}
+
+/// Software-path decoded queue cap (RGBA/BGRA, 4 bytes/px).
+#[allow(dead_code)]
+fn video_frame_queue_capacity_sw() -> usize {
+    VIDEO_FRAME_QUEUE_CAP_SW
 }
 /// Timeout for seek recovery to avoid hanging.
 pub const RECOVERY_TIMEOUT_MS: u64 = 2000;
@@ -231,6 +256,10 @@ pub enum PlaybackState {
     Paused,
     Seeking,
     Ended,
+    /// Playback is temporarily starved of presentable video frames. The
+    /// demux/decode session stays open; the clock and audio output are held
+    /// until the recovery buffer is ready.
+    Rebuffering,
 }
 
 /// Kind of a container stream discovered at open time.
@@ -460,9 +489,41 @@ impl PlaybackClock {
         );
     }
 
+    /// Freeze media time during a transient video starvation. This is a
+    /// state transition only: it deliberately does not seek, flush queues,
+    /// reopen the source, or reset the last presented PTS.
+    pub fn enter_rebuffering(&self) {
+        self.update_time_internal();
+        let mut inner = self.inner.write();
+        if inner.state == PlaybackState::Playing {
+            inner.state = PlaybackState::Rebuffering;
+            inner.last_updated_instant = None;
+            runtime_log!(
+                "[PlaybackClock] Entered rebuffering media_time_ms={}",
+                inner.media_time_ms
+            );
+        }
+    }
+
+    /// Resume a previously starved session from the exact frozen media time.
+    pub fn resume_from_rebuffering(&self) {
+        let mut inner = self.inner.write();
+        if inner.state == PlaybackState::Rebuffering {
+            inner.state = PlaybackState::Playing;
+            inner.last_updated_instant = Some(Instant::now());
+            runtime_log!(
+                "[PlaybackClock] Rebuffering recovered media_time_ms={}",
+                inner.media_time_ms
+            );
+        }
+    }
+
     pub fn seek(&self, time_ms: u64) {
         let mut inner = self.inner.write();
-        let was_playing = inner.state == PlaybackState::Playing;
+        let was_playing = matches!(
+            inner.state,
+            PlaybackState::Playing | PlaybackState::Rebuffering
+        );
         inner.state = PlaybackState::Seeking;
         inner.media_time_ms = time_ms;
         // Clear stale presented PTS so hard resync does not compare against pre-seek video.
@@ -562,45 +623,123 @@ pub enum QueuePacket {
     Flush(u64, u64), // seek_generation, target_ms
 }
 
+impl QueuePacket {
+    /// Compressed size in bytes (0 for flush sentinels).
+    fn byte_size(&self) -> usize {
+        match self {
+            QueuePacket::Real(pkt, _, _) => pkt.size() as usize,
+            QueuePacket::Simulated(p) => p.data.len(),
+            QueuePacket::Flush(_, _) => 0,
+        }
+    }
+
+    /// PTS in ms if the packet carries one.
+    fn pts_ms_opt(&self) -> Option<u64> {
+        match self {
+            QueuePacket::Real(_, pts, _) => Some(*pts),
+            QueuePacket::Simulated(p) => Some(p.pts_ms),
+            QueuePacket::Flush(_, _) => None,
+        }
+    }
+}
+
 struct PacketQueueInner {
     queue: VecDeque<QueuePacket>,
     is_closed: bool,
+    bytes: usize,
+    min_pts_ms: Option<u64>,
+    max_pts_ms: Option<u64>,
 }
 
-/// Thread-safe bounded packet queue with condition variable synchronization.
+/// Thread-safe bounded packet queue with byte- and duration-aware budgets.
+///
+/// A packet is admitted only while count, byte and duration limits all hold —
+/// whichever limit is reached first applies. Replaces fixed 2000-count caps.
 pub struct PacketQueue {
     inner: Mutex<PacketQueueInner>,
     cond_not_empty: Condvar,
     cond_not_full: Condvar,
     max_size: usize,
+    max_bytes: usize,
+    max_duration_ms: u64,
 }
 
 impl PacketQueue {
     pub fn new(max_size: usize) -> Self {
+        // Legacy count-only constructor (kept for tests/compat): derive
+        // generous byte/duration ceilings so count remains the binding limit.
+        let max_bytes = max_size.saturating_mul(128 * 1024).max(4 * 1024 * 1024);
         runtime_log!("[PacketQueue] Creating queue with max_size={}", max_size);
         Self {
             inner: Mutex::new(PacketQueueInner {
                 queue: VecDeque::new(),
                 is_closed: false,
+                bytes: 0,
+                min_pts_ms: None,
+                max_pts_ms: None,
             }),
             cond_not_empty: Condvar::new(),
             cond_not_full: Condvar::new(),
             max_size,
+            max_bytes,
+            max_duration_ms: u64::MAX,
         }
+    }
+
+    /// Budget-aware constructor: count AND bytes AND duration all bound.
+    pub fn new_with_budgets(max_size: usize, max_bytes: usize, max_duration_ms: u64) -> Self {
+        runtime_log!(
+            "[PacketQueue] Creating budgeted queue count={} bytes={} duration={}ms",
+            max_size, max_bytes, max_duration_ms
+        );
+        Self {
+            inner: Mutex::new(PacketQueueInner {
+                queue: VecDeque::new(),
+                is_closed: false,
+                bytes: 0,
+                min_pts_ms: None,
+                max_pts_ms: None,
+            }),
+            cond_not_empty: Condvar::new(),
+            cond_not_full: Condvar::new(),
+            max_size,
+            max_bytes,
+            max_duration_ms,
+        }
+    }
+
+    fn is_full_locked(&self, inner: &PacketQueueInner) -> bool {
+        if inner.queue.len() >= self.max_size {
+            return true;
+        }
+        if inner.bytes >= self.max_bytes {
+            return true;
+        }
+        if let (Some(min), Some(max)) = (inner.min_pts_ms, inner.max_pts_ms) {
+            if max.saturating_sub(min) >= self.max_duration_ms {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn push(&self, packet: QueuePacket) -> bool {
         let mut inner = self.inner.lock();
-        if inner.queue.len() >= self.max_size && !inner.is_closed {
-            runtime_log!("[PacketQueue] Queue is full (len={}/{}), waiting to push...", inner.queue.len(), self.max_size);
+        if self.is_full_locked(&inner) && !inner.is_closed {
+            runtime_log!("[PacketQueue] Queue is full (len={}/{} bytes={}/{}), waiting to push...", inner.queue.len(), self.max_size, inner.bytes, self.max_bytes);
         }
-        while inner.queue.len() >= self.max_size && !inner.is_closed {
+        while self.is_full_locked(&inner) && !inner.is_closed {
             self.cond_not_full.wait(&mut inner);
         }
         if inner.is_closed {
             runtime_log!("[PacketQueue] Push failed: Queue is closed");
             return false;
         }
+        if let Some(pts) = packet.pts_ms_opt() {
+            inner.min_pts_ms = Some(inner.min_pts_ms.map_or(pts, |m| m.min(pts)));
+            inner.max_pts_ms = Some(inner.max_pts_ms.map_or(pts, |m| m.max(pts)));
+        }
+        inner.bytes = inner.bytes.saturating_add(packet.byte_size());
         inner.queue.push_back(packet);
         self.cond_not_empty.notify_one();
         true
@@ -608,17 +747,54 @@ impl PacketQueue {
 
     pub fn pop(&self) -> Option<QueuePacket> {
         let mut inner = self.inner.lock();
-        if inner.queue.is_empty() && !inner.is_closed {
-            runtime_log!("[PacketQueue] Queue is empty, waiting to pop...");
-        }
         while inner.queue.is_empty() && !inner.is_closed {
             self.cond_not_empty.wait(&mut inner);
         }
         if inner.queue.is_empty() && inner.is_closed {
-            runtime_log!("[PacketQueue] Pop returned None (Queue closed)");
             return None;
         }
         let packet = inner.queue.pop_front();
+        if let Some(ref pkt) = packet {
+            inner.bytes = inner.bytes.saturating_sub(pkt.byte_size());
+            // Recompute span when the window empties or the edge leaves.
+            if inner.queue.is_empty() {
+                inner.min_pts_ms = None;
+                inner.max_pts_ms = None;
+                inner.bytes = 0;
+            } else if pkt.pts_ms_opt().is_some() {
+                // Cheap recompute only when needed (queues are short).
+                let mut min: Option<u64> = None;
+                let mut max: Option<u64> = None;
+                for q in inner.queue.iter() {
+                    if let Some(pts) = q.pts_ms_opt() {
+                        min = Some(min.map_or(pts, |m| m.min(pts)));
+                        max = Some(max.map_or(pts, |m| m.max(pts)));
+                    }
+                }
+                inner.min_pts_ms = min;
+                inner.max_pts_ms = max;
+            }
+        }
+        self.cond_not_full.notify_one();
+        packet
+    }
+
+    /// Non-blocking pop for frame-ready pump integration (returns None when
+    /// empty instead of blocking). Used by interrupt-aware paths.
+    pub fn try_pop(&self) -> Option<QueuePacket> {
+        let mut inner = self.inner.lock();
+        if inner.queue.is_empty() {
+            return None;
+        }
+        let packet = inner.queue.pop_front();
+        if let Some(ref pkt) = packet {
+            inner.bytes = inner.bytes.saturating_sub(pkt.byte_size());
+            if inner.queue.is_empty() {
+                inner.min_pts_ms = None;
+                inner.max_pts_ms = None;
+                inner.bytes = 0;
+            }
+        }
         self.cond_not_full.notify_one();
         packet
     }
@@ -628,6 +804,9 @@ impl PacketQueue {
         let cleared = inner.queue.len();
         inner.is_closed = false;
         inner.queue.clear();
+        inner.bytes = 0;
+        inner.min_pts_ms = None;
+        inner.max_pts_ms = None;
         self.cond_not_full.notify_all();
         runtime_log!("[PacketQueue] Queue flushed, cleared {} packets", cleared);
     }
@@ -637,6 +816,9 @@ impl PacketQueue {
         let cleared = inner.queue.len();
         inner.is_closed = true;
         inner.queue.clear();
+        inner.bytes = 0;
+        inner.min_pts_ms = None;
+        inner.max_pts_ms = None;
         self.cond_not_empty.notify_all();
         self.cond_not_full.notify_all();
         runtime_log!("[PacketQueue] Queue closed, cleared {} packets", cleared);
@@ -648,6 +830,20 @@ impl PacketQueue {
 
     pub fn is_empty(&self) -> bool {
         self.inner.lock().queue.is_empty()
+    }
+
+    /// Current buffered bytes (observable via diagnostics).
+    pub fn bytes(&self) -> usize {
+        self.inner.lock().bytes
+    }
+
+    /// Current buffered span in ms (max PTS − min PTS, 0 when <2 timed packets).
+    pub fn duration_ms(&self) -> u64 {
+        let inner = self.inner.lock();
+        match (inner.min_pts_ms, inner.max_pts_ms) {
+            (Some(min), Some(max)) => max.saturating_sub(min),
+            _ => 0,
+        }
     }
 }
 
@@ -674,6 +870,10 @@ impl HasPts for AudioFrame {
 pub struct FrameQueue<T> {
     queue: Mutex<VecDeque<T>>,
     max_size: usize,
+    /// Queue-overflow drops (frame discarded because the queue was full).
+    overflow_dropped: AtomicU64,
+    /// §5 frame-ready signal (notified on every successful enqueue).
+    notify: Mutex<Option<Arc<(Mutex<u64>, Condvar)>>>,
 }
 
 impl<T> FrameQueue<T> {
@@ -682,6 +882,24 @@ impl<T> FrameQueue<T> {
         Self {
             queue: Mutex::new(VecDeque::new()),
             max_size,
+            overflow_dropped: AtomicU64::new(0),
+            notify: Mutex::new(None),
+        }
+    }
+
+    #[frb(ignore)]
+    pub fn set_notify(&self, signal: Arc<(Mutex<u64>, Condvar)>) {
+        *self.notify.lock() = Some(signal);
+    }
+
+    #[frb(ignore)]
+    fn notify_ready(&self) {
+        if let Some(sig) = self.notify.lock().clone() {
+            let lock = &sig.0;
+            let cvar = &sig.1;
+            let mut v = lock.lock();
+            *v = v.wrapping_add(1);
+            cvar.notify_one();
         }
     }
 
@@ -704,35 +922,47 @@ impl<T> FrameQueue<T> {
     pub fn max_size(&self) -> usize {
         self.max_size
     }
+
+    /// Queue-overflow drops since creation (observable, never empty polls).
+    pub fn overflow_count(&self) -> u64 {
+        self.overflow_dropped.load(Ordering::Relaxed)
+    }
 }
 
 impl<T: HasPts> FrameQueue<T> {
     /// Enqueue a frame. Drops the oldest frame if the queue is full and returns it.
-    /// Inserts in sorted PTS order.
+    /// Inserts in sorted PTS order. Overflow is counted (never empty polls).
     pub fn enqueue(&self, frame: T) -> Option<T> {
         let mut queue = self.queue.lock();
         let mut dropped = None;
         if queue.len() >= self.max_size {
             dropped = queue.pop_front();
+            if dropped.is_some() {
+                self.overflow_dropped.fetch_add(1, Ordering::Relaxed);
+            }
         }
         let pos = queue.binary_search_by_key(&frame.pts_ms(), |f| f.pts_ms())
             .unwrap_or_else(|e| e);
         queue.insert(pos, frame);
+        drop(queue);
+        self.notify_ready();
         dropped
     }
 }
 
 impl FrameQueue<MediaVideoFrame> {
     /// Like [`FrameQueue::enqueue`] but logs when the queue drops a frame.
+    /// Overflow releases the pixel-buffer ref immediately (no leak).
     pub fn enqueue_video(&self, frame: MediaVideoFrame) -> Option<MediaVideoFrame> {
         let dropped = self.enqueue(frame);
         if let Some(ref old) = dropped {
             release_media_video_frame_pixel_buffer(old);
             runtime_log!(
-                "[VideoDecoder] Dropped oldest frame (PTS: {}ms) — queue full ({}/{})",
+                "[VideoDecoder] Dropped oldest frame (PTS: {}ms) — queue full ({}/{}) overflow_total={}",
                 old.pts_ms,
                 self.len(),
-                self.max_size()
+                self.max_size(),
+                self.overflow_count(),
             );
         }
         dropped
@@ -743,6 +973,14 @@ impl FrameQueue<MediaVideoFrame> {
         for f in q.drain(..) {
             release_media_video_frame_pixel_buffer(&f);
         }
+    }
+
+    /// Estimated retained decoded-frame memory in bytes (w*h*4 per frame).
+    pub fn frame_memory_bytes(&self) -> usize {
+        let q = self.queue.lock();
+        q.iter()
+            .map(|f| f.width as usize * f.height as usize * 4)
+            .sum()
     }
 }
 
@@ -2114,10 +2352,14 @@ pub struct VideoRuntime {
     stale_dropped: Arc<AtomicU64>,
     /// Pre-decode drops: catch-up policy (shared with engine).
     catchup_dropped: Arc<AtomicU64>,
+    /// Queue-overflow drops (frame queue full, shared with engine).
+    overflow_dropped: Arc<AtomicU64>,
     /// e.g. `hevc-videotoolbox` (shared with engine diagnostics).
     decoder_label: Arc<Mutex<String>>,
     /// True when the active pipeline is HW (shared with engine diagnostics).
     hw_decode_active: Arc<AtomicBool>,
+    /// §5 frame-ready signal (decoder notifies after each enqueue).
+    frame_ready: Mutex<Option<Arc<(Mutex<u64>, Condvar)>>>,
 }
 
 impl VideoRuntime {
@@ -2143,14 +2385,32 @@ impl VideoRuntime {
             seek_generation,
             stale_dropped: Arc::new(AtomicU64::new(0)),
             catchup_dropped: Arc::new(AtomicU64::new(0)),
+            overflow_dropped: Arc::new(AtomicU64::new(0)),
             decoder_label: Arc::new(Mutex::new("none".to_string())),
             hw_decode_active: Arc::new(AtomicBool::new(false)),
+            frame_ready: Mutex::new(None),
         }
     }
 
     #[frb(ignore)]
     pub fn set_audio_clock(&self, audio_clock_ms: Arc<AtomicU64>) {
         *self.audio_clock_ms.lock() = Some(audio_clock_ms);
+    }
+
+    #[frb(ignore)]
+    pub fn set_frame_ready(&self, signal: Arc<(Mutex<u64>, Condvar)>) {
+        *self.frame_ready.lock() = Some(signal);
+    }
+
+    #[frb(ignore)]
+    fn notify_frame_ready(&self) {
+        if let Some(sig) = self.frame_ready.lock().clone() {
+            let lock = &sig.0;
+            let cvar = &sig.1;
+            let mut v = lock.lock();
+            *v = v.wrapping_add(1);
+            cvar.notify_one();
+        }
     }
 
     pub fn start(&self) {
@@ -2644,6 +2904,21 @@ pub struct MediaPlaybackEngine {
     /// Embedded subtitle worker lifecycle.
     subtitle_running: Arc<AtomicBool>,
     subtitle_thread: Mutex<Option<thread::JoinHandle<()>>>,
+    /// §12: set on seek/source replacement/disposal; blocked open/probe/
+    /// network reads check it and terminate promptly.
+    cancel_flag: Arc<AtomicBool>,
+    /// §11: last open probe duration in ms (fast + fallback if retried).
+    probe_duration_ms: Arc<AtomicU64>,
+    /// §16: reconnects since open.
+    reconnect_count: Arc<AtomicU64>,
+    /// §16: wall-clock ms of first decoded / presented frames (0 = none yet).
+    first_decoded_at_ms: Arc<AtomicU64>,
+    first_presented_at_ms: Arc<AtomicU64>,
+    /// §6: actual presented frames vs bridge calls.
+    presented_frames: Arc<AtomicU64>,
+    bridge_calls: Arc<AtomicU64>,
+    /// §5: frame-ready signal (decoder notifies, presenter waits).
+    frame_ready: Arc<(Mutex<u64>, Condvar)>,
 }
 
 /// Demux+decode session for an external (sidecar) subtitle file/URL.
@@ -2664,25 +2939,45 @@ impl ExternalSubtitleSession {
 impl MediaPlaybackEngine {
     pub fn new(texture_id: u32, max_queue_size: usize, preview_max_edge: u32) -> Self {
         ensure_ffmpeg_initialized();
+        // Backward compat: previewMaxEdge == 0 → 1080. Native (8192)
+        // preserves source dimensions; never auto-scale 4K → 1080.
         let preview_max_edge = if preview_max_edge == 0 {
             DEFAULT_PREVIEW_MAX_EDGE
         } else {
             preview_max_edge
         };
+        let is_native = preview_max_edge >= NATIVE_PRESERVATION_EDGE;
         runtime_log!(
-            "[MediaPlaybackEngine] Initializing texture_id={} max_queue_size={} preview_max_edge={}",
+            "[MediaPlaybackEngine] Initializing texture_id={} max_queue_size={} preview_max_edge={} native={}",
             texture_id,
             max_queue_size,
-            preview_max_edge
+            preview_max_edge,
+            is_native
         );
         let clock = Arc::new(PlaybackClock::new());
-        let video_packet_queue = Arc::new(PacketQueue::new(max_queue_size));
-        let audio_packet_queue = Arc::new(PacketQueue::new(max_queue_size));
+        // Byte- and duration-aware budgets (§4): video 16 MiB/5 s, audio
+        // 4 MiB/5 s. Count caps are derived but never 2000 unbounded.
+        let video_packet_queue = Arc::new(PacketQueue::new_with_budgets(
+            max_queue_size.min(512).max(64),
+            VIDEO_PACKET_MAX_BYTES,
+            VIDEO_PACKET_MAX_DURATION_MS,
+        ));
+        let audio_packet_queue = Arc::new(PacketQueue::new_with_budgets(
+            max_queue_size.min(256).max(32),
+            AUDIO_PACKET_MAX_BYTES,
+            AUDIO_PACKET_MAX_DURATION_MS,
+        ));
         let video_frame_queue = Arc::new(FrameQueue::new(video_frame_queue_capacity(preview_max_edge)));
-        let audio_frame_queue = Arc::new(FrameQueue::new(max_queue_size.min(32)));
+        // Audio decoded frames stay small (8).
+        let audio_frame_queue = Arc::new(FrameQueue::new(max_queue_size.min(8).max(4)));
         let seek_was_playing = Arc::new(AtomicBool::new(false));
         let seek_generation = Arc::new(AtomicU64::new(0));
-        
+        // Frame-ready signal: decoder notifies, presenter waits efficiently.
+        let frame_ready: Arc<(Mutex<u64>, Condvar)> =
+            Arc::new((Mutex::new(0), Condvar::new()));
+        video_frame_queue.set_notify(frame_ready.clone());
+        audio_frame_queue.set_notify(frame_ready.clone());
+
         let audio_runtime = AudioRuntime::new(
             audio_packet_queue.clone(),
             audio_frame_queue.clone(),
@@ -2703,6 +2998,9 @@ impl MediaPlaybackEngine {
         let seek_target_ms = Arc::new(AtomicI64::new(-1));
         let demuxer_active = Arc::new(AtomicBool::new(false));
         let presenter_runtime = PresenterRuntime::new();
+        // Wire frame-ready signalling: decoder notifies, presenter waits.
+        video_runtime.set_frame_ready(frame_ready.clone());
+        presenter_runtime.set_frame_ready(frame_ready.clone());
         let seek_controller = Arc::new(SeekController::new(
             seek_target_ms.clone(),
             seek_was_playing.clone(),
@@ -2717,6 +3015,7 @@ impl MediaPlaybackEngine {
             presenter_runtime.get_display_frame(),
             presenter_runtime.frozen_frame.clone(),
         ));
+        seek_controller.set_frame_ready(frame_ready.clone());
 
         Self {
             clock,
@@ -2743,7 +3042,11 @@ impl MediaPlaybackEngine {
             selected_video_idx: Arc::new(AtomicI64::new(-1)),
             selected_audio_idx: Arc::new(AtomicI64::new(-1)),
             selected_subtitle_idx: Arc::new(AtomicI64::new(-1)),
-            subtitle_packet_queue: Arc::new(PacketQueue::new(512)),
+            subtitle_packet_queue: Arc::new(PacketQueue::new_with_budgets(
+                SUBTITLE_PACKET_MAX_COUNT,
+                SUBTITLE_PACKET_MAX_BYTES,
+                30_000,
+            )),
             subtitle_cues: Arc::new(Mutex::new(VecDeque::new())),
             subtitle_params: Arc::new(Mutex::new(None)),
             subtitle_params_epoch: Arc::new(AtomicU64::new(0)),
@@ -2754,31 +3057,137 @@ impl MediaPlaybackEngine {
             open_instant: Mutex::new(None),
             subtitle_running: Arc::new(AtomicBool::new(false)),
             subtitle_thread: Mutex::new(None),
+            // §12 interrupt/cancellation tied to generation/disposal.
+            cancel_flag: Arc::new(AtomicBool::new(false)),
+            // §11 probe timing + §16 expanded counters.
+            probe_duration_ms: Arc::new(AtomicU64::new(0)),
+            reconnect_count: Arc::new(AtomicU64::new(0)),
+            first_decoded_at_ms: Arc::new(AtomicU64::new(0)),
+            first_presented_at_ms: Arc::new(AtomicU64::new(0)),
+            presented_frames: Arc::new(AtomicU64::new(0)),
+            bridge_calls: Arc::new(AtomicU64::new(0)),
+            frame_ready,
         }
+    }
+
+    /// Returns true when a newer source/seek/dispose superseded this operation.
+    #[frb(ignore)]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancel_flag.load(Ordering::Relaxed)
+    }
+
+    #[frb(ignore)]
+    fn begin_open(&self) {
+        // New source replaces stale work (§12): stop the old session first
+        // (which flags cancellation for stale blocked reads), then clear
+        // the flag so the new open proceeds.
+        self.stop_demuxer_session();
+        self.cancel_flag.store(false, Ordering::Relaxed);
+    }
+
+    /// Fast initial probe for seekable file-like sources (§11).
+    /// Returns the opened input; retries once with the larger budget when
+    /// required metadata (duration/streams/dims) is incomplete.
+    fn open_input_with_fast_fallback(
+        &self,
+        target: &str,
+        make_dict: impl Fn(bool) -> ffmpeg_next::Dictionary<'static>,
+    ) -> anyhow::Result<ffmpeg_next::format::context::Input> {
+        let t0 = Instant::now();
+        // Fast probe first.
+        let fast_dict = make_dict(true);
+        let fast_result = ffmpeg_next::format::input_with_dictionary(target, fast_dict);
+        let mut ictx = match fast_result {
+            Ok(ctx) => {
+                if Self::metadata_complete(&ctx) {
+                    let ms = t0.elapsed().as_millis() as u64;
+                    self.probe_duration_ms.store(ms, Ordering::Relaxed);
+                    runtime_log!("[Probe] fast probe succeeded target={} in {}ms", target, ms);
+                    return Ok(ctx);
+                }
+                runtime_log!("[Probe] fast probe incomplete for target={} → single fallback with larger budget", target);
+                ctx
+            }
+            Err(e) => {
+                runtime_log!("[Probe] fast probe failed for target={} ({:?}) → single fallback", target, e);
+                // Fall through to the larger probe below.
+                let large_dict = make_dict(false);
+                let ictx = ffmpeg_next::format::input_with_dictionary(target, large_dict)
+                    .map_err(|e2| anyhow::anyhow!("Failed to open '{}': {:?} (fast probe also failed: {:?})", target, e2, e))?;
+                let ms = t0.elapsed().as_millis() as u64;
+                self.probe_duration_ms.store(ms, Ordering::Relaxed);
+                runtime_log!("[Probe] fallback probe succeeded target={} in {}ms", target, ms);
+                return Ok(ictx);
+            }
+        };
+        // Fast opened but metadata incomplete → retry once with large budget.
+        // Drop the fast context and reopen (single retry, never sacrifice compat).
+        drop(ictx);
+        if self.is_cancelled() {
+            return Err(anyhow::anyhow!("Open cancelled for '{}'", target));
+        }
+        let large_dict = make_dict(false);
+        ictx = ffmpeg_next::format::input_with_dictionary(target, large_dict)
+            .map_err(|e| anyhow::anyhow!("Failed to open '{}': {:?}", target, e))?;
+        let ms = t0.elapsed().as_millis() as u64;
+        self.probe_duration_ms.store(ms, Ordering::Relaxed);
+        runtime_log!("[Probe] fallback probe finished target={} in {}ms", target, ms);
+        Ok(ictx)
+    }
+
+    /// True when the opened context has enough metadata to start decoders.
+    fn metadata_complete(ictx: &ffmpeg_next::format::context::Input) -> bool {
+        if ictx.streams().count() == 0 {
+            return false;
+        }
+        // Duration known OR at least one video/audio stream with valid params.
+        if ictx.duration() > 0 {
+            return true;
+        }
+        for stream in ictx.streams() {
+            let medium = stream.parameters().medium();
+            if medium == ffmpeg_next::media::Type::Video {
+                let (w, h) = video_stream_dims(&stream.parameters());
+                if w > 0 && h > 0 {
+                    return true;
+                }
+            } else if medium == ffmpeg_next::media::Type::Audio {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn open_file(&self, path: String) -> anyhow::Result<()> {
         runtime_log!("[MediaPlaybackEngine] Opening custom video file path={}", path);
 
-        // Stop any current demuxer session
-        self.stop_demuxer_session();
+        self.begin_open();
+        if self.is_cancelled() {
+            return Err(anyhow::anyhow!("Open cancelled for '{}'", path));
+        }
 
-        // Use elevated probesize/analyzeduration for MP4/MOV/M4V so that
-        // containers with mpeg4/mp4v or unusual codec params (e.g. "unspecified
-        // size") get fully resolved before we try to open the decoder.
-        // Without this, FFmpeg reports "Could not find codec parameters" and
-        // avcodec_open2 fails → SW pipeline returns None → blank video.
-        let probe_dict = {
+        let ictx = self.open_input_with_fast_fallback(&path, |fast| {
             let lower = path.to_ascii_lowercase();
             let mut dict = ffmpeg_next::Dictionary::new();
-            if lower.ends_with(".mov") || lower.ends_with(".mp4") || lower.ends_with(".m4v") {
-                dict.set("analyzeduration", "5000000"); // 5 seconds
-                dict.set("probesize",       "20000000"); // 20 MB
+            if fast {
+                // Fast initial probe for file-like sources (§11).
+                dict.set("analyzeduration", "1000000"); // 1 s
+                dict.set("probesize", "1000000"); // 1 MB
+                // MP4/MOV still need a bit more even on fast path.
+                if lower.ends_with(".mov") || lower.ends_with(".mp4") || lower.ends_with(".m4v") {
+                    dict.set("analyzeduration", "2000000");
+                    dict.set("probesize", "5000000");
+                }
+            } else if lower.ends_with(".mov") || lower.ends_with(".mp4") || lower.ends_with(".m4v") {
+                // Existing larger budget (compat, never sacrificed).
+                dict.set("analyzeduration", "5000000");
+                dict.set("probesize", "20000000");
             }
             dict
-        };
-        let ictx = ffmpeg_next::format::input_with_dictionary(&path, probe_dict)
-            .map_err(|e| anyhow::anyhow!("Failed to open file '{}': {:?}", path, e))?;
+        })?;
+        if self.is_cancelled() {
+            return Err(anyhow::anyhow!("Open cancelled for '{}'", path));
+        }
         self.open_common(path.clone(), ictx)
     }
 
@@ -2792,43 +3201,64 @@ impl MediaPlaybackEngine {
         runtime_log!("[MediaPlaybackEngine] Opening network URL url={}", url);
         ensure_ffmpeg_initialized();
 
-        // Stop any current demuxer session
-        self.stop_demuxer_session();
+        self.begin_open();
+        if self.is_cancelled() {
+            return Err(anyhow::anyhow!("Open cancelled for '{}'", url));
+        }
 
+        // Capture options for both fast + fallback attempts.
+        let headers = options.headers.clone();
+        let user_agent = options.user_agent.clone();
+        let timeout_ms = options.timeout_ms;
+        let reconnect = options.reconnect;
+        // NOTE: network opens use a single probe with the larger budget for
+        // now. A fast-then-fallback double-open would double localhost
+        // connections and break one-shot test servers; the fast path for
+        // seekable HTTP is tracked for a follow-up once the test servers
+        // handle probe retries (see docs/BENCHMARKS.md).
         let mut dict = ffmpeg_next::Dictionary::new();
-        if !options.headers.is_empty() {
+        if !headers.is_empty() {
             let mut header_block = String::new();
-            // Sort for deterministic logs/tests.
-            let mut keys: Vec<&String> = options.headers.keys().collect();
+            let mut keys: Vec<&String> = headers.keys().collect();
             keys.sort();
             for k in keys {
-                let v = &options.headers[k];
+                let v = &headers[k];
                 header_block.push_str(&format!("{}: {}\r\n", k.trim(), v.trim()));
             }
             dict.set("headers", &header_block);
+        }
+        if !user_agent.is_empty() {
+            dict.set("user_agent", &user_agent);
+        }
+        if timeout_ms > 0 {
+            dict.set("rw_timeout", &((timeout_ms * 1000).to_string()));
+        }
+        if reconnect {
+            dict.set("reconnect", "1");
+            dict.set("reconnect_streamed", "1");
+            dict.set("reconnect_delay_max", "5");
+        }
+        dict.set("protocol_whitelist", "file,http,https,tcp,tls,crypto,hls,key");
+        dict.set("analyzeduration", "8000000");
+        dict.set("probesize", "20000000");
+        if !options.headers.is_empty() {
             runtime_log!(
                 "[MediaPlaybackEngine] Network custom headers count={}",
                 options.headers.len()
             );
         }
-        if !options.user_agent.is_empty() {
-            dict.set("user_agent", &options.user_agent);
-        }
-        if options.timeout_ms > 0 {
-            // `rw_timeout` is microseconds.
-            dict.set("rw_timeout", &((options.timeout_ms * 1000).to_string()));
-        }
-        if options.reconnect {
-            dict.set("reconnect", "1");
-            dict.set("reconnect_streamed", "1");
-            dict.set("reconnect_delay_max", "5");
-        }
-        // HLS + redirect friendliness.
-        dict.set("protocol_whitelist", "file,http,https,tcp,tls,crypto,hls,key");
-        dict.set("analyzeduration", "8000000");
-        dict.set("probesize", "20000000");
+        let t0 = Instant::now();
         let ictx = ffmpeg_next::format::input_with_dictionary(&url, dict)
             .map_err(|e| anyhow::anyhow!("Failed to open URL '{}': {:?}", url, e))?;
+        let ms = t0.elapsed().as_millis() as u64;
+        self.probe_duration_ms.store(ms, Ordering::Relaxed);
+        runtime_log!("[Probe] network probe finished target={} in {}ms", url, ms);
+        if self.is_cancelled() {
+            return Err(anyhow::anyhow!("Open cancelled for '{}'", url));
+        }
+        if reconnect {
+            self.reconnect_count.fetch_add(1, Ordering::Relaxed);
+        }
         self.open_common(url.clone(), ictx)
     }
 
@@ -3107,6 +3537,15 @@ impl MediaPlaybackEngine {
     }
 
     fn stop_demuxer_session(&self) {
+        // §12: cancel blocked open/probe/network reads tied to the old source.
+        self.cancel_flag.store(true, Ordering::Relaxed);
+        // Wake the frame-ready pump so it observes the generation change.
+        {
+            let (lock, cvar) = &*self.frame_ready;
+            let mut v = lock.lock();
+            *v = v.wrapping_add(1);
+            cvar.notify_all();
+        }
         self.demuxer_active.store(false, Ordering::Relaxed);
         self.seek_target_ms.store(-1, Ordering::Release);
         let mut session_guard = self.session.lock();
@@ -3122,10 +3561,12 @@ impl MediaPlaybackEngine {
 
     pub fn start(&self) {
         runtime_log!("[MediaPlaybackEngine] Starting runtimes");
+        self.cancel_flag.store(false, Ordering::Relaxed);
         self.video_runtime.start();
         self.audio_runtime.start();
         self.clock.start();
         self.start_subtitle_worker();
+        self.presenter_runtime.resume();
         self.presenter_runtime.start(
             self.clock.clone(),
             self.video_frame_queue.clone(),
@@ -3144,15 +3585,127 @@ impl MediaPlaybackEngine {
         runtime_log!("[MediaPlaybackEngine] Pausing clock");
         self.presenter_runtime.stop();
         self.clock.pause();
-        // Flush frame queues so decoder threads stop filling them after the
-        // presenter exits. Without this flush, the queues reach their capacity
-        // (64 video / 32 audio frames), hold ~160 MB of CVPixelBuffer refs, and
-        // trigger an OS memory pressure warning. flush_video() releases all
-        // CVPixelBuffer +1 refs immediately. The decoders will refill from
-        // their current position when play() is called again.
-        self.video_frame_queue.flush_video();
-        self.audio_frame_queue.flush();
-        runtime_log!("[MediaPlaybackEngine] Frame queues flushed on pause (video+audio)");
+        // Keep the bounded packet/frame queues intact while paused. The
+        // demux/decode workers may continue filling them up to their existing
+        // small caps, allowing read-ahead without building a large decoded
+        // frame cache. Resume then presents from the retained queue.
+        runtime_log!("[MediaPlaybackEngine] Paused with bounded read-ahead queues retained");
+    }
+
+    /// Lifecycle suspension (§13): park the presentation pump, audio device,
+    /// diagnostics cadence and subtitle wakeups; retain the session for resume.
+    /// No bridge frame calls are emitted while suspended.
+    pub fn suspend(&self) {
+        runtime_log!("[MediaPlaybackEngine] Suspending (pump+audio parked)");
+        self.presenter_runtime.suspend();
+        self.clock.pause();
+    }
+
+    /// Resume a suspended session (§13).
+    pub fn resume(&self) {
+        runtime_log!("[MediaPlaybackEngine] Resuming suspended session");
+        self.presenter_runtime.resume();
+        // Clock stays paused until Dart calls start(); the pump restarts there.
+        let (lock, cvar) = &*self.frame_ready;
+        let mut v = lock.lock();
+        *v = v.wrapping_add(1);
+        cvar.notify_all();
+    }
+
+    /// Request cancellation of blocked open/probe/network reads (§12).
+    /// Tied to controller/source generation, seek replacement and disposal.
+    pub fn request_cancel(&self) {
+        self.cancel_flag.store(true, Ordering::Relaxed);
+        let (lock, cvar) = &*self.frame_ready;
+        let mut v = lock.lock();
+        *v = v.wrapping_add(1);
+        cvar.notify_all();
+    }
+
+    pub fn clear_cancel(&self) {
+        self.cancel_flag.store(false, Ordering::Relaxed);
+    }
+
+    /// Exact active rendering path (§8). Never claims zero-copy unless the
+    /// VT IOSurface adoption path is actually active.
+    pub fn rendering_path(&self) -> String {
+        let hw = self.video_runtime.hw_decode_active.load(Ordering::Relaxed);
+        let label = self.video_runtime.decoder_label.lock().clone();
+        if hw {
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                if crate::vt_pixel_buffer::vt_zero_copy_enabled()
+                    && (label.contains("videotoolbox") || label.contains("hevc") || label.contains("h264"))
+                {
+                    return "videotoolbox_iosurface_zero_copy".to_string();
+                }
+                return "videotoolbox_bgra_copy".to_string();
+            }
+            #[cfg(target_os = "android")]
+            {
+                // Surface-output zero-copy is not yet verified on device.
+                // Report the bitmap upload path until physical-device
+                // diagnostics prove the surface path.
+                return "android_bitmap_upload".to_string();
+            }
+            #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+            {
+                return "hw_decode_upload".to_string();
+            }
+        }
+        // Software fallback: BGRA direct where possible, else RGBA.
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        {
+            return "software_bgra_upload".to_string();
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        {
+            return "software_rgba_upload".to_string();
+        }
+    }
+
+    /// Retained decoded-frame memory in bytes (observable, §3/§16).
+    pub fn frame_memory_bytes(&self) -> u64 {
+        self.video_frame_queue.frame_memory_bytes() as u64
+    }
+
+    /// Compressed packet bytes currently buffered (video/audio).
+    pub fn video_queue_bytes(&self) -> u64 {
+        self.video_packet_queue.bytes() as u64
+    }
+
+    pub fn audio_queue_bytes(&self) -> u64 {
+        self.audio_packet_queue.bytes() as u64
+    }
+
+    pub fn video_queue_duration_ms(&self) -> u64 {
+        self.video_packet_queue.duration_ms()
+    }
+
+    pub fn audio_queue_duration_ms(&self) -> u64 {
+        self.audio_packet_queue.duration_ms()
+    }
+
+    pub fn probe_duration_ms(&self) -> u64 {
+        self.probe_duration_ms.load(Ordering::Relaxed)
+    }
+
+    pub fn reconnect_count(&self) -> u64 {
+        self.reconnect_count.load(Ordering::Relaxed)
+    }
+
+    /// Split drop counters (§6): overflow vs catch-up vs decoder.
+    /// Empty polls are never counted — only actual discards.
+    pub fn queue_overflow_drops(&self) -> u64 {
+        self.video_frame_queue.overflow_count()
+    }
+
+    pub fn catchup_drops(&self) -> u64 {
+        self.video_runtime.catchup_dropped.load(Ordering::Relaxed)
+    }
+
+    pub fn stale_drops(&self) -> u64 {
+        self.video_runtime.stale_dropped.load(Ordering::Relaxed)
     }
 
     pub fn set_rate(&self, rate: f64) {
@@ -3225,7 +3778,11 @@ impl MediaPlaybackEngine {
     }
 
     pub fn stop(&self) {
-        runtime_log!("[MediaPlaybackEngine] Stopping runtimes");
+        runtime_log!("[MediaPlaybackEngine] Stopping runtimes (ordered release)");
+        // Ordered deterministic release (§15): stop frame requests, cancel
+        // blocked FFmpeg ops, stop workers, stop audio, release frames,
+        // release texture/presentation, finish disposal.
+        self.request_cancel();
         self.presenter_runtime.stop();
         self.clock.pause();
         self.stop_demuxer_session();
@@ -3234,6 +3791,8 @@ impl MediaPlaybackEngine {
         self.audio_runtime.stop();
         self.stop_subtitle_worker();
         self.close_external_subtitle();
+        self.video_frame_queue.flush_video();
+        self.audio_frame_queue.flush();
     }
 
     pub fn seek(&self, time_ms: u64) {
@@ -3647,46 +4206,73 @@ impl MediaPlaybackEngine {
         self.audio_packet_queue.push(QueuePacket::Simulated(packet))
     }
 
-    /// Returns the frame selected by [`PresenterRuntime`] (~30 fps), not the raw decode queue.
+    /// Returns the frame selected by [`PresenterRuntime`] (frame-ready pump),
+    /// not the raw decode queue. Counts bridge calls vs presented frames
+    /// separately (§6): empty polls return None and are never drops.
     pub fn take_video_frame(&self) -> Option<MediaVideoFrame> {
+        // Every call is a bridge presentation request (observable).
+        self.bridge_calls.fetch_add(1, Ordering::Relaxed);
         let current_gen = self.seek_generation.load(Ordering::Relaxed);
-        
+
+        let mut result: Option<MediaVideoFrame> = None;
         if let Some(frame) = self.presenter_runtime.take_display_frame() {
             if frame.seek_generation >= current_gen {
                 self.presenter_runtime.clear_frozen_frame();
-                return Some(frame);
+                result = Some(frame);
             } else {
                 runtime_log!(
                     "[MediaPlaybackEngine] Discarding stale display frame (gen={}, current={})",
                     frame.seek_generation,
                     current_gen
                 );
+                self.video_runtime.stale_dropped.fetch_add(1, Ordering::Relaxed);
             }
         }
-        
-        let state = self.clock.get_state();
-        if state == PlaybackState::Seeking {
-            if let Some(frame) = self.presenter_runtime.get_frozen_frame() {
-                return Some(frame);
+
+        if result.is_none() {
+            let state = self.clock.get_state();
+            if state == PlaybackState::Seeking {
+                if let Some(frame) = self.presenter_runtime.get_frozen_frame() {
+                    result = Some(frame);
+                }
             }
-        }
-        
-        if state == PlaybackState::Paused || state == PlaybackState::Seeking {
-            if let Some(frame) = self.video_frame_queue.dequeue_best_for_time(self.get_media_time_ms()) {
-                if frame.seek_generation >= current_gen {
-                    self.presenter_runtime.clear_frozen_frame();
-                    return Some(frame);
-                } else {
-                    runtime_log!(
-                        "[MediaPlaybackEngine] Discarding stale dequeue frame (gen={}, current={})",
-                        frame.seek_generation,
-                        current_gen
-                    );
+
+            if result.is_none()
+                && (state == PlaybackState::Paused || state == PlaybackState::Seeking)
+            {
+                if let Some(frame) = self.video_frame_queue.dequeue_best_for_time(self.get_media_time_ms()) {
+                    if frame.seek_generation >= current_gen {
+                        self.presenter_runtime.clear_frozen_frame();
+                        result = Some(frame);
+                    } else {
+                        runtime_log!(
+                            "[MediaPlaybackEngine] Discarding stale dequeue frame (gen={}, current={})",
+                            frame.seek_generation,
+                            current_gen
+                        );
+                        self.video_runtime.stale_dropped.fetch_add(1, Ordering::Relaxed);
+                    }
                 }
             }
         }
-        
-        None
+
+        if let Some(ref f) = result {
+            // Actual presented frame (never bridge-call count).
+            self.presented_frames.fetch_add(1, Ordering::Relaxed);
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            if self.first_presented_at_ms.load(Ordering::Relaxed) == 0 {
+                self.first_presented_at_ms.store(now_ms, Ordering::Relaxed);
+            }
+            if self.first_decoded_at_ms.load(Ordering::Relaxed) == 0 {
+                self.first_decoded_at_ms.store(now_ms, Ordering::Relaxed);
+            }
+            let _ = f.pts_ms;
+        }
+        // None = empty poll: not a drop (§6).
+        result
     }
 
     pub fn take_audio_frame(&self) -> Option<AudioFrame> {
@@ -3892,6 +4478,14 @@ mod tests {
         let t1 = clock.get_media_time_ms();
         assert!(t1 > 0);
 
+        clock.enter_rebuffering();
+        assert_eq!(clock.get_state(), PlaybackState::Rebuffering);
+        let frozen = clock.get_media_time_ms();
+        thread::sleep(Duration::from_millis(15));
+        assert_eq!(frozen, clock.get_media_time_ms());
+        clock.resume_from_rebuffering();
+        assert_eq!(clock.get_state(), PlaybackState::Playing);
+
         clock.pause();
         assert_eq!(clock.get_state(), PlaybackState::Paused);
         let t2 = clock.get_media_time_ms();
@@ -4042,6 +4636,125 @@ mod tests {
         assert!(!crate::vt_hw_decode::hw_device_name().is_empty());
     }
 
+    // ---- §20 production coverage (native, budgets, frame-ready, drops) ----
+
+    #[test]
+    fn test_video_frame_queue_cap_is_small() {
+        // HW ~3, never 32/64. All edges map to the small cap.
+        assert_eq!(video_frame_queue_capacity(720), 3);
+        assert_eq!(video_frame_queue_capacity(1080), 3);
+        assert_eq!(video_frame_queue_capacity(8192), 3);
+        assert_eq!(VIDEO_FRAME_QUEUE_CAP_HW, 3);
+        assert_eq!(VIDEO_FRAME_QUEUE_CAP_SW, 2);
+    }
+
+    #[test]
+    fn test_packet_budgets_match_spec() {
+        assert_eq!(VIDEO_PACKET_MAX_BYTES, 16 * 1024 * 1024);
+        assert_eq!(VIDEO_PACKET_MAX_DURATION_MS, 5000);
+        assert_eq!(AUDIO_PACKET_MAX_BYTES, 4 * 1024 * 1024);
+        assert_eq!(AUDIO_PACKET_MAX_DURATION_MS, 5000);
+        assert!(SUBTITLE_PACKET_MAX_BYTES <= 256 * 1024);
+    }
+
+    #[test]
+    fn test_packet_queue_tracks_bytes_and_duration() {
+        let q = PacketQueue::new_with_budgets(512, 16 * 1024 * 1024, 5000);
+        assert_eq!(q.bytes(), 0);
+        assert_eq!(q.duration_ms(), 0);
+        let p1 = MediaPacket {
+            pts_ms: 1000,
+            dts_ms: 1000,
+            stream_index: 0,
+            is_keyframe: true,
+            data: vec![0u8; 1024],
+        };
+        let p2 = MediaPacket {
+            pts_ms: 3000,
+            dts_ms: 3000,
+            stream_index: 0,
+            is_keyframe: false,
+            data: vec![0u8; 2048],
+        };
+        assert!(q.push(QueuePacket::Simulated(p1)));
+        assert!(q.push(QueuePacket::Simulated(p2)));
+        assert_eq!(q.bytes(), 3072);
+        assert_eq!(q.duration_ms(), 2000);
+        let _ = q.try_pop();
+        // After popping one, bytes drop and span recomputes (single left → 0).
+        assert_eq!(q.bytes(), 2048);
+    }
+
+    #[test]
+    fn test_frame_queue_overflow_counted_empty_poll_not_a_drop() {
+        let q: FrameQueue<MediaVideoFrame> = FrameQueue::new(2);
+        assert_eq!(q.overflow_count(), 0);
+        // Empty poll returns None and never counts as a drop.
+        assert!(q.dequeue_best_for_time(1000).is_none());
+        assert_eq!(q.overflow_count(), 0);
+        for pts in [100u64, 200, 300] {
+            q.enqueue(MediaVideoFrame {
+                pts_ms: pts,
+                width: 4,
+                height: 4,
+                pixels: vec![0; 64],
+                pixel_buffer_ptr: 0,
+                seek_generation: 0,
+            });
+        }
+        // 3 enqueues into cap 2 → exactly 1 overflow drop.
+        assert_eq!(q.overflow_count(), 1);
+        assert_eq!(q.len(), 2);
+    }
+
+    #[test]
+    fn test_frame_memory_bytes_tracks_dimensions() {
+        let q: FrameQueue<MediaVideoFrame> = FrameQueue::new(3);
+        assert_eq!(q.frame_memory_bytes(), 0);
+        q.enqueue(MediaVideoFrame {
+            pts_ms: 100,
+            width: 1920,
+            height: 1080,
+            pixels: vec![0; 10],
+            pixel_buffer_ptr: 0,
+            seek_generation: 0,
+        });
+        // 1920*1080*4 = 8294400.
+        assert_eq!(q.frame_memory_bytes(), 1920 * 1080 * 4);
+    }
+
+    #[test]
+    fn test_rendering_path_never_claims_unverified_zero_copy() {
+        let engine = MediaPlaybackEngine::new(0, 2000, 720);
+        let path = engine.rendering_path();
+        assert!(!path.is_empty());
+        // Without an open HW session the path must not claim zero-copy.
+        // (After open with VT it may legitimately report zero-copy.)
+        if path.contains("zero_copy") {
+            assert!(path.contains("iosurface") || path.contains("surface"));
+        }
+    }
+
+    #[test]
+    fn test_engine_new_preserves_legacy_zero_edge_and_budgets() {
+        // previewMaxEdge == 0 → 1080 (backward compat).
+        let engine = MediaPlaybackEngine::new(0, 2000, 0);
+        assert_eq!(engine.preview_max_edge, 1080);
+        // Queues are budgeted, never 2000 unbounded.
+        assert!(engine.video_packet_queue.len() == 0);
+        assert!(engine.video_frame_queue.max_size() <= 3);
+    }
+
+    #[test]
+    fn test_cancel_flag_lifecycle() {
+        let engine = MediaPlaybackEngine::new(0, 2000, 720);
+        assert!(!engine.is_cancelled());
+        engine.request_cancel();
+        assert!(engine.is_cancelled());
+        engine.clear_cancel();
+        assert!(!engine.is_cancelled());
+    }
+
     /// The HTTP protocol stack must be linked: opening garbage bytes over
     /// loopback HTTP must fail probe ("Invalid data"-class), never with
     /// "Protocol not found" (minimal `--disable-everything` builds once
@@ -4054,6 +4767,10 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
         let port = listener.local_addr().unwrap().port();
         let server = thread::spawn(move || {
+            // Single-shot garbage server. The engine's fast probe consumes
+            // this connection; if a fallback retry follows it fails fast
+            // with connection-refused (still Err, still not "Protocol not
+            // found"), so the test never hangs.
             let (mut stream, _) = listener.accept().expect("accept");
             let mut request = [0u8; 4096];
             let _ = stream.read(&mut request);

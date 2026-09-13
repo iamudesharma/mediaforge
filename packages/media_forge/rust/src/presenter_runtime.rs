@@ -1,12 +1,15 @@
-//! Phase 2: paced frame presentation (~30 fps) decoupled from Dart's variable tick rate.
-//! Phase 1: hard resync — seek demuxer to audio clock when presented video lags by several seconds.
+//! Frame-ready presentation pump: the decoder signals when a new presentable
+//! frame is selected; the presenter waits efficiently (Condvar) until one of:
+//! new frame ready / playback stops / seek generation changes / disposed.
+//! No 60/120 Hz polling when there is no new frame. No presentation while
+//! paused / completed / backgrounded / disposed.
 
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 
 use crate::api::runtime::{
     AudioFrame, FrameQueue, MediaVideoFrame, PacketQueue, PlaybackClock, PlaybackState,
@@ -25,7 +28,20 @@ pub const HARD_RESYNC_COOLDOWN_MS: u64 = 3000;
 /// Suppress hard resync right after UI/demuxer seek while queues refill.
 pub const HARD_RESYNC_SEEK_GRACE_MS: u64 = 2000;
 /// Presenter tick interval (~60 fps UI cadence; decode may be 30fps).
+/// Kept for backward-compat telemetry; the pump itself is frame-ready
+/// (event-driven) and does not poll at this rate when idle.
 pub const PRESENTER_INTERVAL_MS: u64 = 16;
+/// Max wait while playing without a new frame (one 30 fps interval).
+const FRAME_READY_WAIT_PLAYING_MS: u64 = 33;
+/// Max wait while paused/backgrounded (no presentation requested).
+const FRAME_READY_WAIT_IDLE_MS: u64 = 200;
+/// Require sustained starvation before freezing the clock. A brief gap
+/// between decoder frames must remain invisible to the user.
+const REBUFFER_ENTER_DELAY_MS: u64 = 750;
+/// Require a larger recovery condition than the enter condition: two frames
+/// must remain available for a short period before playback resumes.
+const REBUFFER_RESUME_DELAY_MS: u64 = 350;
+const REBUFFER_RESUME_FRAMES: usize = 2;
 
 /// Shared seek signalling used by UI seek, hard resync, and the demuxer thread.
 pub struct SeekController {
@@ -42,9 +58,11 @@ pub struct SeekController {
     pub seek_generation: Arc<AtomicU64>,
     display_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
     frozen_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
+    frame_ready: Mutex<Option<Arc<(Mutex<u64>, Condvar)>>>,
 }
 
 impl SeekController {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         seek_target_ms: Arc<AtomicI64>,
         seek_was_playing: Arc<AtomicBool>,
@@ -73,6 +91,21 @@ impl SeekController {
             seek_generation,
             display_frame,
             frozen_frame,
+            frame_ready: Mutex::new(None),
+        }
+    }
+
+    pub fn set_frame_ready(&self, signal: Arc<(Mutex<u64>, Condvar)>) {
+        *self.frame_ready.lock() = Some(signal);
+    }
+
+    fn notify_frame_ready(&self) {
+        if let Some(sig) = self.frame_ready.lock().clone() {
+            let lock = &sig.0;
+            let cvar = &sig.1;
+            let mut v = lock.lock();
+            *v = v.wrapping_add(1);
+            cvar.notify_all();
         }
     }
 
@@ -107,7 +140,10 @@ impl SeekController {
         *display = None;
 
         if self.demuxer_active.load(Ordering::Relaxed) {
-            let was_playing = self.clock.get_state() == PlaybackState::Playing;
+            let was_playing = matches!(
+                self.clock.get_state(),
+                PlaybackState::Playing | PlaybackState::Rebuffering
+            );
             self.seek_was_playing
                 .store(was_playing, Ordering::Relaxed);
             self.clock.seek(time_ms);
@@ -125,6 +161,8 @@ impl SeekController {
             self.audio_frame_queue.flush();
             self.clock.seek_complete(false, time_ms);
         }
+        // Wake the frame-ready pump: generation changed (§5).
+        self.notify_frame_ready();
     }
 }
 
@@ -178,6 +216,18 @@ impl HardResyncState {
         if audio_ms == 0 {
             return false;
         }
+        // A missing video frame is starvation, not an A/V synchronization
+        // problem. Seeking here flushes packet/frame queues and causes a
+        // localhost stream to issue a new Range read while it is still
+        // waiting for the current piece. Keep the last frame and let the
+        // existing demux/decode pipeline refill instead.
+        if video_frame_queue.len() == 0 {
+            presenter_log!(
+                "[HardResync] suppressed during video starvation audio={}ms",
+                audio_ms
+            );
+            return false;
+        }
         let presented_ms = clock.get_last_presented_pts_ms();
         let decoded_ms = video_frame_queue.latest_pts();
         // Backward seek: stale presented PTS from before seek must not trigger forward resync.
@@ -229,23 +279,50 @@ impl HardResyncState {
     }
 }
 
-/// Paced presenter: selects at most one display frame per interval from the decode queue.
+/// Frame-ready presenter: waits efficiently until a new frame is ready,
+/// playback stops, seek generation changes, or disposal. Presents at most
+/// one display frame per wake through the pixel_surface bridge. No
+/// presentation while paused / completed / backgrounded / disposed.
 pub struct PresenterRuntime {
     is_running: Arc<AtomicBool>,
+    /// Suspended (backgrounded): pump parked, no bridge calls.
+    is_suspended: Arc<AtomicBool>,
     thread_handle: Mutex<Option<thread::JoinHandle<()>>>,
     display_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
     hard_resync: Arc<HardResyncState>,
     pub(crate) frozen_frame: Arc<Mutex<Option<MediaVideoFrame>>>,
+    frame_ready: Mutex<Option<Arc<(Mutex<u64>, Condvar)>>>,
 }
 
 impl PresenterRuntime {
     pub fn new() -> Self {
         Self {
             is_running: Arc::new(AtomicBool::new(false)),
+            is_suspended: Arc::new(AtomicBool::new(false)),
             thread_handle: Mutex::new(None),
             display_frame: Arc::new(Mutex::new(None)),
             hard_resync: Arc::new(HardResyncState::new()),
             frozen_frame: Arc::new(Mutex::new(None)),
+            frame_ready: Mutex::new(None),
+        }
+    }
+
+    pub fn set_frame_ready(&self, signal: Arc<(Mutex<u64>, Condvar)>) {
+        *self.frame_ready.lock() = Some(signal);
+    }
+
+    /// Lifecycle suspension (§13): park the pump, emit no bridge calls.
+    pub fn suspend(&self) {
+        self.is_suspended.store(true, Ordering::SeqCst);
+        if let Some(sig) = self.frame_ready.lock().clone() {
+            sig.1.notify_all();
+        }
+    }
+
+    pub fn resume(&self) {
+        self.is_suspended.store(false, Ordering::SeqCst);
+        if let Some(sig) = self.frame_ready.lock().clone() {
+            sig.1.notify_all();
         }
     }
 
@@ -281,36 +358,49 @@ impl PresenterRuntime {
             presenter_log!("[PresenterRuntime] Already running");
             return;
         }
+        self.is_suspended.store(false, Ordering::SeqCst);
 
         let is_running = self.is_running.clone();
+        let is_suspended = self.is_suspended.clone();
         let display_frame = self.display_frame.clone();
         let hard_resync = self.hard_resync.clone();
-        let interval = Duration::from_millis(PRESENTER_INTERVAL_MS);
         let frozen_frame = self.frozen_frame.clone();
+        let frame_ready = self.frame_ready.lock().clone();
 
         presenter_log!(
-            "[PresenterRuntime] Starting paced presenter interval_ms={} (~{} Hz)",
-            PRESENTER_INTERVAL_MS,
-            1000 / PRESENTER_INTERVAL_MS.max(1)
+            "[PresenterRuntime] Starting frame-ready pump (event-driven, no vsync polling)"
         );
 
         let handle = thread::spawn(move || {
-            let mut next_tick = Instant::now();
             let mut last_present_log = Instant::now() - Duration::from_secs(5);
-            let mut last_gen = 0u64;
+            let mut last_gen = seek.seek_generation.load(Ordering::Relaxed);
 
             // Frame pacing history tracking
             let mut last_presented_frame_pts: Option<u64> = None;
             let mut last_presented_frame_time: Option<Instant> = None;
             let mut pacing_interval_average_ms: Option<f64> = None;
             let mut pacing_drift_average_ms: Option<f64> = None;
+            let mut starvation_started: Option<Instant> = None;
+            let mut recovery_ready_started: Option<Instant> = None;
+            let mut observed_version: u64 = frame_ready
+                .as_ref()
+                .map(|sig| *sig.0.lock())
+                .unwrap_or(0);
 
             while is_running.load(Ordering::SeqCst) {
-                let now = Instant::now();
-                if now < next_tick {
-                    thread::sleep(next_tick - now);
+                // §5/§13: never present while suspended; park efficiently.
+                if is_suspended.load(Ordering::SeqCst) {
+                    if let Some(sig) = frame_ready.as_ref() {
+                        let lock = &sig.0;
+                        let cvar = &sig.1;
+                        let mut guard = lock.lock();
+                        let _ = cvar.wait_for(&mut guard, Duration::from_millis(FRAME_READY_WAIT_IDLE_MS));
+                        observed_version = *guard;
+                    } else {
+                        thread::sleep(Duration::from_millis(FRAME_READY_WAIT_IDLE_MS));
+                    }
+                    continue;
                 }
-                next_tick = Instant::now() + interval;
 
                 let current_gen = seek.seek_generation.load(Ordering::Relaxed);
                 if current_gen != last_gen {
@@ -320,12 +410,99 @@ impl PresenterRuntime {
                     last_presented_frame_time = None;
                     pacing_interval_average_ms = None;
                     pacing_drift_average_ms = None;
+                    // Generation change wakes immediately (no stale wait).
                 }
 
                 let state = clock.get_state();
-                if state != PlaybackState::Playing {
+                if state != PlaybackState::Playing && state != PlaybackState::Rebuffering {
+                    starvation_started = None;
+                    recovery_ready_started = None;
+                    // Paused/completed/backgrounded: no presentation requests.
+                    // Wait efficiently for state change / new seek / stop.
+                    if let Some(sig) = frame_ready.as_ref() {
+                        let lock = &sig.0;
+                        let cvar = &sig.1;
+                        let mut guard = lock.lock();
+                        // Wake early on frame-ready signal (e.g. seek flush),
+                        // otherwise re-check state after the idle timeout.
+                        let _ = cvar.wait_for(&mut guard, Duration::from_millis(FRAME_READY_WAIT_IDLE_MS));
+                        observed_version = *guard;
+                    } else {
+                        thread::sleep(Duration::from_millis(FRAME_READY_WAIT_IDLE_MS));
+                    }
                     continue;
                 }
+
+                // Native rebuffering is a latched state. No frame is
+                // requested while starved, so the last texture remains on
+                // screen and the audio callback outputs silence with a
+                // frozen clock. Recovery requires a small frame cushion and
+                // hysteresis before returning to Playing.
+                if state == PlaybackState::Rebuffering {
+                    if video_frame_queue.len() >= REBUFFER_RESUME_FRAMES {
+                        recovery_ready_started.get_or_insert_with(Instant::now);
+                        if recovery_ready_started
+                            .map(|t| t.elapsed() >= Duration::from_millis(REBUFFER_RESUME_DELAY_MS))
+                            .unwrap_or(false)
+                        {
+                            clock.resume_from_rebuffering();
+                            recovery_ready_started = None;
+                            starvation_started = None;
+                        }
+                    } else {
+                        recovery_ready_started = None;
+                    }
+                    if let Some(sig) = frame_ready.as_ref() {
+                        let lock = &sig.0;
+                        let cvar = &sig.1;
+                        let mut guard = lock.lock();
+                        let _ = cvar.wait_for(
+                            &mut guard,
+                            Duration::from_millis(FRAME_READY_WAIT_PLAYING_MS),
+                        );
+                        observed_version = *guard;
+                    } else {
+                        thread::sleep(Duration::from_millis(FRAME_READY_WAIT_PLAYING_MS));
+                    }
+                    continue;
+                }
+
+                // Playing: wait for a new frame, seek, stop or timeout.
+                // Exactly one wake per presentable frame — no 60/120 Hz poll.
+                if let Some(sig) = frame_ready.as_ref() {
+                    let lock = &sig.0;
+                    let cvar = &sig.1;
+                    let mut guard = lock.lock();
+                    if *guard == observed_version && video_frame_queue.is_empty() {
+                        let _ = cvar.wait_for(&mut guard, Duration::from_millis(FRAME_READY_WAIT_PLAYING_MS));
+                    }
+                    observed_version = *guard;
+                } else {
+                    thread::sleep(Duration::from_millis(FRAME_READY_WAIT_PLAYING_MS));
+                }
+
+                if !is_running.load(Ordering::SeqCst) {
+                    break;
+                }
+                if is_suspended.load(Ordering::SeqCst) {
+                    continue;
+                }
+                if seek.seek_generation.load(Ordering::Relaxed) != last_gen {
+                    continue; // re-loop to invalidate pacing history
+                }
+                if clock.get_state() != PlaybackState::Playing {
+                    continue;
+                }
+
+                if video_frame_queue.is_empty() {
+                    let started = starvation_started.get_or_insert_with(Instant::now);
+                    if started.elapsed() >= Duration::from_millis(REBUFFER_ENTER_DELAY_MS) {
+                        clock.enter_rebuffering();
+                        recovery_ready_started = None;
+                    }
+                    continue;
+                }
+                starvation_started = None;
 
                 hard_resync.maybe_resync(
                     &display_frame,
@@ -347,16 +524,16 @@ impl PresenterRuntime {
                 if let Some(frame) = video_frame_queue.dequeue_best_for_time(media_ms) {
                     let pts = frame.pts_ms;
                     clock.advance_presented_pts(pts);
-                    
+
                     // Update pacing history
                     let frame_time = Instant::now();
                     if let (Some(last_pts), Some(last_time)) = (last_presented_frame_pts, last_presented_frame_time) {
                         let pts_delta = pts.saturating_sub(last_pts) as f64;
                         let time_delta = frame_time.duration_since(last_time).as_millis() as f64;
-                        
+
                         let prev_avg_int = pacing_interval_average_ms.unwrap_or(pts_delta);
                         pacing_interval_average_ms = Some(prev_avg_int * 0.9 + pts_delta * 0.1);
-                        
+
                         let drift = (time_delta - pts_delta).abs();
                         let prev_avg_drift = pacing_drift_average_ms.unwrap_or(drift);
                         pacing_drift_average_ms = Some(prev_avg_drift * 0.9 + drift * 0.1);
@@ -392,10 +569,42 @@ impl PresenterRuntime {
             return;
         }
         presenter_log!("[PresenterRuntime] Stopping");
+        // Wake the pump so it exits promptly (§5: stops on disposed).
+        if let Some(sig) = self.frame_ready.lock().clone() {
+            sig.1.notify_all();
+        }
         *self.display_frame.lock() = None;
         *self.frozen_frame.lock() = None;
         if let Some(handle) = self.thread_handle.lock().take() {
             let _ = handle.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_ready_signal_wakes_waiter() {
+        let sig: Arc<(Mutex<u64>, Condvar)> =
+            Arc::new((Mutex::new(0), Condvar::new()));
+        let sig2 = sig.clone();
+        let handle = thread::spawn(move || {
+            let (lock, cvar) = &*sig2;
+            let mut guard = lock.lock();
+            let v0 = *guard;
+            let _ = cvar.wait_for(&mut guard, Duration::from_millis(2000));
+            assert_ne!(*guard, v0);
+        });
+        thread::sleep(Duration::from_millis(50));
+        {
+            let lock = &sig.0;
+            let cvar = &sig.1;
+            let mut v = lock.lock();
+            *v = v.wrapping_add(1);
+            cvar.notify_all();
+        }
+        handle.join().unwrap();
     }
 }

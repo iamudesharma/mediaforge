@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../buffered_range.dart';
 import 'models.dart';
 import 'player_timeline.dart';
 import 'utils.dart';
@@ -133,12 +134,20 @@ class PlayerTopBar extends StatelessWidget {
 ///
 /// [wide] switches between the full desktop row and the compact mobile
 /// row. Buttons without a handler are hidden (no invented controls).
+///
+/// Bottom-right order (responsive): speed, subtitles, audio, PiP
+/// (optional), fullscreen, settings. The fullscreen button is visible by
+/// default unless [fullscreenEnabled] is false or [onToggleFullscreen] is
+/// explicitly null *and* fullscreen was disabled — legacy callers that
+/// pass [onToggleFullscreen] keep full control (backward compat).
 class PlayerBottomBar extends StatelessWidget {
   const PlayerBottomBar({
     super.key,
     required this.position,
     required this.buffered,
     required this.duration,
+    this.bufferedRanges = const [],
+    this.externalBufferedRanges = const [],
     required this.isPlaying,
     required this.showRemaining,
     required this.onToggleRemaining,
@@ -162,6 +171,7 @@ class PlayerBottomBar extends StatelessWidget {
     this.onPictureInPicture,
     this.onToggleFullscreen,
     this.isFullscreen = false,
+    this.fullscreenEnabled = true,
     this.chapters = const [],
     this.thumbnailBuilder,
     this.wide = false,
@@ -170,6 +180,12 @@ class PlayerBottomBar extends StatelessWidget {
   final Duration position;
   final Duration buffered;
   final Duration duration;
+
+  /// Engine-derived availability ranges (see [PlayerTimeline]).
+  final List<MediaForgeBufferedRange> bufferedRanges;
+
+  /// Host-provided cache ranges merged for display (generic, no torrents).
+  final List<MediaForgeBufferedRange> externalBufferedRanges;
   final bool isPlaying;
   final bool showRemaining;
   final VoidCallback onToggleRemaining;
@@ -193,9 +209,17 @@ class PlayerBottomBar extends StatelessWidget {
   final VoidCallback? onPictureInPicture;
   final VoidCallback? onToggleFullscreen;
   final bool isFullscreen;
+
+  /// When false the fullscreen button is hidden (app explicitly disables
+  /// fullscreen). Defaults to true: the icon is visible in normal mode.
+  final bool fullscreenEnabled;
   final List<MediaPlayerChapter> chapters;
   final Future<Widget?> Function(Duration position)? thumbnailBuilder;
   final bool wide;
+
+  /// Whether the fullscreen control is shown.
+  bool get showFullscreenButton =>
+      fullscreenEnabled && onToggleFullscreen != null;
 
   @override
   Widget build(BuildContext context) {
@@ -232,6 +256,8 @@ class PlayerBottomBar extends StatelessWidget {
                         position: position,
                         buffered: buffered,
                         duration: duration,
+                        bufferedRanges: bufferedRanges,
+                        externalBufferedRanges: externalBufferedRanges,
                         onSeekCommitted: onSeekCommitted,
                         chapters: chapters,
                         thumbnailBuilder: thumbnailBuilder,
@@ -311,6 +337,11 @@ class PlayerBottomBar extends StatelessWidget {
                       onPressed: onMuteToggle,
                     ),
                   const Spacer(),
+                  // Bottom-right cluster (responsive): speed, subtitles,
+                  // audio, PiP (optional), fullscreen, settings. Audio and
+                  // fullscreen stay reachable on narrow screens; only the
+                  // speed presentation (text vs icon) and the volume slider
+                  // collapse.
                   if (wide)
                     TextButton(
                       onPressed: onSpeed,
@@ -334,24 +365,25 @@ class PlayerBottomBar extends StatelessWidget {
                     selected: subtitleActive,
                     onPressed: onSubtitles,
                   ),
-                  if (wide)
-                    PlayerIconButton(
-                      icon: Icons.audiotrack_outlined,
-                      tooltip: 'Audio tracks (A)',
-                      onPressed: onAudio,
-                    ),
+                  PlayerIconButton(
+                    icon: Icons.audiotrack_outlined,
+                    tooltip: 'Audio tracks (A)',
+                    onPressed: onAudio,
+                  ),
                   if (onPictureInPicture != null)
                     PlayerIconButton(
                       icon: Icons.picture_in_picture_outlined,
                       tooltip: 'Picture in picture',
                       onPressed: onPictureInPicture,
                     ),
-                  if (onToggleFullscreen != null)
+                  if (showFullscreenButton)
                     PlayerIconButton(
                       icon: isFullscreen
                           ? Icons.fullscreen_exit
                           : Icons.fullscreen,
-                      tooltip: 'Fullscreen (F)',
+                      tooltip: isFullscreen
+                          ? 'Exit fullscreen'
+                          : 'Enter fullscreen',
                       onPressed: onToggleFullscreen,
                     ),
                   PlayerIconButton(

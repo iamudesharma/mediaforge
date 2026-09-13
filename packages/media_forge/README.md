@@ -224,7 +224,7 @@ print('hevc_videotoolbox=${caps.hevcVideotoolbox}');
 | `PacketQueue` | Custom packet queue for pipeline experiments |
 | `MediaVideoFrame` / `AudioFrame` | Decoded frame data |
 | `DiagnosticsSnapshot` | Full runtime snapshot from Rust |
-| `PlaybackState` | `idle`, `playing`, `paused`, `seeking`, `ended` |
+| `PlaybackState` | `idle`, `playing`, `paused`, `seeking`, `ended`, `rebuffering` |
 
 ### Flutter presentation layer
 

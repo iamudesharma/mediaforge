@@ -5164,6 +5164,7 @@ impl SseDecode for crate::api::runtime::PlaybackState {
             2 => crate::api::runtime::PlaybackState::Paused,
             3 => crate::api::runtime::PlaybackState::Seeking,
             4 => crate::api::runtime::PlaybackState::Ended,
+            5 => crate::api::runtime::PlaybackState::Rebuffering,
             _ => unreachable!("Invalid variant for PlaybackState: {}", inner),
         };
     }
@@ -6476,6 +6477,7 @@ impl SseEncode for crate::api::runtime::PlaybackState {
                 crate::api::runtime::PlaybackState::Paused => 2,
                 crate::api::runtime::PlaybackState::Seeking => 3,
                 crate::api::runtime::PlaybackState::Ended => 4,
+                crate::api::runtime::PlaybackState::Rebuffering => 5,
                 _ => {
                     unimplemented!("");
                 }

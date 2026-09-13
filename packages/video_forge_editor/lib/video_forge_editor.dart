@@ -16,6 +16,7 @@ export 'src/playback/rust_playback_backend.dart';
 export 'src/services/audio_picker.dart';
 export 'src/services/editor_output_paths.dart';
 export 'src/services/media_ingest.dart';
+export 'src/services/remote_ingest_cache.dart';
 export 'src/services/video_export_service.dart';
 export 'src/services/video_input.dart';
 export 'src/services/video_picker.dart';

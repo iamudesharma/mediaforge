@@ -300,15 +300,28 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
   Future<mf.PlaybackState> getPlaybackState() async =>
       playing ? mf.PlaybackState.playing : mf.PlaybackState.paused;
 
-  @override
-  Future<BigInt> getVideoPacketQueueLen() async => BigInt.from(10);
+  /// Controllable queue depths for buffering tests (defaults preserve the
+  /// historic fixed values). While paused, tests grow [videoPacketQueueLen]
+  /// to simulate demux read-ahead up to the byte/duration budget.
+  int videoPacketQueueLen = 10;
+  int audioPacketQueueLen = 5;
+  int bufferedDurationMs = 2000;
+
+  /// When non-null, overrides the playing ? 4 : 0 frame-queue behaviour
+  /// (used to assert the decoded queue stays small while paused).
+  int? videoFrameQueueLenOverride;
 
   @override
-  Future<BigInt> getAudioPacketQueueLen() async => BigInt.from(5);
+  Future<BigInt> getVideoPacketQueueLen() async =>
+      BigInt.from(videoPacketQueueLen);
 
   @override
-  Future<BigInt> getVideoFrameQueueLen() async =>
-      BigInt.from(playing ? 4 : 0);
+  Future<BigInt> getAudioPacketQueueLen() async =>
+      BigInt.from(audioPacketQueueLen);
+
+  @override
+  Future<BigInt> getVideoFrameQueueLen() async => BigInt.from(
+      videoFrameQueueLenOverride ?? (playing ? 4 : 0));
 
   @override
   Future<BigInt> getAudioFrameQueueLen() async => BigInt.from(8);
@@ -316,6 +329,7 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
   @override
   Future<mf.DiagnosticsSnapshot> getDiagnostics() async {
     final p = _pos();
+    final vq = videoFrameQueueLenOverride ?? (playing ? 4 : 0);
     return mf.DiagnosticsSnapshot(
       state: playing ? mf.PlaybackState.playing : mf.PlaybackState.paused,
       mediaTimeMs: BigInt.from(p),
@@ -324,13 +338,13 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
       latestDecodedPtsMs: BigInt.from(p),
       presentedPtsMs: BigInt.from(p),
       avDriftMs: BigInt.zero,
-      videoPacketsInQueue: BigInt.from(10),
-      audioPacketsInQueue: BigInt.from(5),
-      videoFramesInQueue: BigInt.from(playing ? 4 : 0),
+      videoPacketsInQueue: BigInt.from(videoPacketQueueLen),
+      audioPacketsInQueue: BigInt.from(audioPacketQueueLen),
+      videoFramesInQueue: BigInt.from(vq),
       audioFramesInQueue: BigInt.from(8),
       bytesRead: BigInt.from(1024 * 1024),
       readBitrateBps: BigInt.from(800000),
-      bufferedDurationMs: BigInt.from(2000),
+      bufferedDurationMs: BigInt.from(bufferedDurationMs),
       droppedVideoFrames: BigInt.zero,
       activeVideoDecoder: 'h264-videotoolbox',
       hwDecodeActive: true,

@@ -12,9 +12,13 @@
 /// them over FFI.
 library;
 
+export 'src/buffered_range.dart';
 export 'src/capabilities.dart';
 export 'src/diagnostics.dart';
+export 'src/fullscreen_controller.dart';
 export 'src/media_source.dart';
+export 'src/network_profile.dart';
+export 'src/player_configuration.dart';
 export 'src/player_controller.dart';
 export 'src/player_ui/player_ui.dart';
 export 'src/player_value.dart';

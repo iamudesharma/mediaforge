@@ -15,6 +15,8 @@ class VideoForgeEditorConfig {
     this.onExport,
     this.onCancel,
     this.cacheSegment = 'video_forge_editor',
+    this.initialPosition,
+    this.cacheKey,
   });
 
   /// App bar title.
@@ -43,4 +45,13 @@ class VideoForgeEditorConfig {
 
   /// Documents subdirectory for ingest/export cache.
   final String cacheSegment;
+
+  /// Optional playback resume position (e.g. from `MediaIngestResult`).
+  /// When set, the editor seeks here after opening instead of starting at 0.
+  final Duration? initialPosition;
+
+  /// Cache key for the opened source (e.g. from `MediaIngestResult`).
+  /// When set, the editor persists the playhead via `RemoteIngestCache`
+  /// on teardown/dispose so the next open can resume.
+  final String? cacheKey;
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'buffered_range.dart';
 import 'track_info.dart';
 
 /// Immutable snapshot of player state, in the spirit of `video_player`'s
@@ -14,6 +15,15 @@ class MediaForgePlayerValue {
     this.duration = Duration.zero,
     this.position = Duration.zero,
     this.buffered = Duration.zero,
+    this.bufferedPosition = Duration.zero,
+    this.bufferedRanges = const [],
+    this.bufferedAhead = Duration.zero,
+    this.isRebuffering = false,
+    this.isPreloading = false,
+    this.packetBufferedDuration = Duration.zero,
+    this.packetBufferedBytes = 0,
+    this.decodedVideoFrames = 0,
+    this.decodedFrameMemoryBytes = 0,
     this.volume = 1.0,
     this.isMuted = false,
     this.playbackRate = 1.0,
@@ -29,6 +39,9 @@ class MediaForgePlayerValue {
     this.selectedVideoTrackId,
     this.subtitleDelay = Duration.zero,
     this.subtitlesEnabled = true,
+    this.firstFramePresented = false,
+    this.activeSeekGeneration = 0,
+    this.lastSeekSettledGeneration = -1,
   });
 
   /// Nothing opened yet.
@@ -40,7 +53,45 @@ class MediaForgePlayerValue {
   final bool isCompleted;
   final Duration duration;
   final Duration position;
+
+  /// Legacy single buffered point (kept for backward compat).
+  ///
+  /// Equals [bufferedPosition]: the contiguous buffered point ahead of the
+  /// playhead. Prefer [bufferedRanges]/[bufferedPosition] for new code.
   final Duration buffered;
+
+  /// Contiguous buffered point ahead of the playhead (honest read-ahead,
+  /// never faked from playback position alone).
+  final Duration bufferedPosition;
+
+  /// Genuinely available ranges (engine read-ahead merged with optional
+  /// host-provided cache ranges). May be non-contiguous after seeks or
+  /// with sparse network/torrent caches.
+  final List<MediaForgeBufferedRange> bufferedRanges;
+
+  /// [bufferedPosition] − [position] (never negative).
+  final Duration bufferedAhead;
+
+  /// Playback cannot continue (stall). Show a loading indicator.
+  ///
+  /// Distinct from [isPreloading]: background read-ahead while healthy or
+  /// paused must never show a large spinner.
+  final bool isRebuffering;
+
+  /// Background read-ahead while playback is healthy or paused.
+  final bool isPreloading;
+
+  /// Compressed packet read-ahead (demux/network layer, not decoded frames).
+  final Duration packetBufferedDuration;
+
+  /// Compressed packet bytes currently held.
+  final int packetBufferedBytes;
+
+  /// Decoded video frames waiting for presentation (small: ~2–3).
+  final int decodedVideoFrames;
+
+  /// Estimated retained decoded-frame memory (bytes).
+  final int decodedFrameMemoryBytes;
   final double volume;
   final bool isMuted;
   final double playbackRate;
@@ -66,6 +117,15 @@ class MediaForgePlayerValue {
   /// Gates cue delivery in `pollSubtitleText`.
   final bool subtitlesEnabled;
 
+  /// True once the first frame has been presented since open.
+  final bool firstFramePresented;
+
+  /// Monotonic seek generation (incremented on every seek/open).
+  final int activeSeekGeneration;
+
+  /// Latest seek generation that reached a valid presented frame (-1 = none).
+  final int lastSeekSettledGeneration;
+
   bool get hasError => errorDescription != null;
   bool get hasVideo => videoWidth > 0 && videoHeight > 0;
 
@@ -87,6 +147,15 @@ class MediaForgePlayerValue {
     Duration? duration,
     Duration? position,
     Duration? buffered,
+    Duration? bufferedPosition,
+    List<MediaForgeBufferedRange>? bufferedRanges,
+    Duration? bufferedAhead,
+    bool? isRebuffering,
+    bool? isPreloading,
+    Duration? packetBufferedDuration,
+    int? packetBufferedBytes,
+    int? decodedVideoFrames,
+    int? decodedFrameMemoryBytes,
     double? volume,
     bool? isMuted,
     double? playbackRate,
@@ -106,6 +175,9 @@ class MediaForgePlayerValue {
     bool clearAudioSelection = false,
     bool clearSubtitleSelection = false,
     bool clearVideoSelection = false,
+    bool? firstFramePresented,
+    int? activeSeekGeneration,
+    int? lastSeekSettledGeneration,
   }) {
     return MediaForgePlayerValue(
       isInitialized: isInitialized ?? this.isInitialized,
@@ -114,7 +186,18 @@ class MediaForgePlayerValue {
       isCompleted: isCompleted ?? this.isCompleted,
       duration: duration ?? this.duration,
       position: position ?? this.position,
-      buffered: buffered ?? this.buffered,
+      buffered: buffered ?? bufferedPosition ?? this.buffered,
+      bufferedPosition: bufferedPosition ?? this.bufferedPosition,
+      bufferedRanges: bufferedRanges ?? this.bufferedRanges,
+      bufferedAhead: bufferedAhead ?? this.bufferedAhead,
+      isRebuffering: isRebuffering ?? this.isRebuffering,
+      isPreloading: isPreloading ?? this.isPreloading,
+      packetBufferedDuration:
+          packetBufferedDuration ?? this.packetBufferedDuration,
+      packetBufferedBytes: packetBufferedBytes ?? this.packetBufferedBytes,
+      decodedVideoFrames: decodedVideoFrames ?? this.decodedVideoFrames,
+      decodedFrameMemoryBytes:
+          decodedFrameMemoryBytes ?? this.decodedFrameMemoryBytes,
       volume: volume ?? this.volume,
       isMuted: isMuted ?? this.isMuted,
       playbackRate: playbackRate ?? this.playbackRate,
@@ -137,6 +220,10 @@ class MediaForgePlayerValue {
           : (selectedVideoTrackId ?? this.selectedVideoTrackId),
       subtitleDelay: subtitleDelay ?? this.subtitleDelay,
       subtitlesEnabled: subtitlesEnabled ?? this.subtitlesEnabled,
+      firstFramePresented: firstFramePresented ?? this.firstFramePresented,
+      activeSeekGeneration: activeSeekGeneration ?? this.activeSeekGeneration,
+      lastSeekSettledGeneration:
+          lastSeekSettledGeneration ?? this.lastSeekSettledGeneration,
     );
   }
 
@@ -150,6 +237,15 @@ class MediaForgePlayerValue {
       other.duration == duration &&
       other.position == position &&
       other.buffered == buffered &&
+      other.bufferedPosition == bufferedPosition &&
+      listEquals(other.bufferedRanges, bufferedRanges) &&
+      other.bufferedAhead == bufferedAhead &&
+      other.isRebuffering == isRebuffering &&
+      other.isPreloading == isPreloading &&
+      other.packetBufferedDuration == packetBufferedDuration &&
+      other.packetBufferedBytes == packetBufferedBytes &&
+      other.decodedVideoFrames == decodedVideoFrames &&
+      other.decodedFrameMemoryBytes == decodedFrameMemoryBytes &&
       other.volume == volume &&
       other.isMuted == isMuted &&
       other.playbackRate == playbackRate &&
@@ -164,7 +260,10 @@ class MediaForgePlayerValue {
       other.selectedSubtitleTrackId == selectedSubtitleTrackId &&
       other.selectedVideoTrackId == selectedVideoTrackId &&
       other.subtitleDelay == subtitleDelay &&
-      other.subtitlesEnabled == subtitlesEnabled;
+      other.subtitlesEnabled == subtitlesEnabled &&
+      other.firstFramePresented == firstFramePresented &&
+      other.activeSeekGeneration == activeSeekGeneration &&
+      other.lastSeekSettledGeneration == lastSeekSettledGeneration;
 
   @override
   int get hashCode => Object.hashAll([
@@ -175,6 +274,15 @@ class MediaForgePlayerValue {
         duration,
         position,
         buffered,
+        bufferedPosition,
+        Object.hashAll(bufferedRanges),
+        bufferedAhead,
+        isRebuffering,
+        isPreloading,
+        packetBufferedDuration,
+        packetBufferedBytes,
+        decodedVideoFrames,
+        decodedFrameMemoryBytes,
         volume,
         isMuted,
         playbackRate,
@@ -190,5 +298,8 @@ class MediaForgePlayerValue {
         selectedVideoTrackId,
         subtitleDelay,
         subtitlesEnabled,
+        firstFramePresented,
+        activeSeekGeneration,
+        lastSeekSettledGeneration,
       ]);
 }

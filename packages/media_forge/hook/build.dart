@@ -181,6 +181,7 @@ void _applyFfmpegDistEnv(
   String triple,
 ) {
   if (env.containsKey('FFMPEG_DIR') && env['FFMPEG_DIR']!.isNotEmpty) {
+    _sanitizeAppleBuildEnv(env, env['FFMPEG_DIR']!);
     return;
   }
   final home = Platform.environment['HOME'];
@@ -230,13 +231,7 @@ void _applyFfmpegDistEnv(
       continue;
     }
     env['FFMPEG_DIR'] = dir;
-    final pkgConfig = p.join(dir, 'lib', 'pkgconfig');
-    if (Directory(pkgConfig).existsSync()) {
-      final existing = env['PKG_CONFIG_PATH'];
-      env['PKG_CONFIG_PATH'] = existing == null || existing.isEmpty
-          ? pkgConfig
-          : '$pkgConfig:$existing';
-    }
+    _sanitizeAppleBuildEnv(env, dir);
     final staticLibs = _isStaticFfmpegDir(dir);
     if (staticLibs) {
       // Static archives don't carry their system deps (shared dylibs do
@@ -258,6 +253,74 @@ void _applyFfmpegDistEnv(
       );
     }
     return;
+  }
+}
+
+/// §17 build reproducibility: the intended bundled/static FFmpeg must be the
+/// ONLY FFmpeg source. Stale Homebrew library search paths leak into
+/// builds/tests (via PKG_CONFIG_PATH) and pull a foreign FFmpeg 7.x with an
+/// unavailable `libstdc++` link request. Strip them and verify the static
+/// prefix is self-contained.
+void _sanitizeAppleBuildEnv(Map<String, String> env, String ffmpegDir) {
+  // PKG_CONFIG_PATH must resolve ONLY inside the chosen FFmpeg prefix.
+  // Drop every Homebrew entry so pkg-config can never return a foreign
+  // libav* with `-lstdc++` (unavailable on macOS; libc++ is the system
+  // C++ runtime). Local Homebrew installs are never a required build input.
+  final pkgConfig = p.join(ffmpegDir, 'lib', 'pkgconfig');
+  if (Directory(pkgConfig).existsSync()) {
+    env['PKG_CONFIG_PATH'] = pkgConfig;
+    stderr.writeln('media_forge: PKG_CONFIG_PATH=$pkgConfig (Homebrew stripped)');
+  } else {
+    // No pkgconfig dir (e.g. Android NDK prefix): still strip Homebrew.
+    final existing = env['PKG_CONFIG_PATH'] ?? '';
+    final cleaned = existing
+        .split(':')
+        .where((e) =>
+            e.isNotEmpty &&
+            !e.contains('/opt/homebrew') &&
+            !e.contains('/usr/local/Homebrew') &&
+            !e.contains('homebrew'))
+        .join(':');
+    if (cleaned.isEmpty) {
+      env.remove('PKG_CONFIG_PATH');
+    } else {
+      env['PKG_CONFIG_PATH'] = cleaned;
+    }
+  }
+  // Never pass a Homebrew library dir to the linker via LIBRARY_PATH /
+  // LD_LIBRARY_PATH leftovers from a developer shell.
+  for (final key in ['LIBRARY_PATH', 'LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']) {
+    final v = env[key];
+    if (v == null || v.isEmpty) continue;
+    final cleaned = v
+        .split(':')
+        .where((e) =>
+            e.isNotEmpty &&
+            !e.contains('/opt/homebrew') &&
+            !e.contains('/usr/local/Homebrew'))
+        .join(':');
+    if (cleaned.isEmpty) {
+      env.remove(key);
+    } else {
+      env[key] = cleaned;
+    }
+  }
+  // Warn when the chosen prefix itself leaks Homebrew (rebuild FFmpeg with
+  // scripts/build-ffmpeg-macos-vt.sh which isolates pkg-config from Homebrew
+  // and passes --disable-xlib).
+  final libavutilPc = File(p.join(pkgConfig, 'libavutil.pc'));
+  if (libavutilPc.existsSync()) {
+    try {
+      final content = libavutilPc.readAsStringSync();
+      if (content.contains('/opt/homebrew')) {
+        stderr.writeln(
+          'media_forge: WARNING: $pkgConfig/libavutil.pc references /opt/homebrew '
+          '(X11 leakage from FFmpeg configure). Rebuild with '
+          'scripts/build-ffmpeg-macos-vt.sh to remove it. Linking still '
+          'succeeds while Homebrew X11 exists, but the prefix is not hermetic.',
+        );
+      }
+    } catch (_) {}
   }
 }
 

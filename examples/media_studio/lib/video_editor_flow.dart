@@ -7,10 +7,18 @@ class VideoEditorFlow extends StatelessWidget {
     super.key,
     required this.initialPath,
     this.displayName,
+    this.initialPosition,
+    this.cacheKey,
   });
 
   final String initialPath;
   final String? displayName;
+
+  /// Resume position for cached remote sources (0/absent = start).
+  final Duration? initialPosition;
+
+  /// Cache key for persisting the playhead across opens.
+  final String? cacheKey;
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +29,8 @@ class VideoEditorFlow extends StatelessWidget {
         showDiagnostics: false,
         onExport: (result) => Navigator.pop(context, result),
         onCancel: () => Navigator.pop(context),
+        initialPosition: initialPosition,
+        cacheKey: cacheKey,
       ),
     );
   }

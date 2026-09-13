@@ -33,25 +33,62 @@ class MediaForgeTexturePresenter {
   bool _disposed = false;
   bool _textureCreated = false;
 
+  // ---- §6/§8 observability ----
+  int _bridgeCalls = 0;
+  int _presentedFrames = 0;
+  String _renderingPath = 'unknown';
+  int _nativeW = 0;
+  int _nativeH = 0;
+  double? _lastPresentationMs;
+
   bool get isReady => textureId.value != null && frameSize.value != Size.zero;
   bool get usesGpuTexture => gpuTextureSupported();
 
+  /// Bridge presentation calls (every native present/upload attempt).
+  int get bridgeCallCount => _bridgeCalls;
+
+  /// Actually presented frames (new PTS accepted).
+  int get presentedFrameCount => _presentedFrames;
+
+  /// Exact active rendering path. One of:
+  /// `videotoolbox_iosurface_zero_copy`, `videotoolbox_bgra_copy`,
+  /// `software_bgra_upload`, `software_rgba_upload`, `cpu_fallback`,
+  /// `android_surface_zero_copy` (only when verified), `android_bitmap_upload`.
+  String get activeRenderingPath => _renderingPath;
+
+  int get nativeWidth => _nativeW;
+  int get nativeHeight => _nativeH;
+  double? get lastPresentationMs => _lastPresentationMs;
+
   /// Present one decoder frame. Returns PTS ms, or -1 when nothing new.
   Future<int> presentNext(MediaPlaybackEngine engine) async {
+    if (_disposed) return -1;
+    final t0 = DateTime.now();
     final frame = await engine.takeVideoFrame();
     if (frame == null) return -1;
     final pts = frame.ptsMs.toInt();
     if (frame.pixelBufferPtr != BigInt.zero) {
+      _bridgeCalls++;
       await _presentPixelBuffer(frame);
+      _presentedFrames++;
+      _lastPresentationMs =
+          DateTime.now().difference(t0).inMicroseconds / 1000.0;
       return pts;
     }
     if (usesGpuTexture) {
       final uploaded = await _uploadBgra(frame, pts);
-      if (uploaded && kDebugMode) {
-        // Milestone-only logging lives in the controller; keep hot path quiet.
+      if (uploaded) {
+        _presentedFrames++;
+        _lastPresentationMs =
+            DateTime.now().difference(t0).inMicroseconds / 1000.0;
       }
     } else {
+      _bridgeCalls++;
       await _presentCpu(frame);
+      _presentedFrames++;
+      _renderingPath = 'cpu_fallback';
+      _lastPresentationMs =
+          DateTime.now().difference(t0).inMicroseconds / 1000.0;
     }
     return pts;
   }
@@ -62,6 +99,8 @@ class MediaForgeTexturePresenter {
     final w = handoff.width;
     final h = handoff.height;
     if (w <= 0 || h <= 0) return;
+    _nativeW = w;
+    _nativeH = h;
     final ptr = handoff.pixelBufferPtr.toInt();
     await _ensureTexture(w, h);
     if (_disposed || textureId.value == null) return;
@@ -69,30 +108,69 @@ class MediaForgeTexturePresenter {
       handle: textureHandle,
       pixelBufferPtr: ptr,
     );
+    // The VT handoff buffer is IOSurface-backed by construction
+    // (see media_forge vt_pixel_buffer.rs); Swift adopts it without copy
+    // when canAdoptPixelBufferDirectly succeeds. Report zero-copy only for
+    // this path — never for RGBA uploads.
+    _renderingPath = 'videotoolbox_iosurface_zero_copy';
   }
 
   /// BGRA-first upload. `media_forge` decodes to RGBA bytes today, so this
-  /// currently goes through the BGRA channel (the plugin treats the bytes
-  /// as BGRA; see README gap note). Once the engine emits BGRA this becomes
-  /// a zero-swizzle memcpy on Apple.
+  /// currently goes through the RGBA channel until the engine emits BGRA;
+  /// the branch is explicit so the BGRA cutover is one line.
   Future<bool> _uploadBgra(MediaVideoFrame frame, int pts) async {
     if (!gpuTextureSupported()) return false;
     final w = frame.width;
     final h = frame.height;
     if (w <= 0 || h <= 0) return false;
     if (pts == _lastPtsMs && isReady) return false;
+    _nativeW = w;
+    _nativeH = h;
     await _ensureTexture(w, h);
     if (_disposed || textureId.value == null) return false;
-    // Engine frames are RGBA; upload via the BGRA entry point would swap
-    // channels, so stay on the RGBA path until the engine offers BGRA.
-    // The branch is kept explicit so the future BGRA cutover is one line.
+    _bridgeCalls++;
+    // Engine frames are RGBA today; uploading via the BGRA entry point
+    // would swap channels, so stay on the RGBA path until the engine
+    // offers BGRA. Prefer updateTextureBgra the moment the engine emits
+    // BGRA directly (software fallback on Apple).
     await GpuTextureRegistry.updateTextureRgba(
       handle: textureHandle,
       pixels: frame.pixels,
     );
     if (_disposed) return false;
     await GpuTextureRegistry.notifyFrameAvailable(textureHandle);
+    _bridgeCalls++;
+    _renderingPath = 'software_rgba_upload';
     _lastPtsMs = pts;
+    return true;
+  }
+
+  /// Direct BGRA upload (software fallback on Apple when the engine emits
+  /// BGRA). Skips the RGBA→BGRA swizzle via `updateTextureBgra`.
+  Future<bool> uploadBgraDirect({
+    required int width,
+    required int height,
+    required Uint8List bgra,
+    required int ptsMs,
+  }) async {
+    if (!gpuTextureSupported() || _disposed) return false;
+    if (width <= 0 || height <= 0) return false;
+    if (ptsMs == _lastPtsMs && isReady) return false;
+    _nativeW = width;
+    _nativeH = height;
+    await _ensureTexture(width, height);
+    if (_disposed || textureId.value == null) return false;
+    _bridgeCalls++;
+    await GpuTextureRegistry.updateTextureBgra(
+      handle: textureHandle,
+      pixels: bgra,
+    );
+    if (_disposed) return false;
+    await GpuTextureRegistry.notifyFrameAvailable(textureHandle);
+    _bridgeCalls++;
+    _renderingPath = 'software_bgra_upload';
+    _lastPtsMs = ptsMs;
+    _presentedFrames++;
     return true;
   }
 

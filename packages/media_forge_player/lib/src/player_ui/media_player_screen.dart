@@ -5,6 +5,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../buffered_range.dart';
+import '../fullscreen_controller.dart';
 import '../player_controller.dart';
 import '../player_value.dart';
 import '../video_widget.dart';
@@ -24,11 +26,29 @@ import 'widgets/player_icon_button.dart';
 /// keyboard shortcuts, VLC-style settings/info panels and streaming-state
 /// layers. Consumes only the public controller/value/diagnostics APIs.
 ///
+/// The same running playback session is preserved across fullscreen
+/// transitions: entering/exiting fullscreen never recreates
+/// [MediaForgePlayerController], reopens media, restarts FFmpeg, loses the
+/// texture/position, or drops audio/subtitle selections.
+///
 /// Capabilities the engine does not expose (audio delay, brightness, PiP
 /// hardware, cast, chapters/thumbnails metadata) are either omitted or
 /// injected by the app: [chapters], [thumbnailBuilder],
-/// [onPictureInPicture], [onToggleFullscreen], [onPrevious]/[onNext],
+/// [onPictureInPicture], [onPrevious]/[onNext],
 /// [onPickExternalSubtitle], [torrentStats].
+///
+/// Fullscreen (backward compat): legacy [onToggleFullscreen]/[isFullscreen]
+/// still work — when [onToggleFullscreen] is provided it is invoked for
+/// toggles. Otherwise [fullscreenController] (or an internal one) drives
+/// built-in immersive fullscreen, optionally overridden with
+/// [onEnterFullscreen]/[onExitFullscreen] for native-window handling.
+/// The fullscreen button is visible by default unless [fullscreenEnabled]
+/// is false.
+///
+/// Buffered ranges (generic, no torrent types): pass host-known
+/// download/cache windows via [externalBufferedRanges]; they are forwarded
+/// to the controller and merged (union) with engine read-ahead for the
+/// timeline. This package never imports PeerStream/libtorrent types.
 class MediaPlayerScreen extends StatefulWidget {
   const MediaPlayerScreen({
     super.key,
@@ -43,6 +63,11 @@ class MediaPlayerScreen extends StatefulWidget {
     this.onNext,
     this.onToggleFullscreen,
     this.isFullscreen = false,
+    this.fullscreenController,
+    this.fullscreenEnabled = true,
+    this.onEnterFullscreen,
+    this.onExitFullscreen,
+    this.externalBufferedRanges,
     this.onPictureInPicture,
     this.onPickExternalSubtitle,
     this.onBack,
@@ -59,8 +84,35 @@ class MediaPlayerScreen extends StatefulWidget {
   final ValueListenable<MediaPlayerTorrentStats?>? torrentStats;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+
+  /// Legacy fullscreen toggle (preserved). When provided, fullscreen
+  /// toggles invoke it and [isFullscreen] is the source of truth.
   final VoidCallback? onToggleFullscreen;
+
+  /// Legacy fullscreen flag (used only with [onToggleFullscreen]).
   final bool isFullscreen;
+
+  /// Reusable fullscreen state. When null an internal controller is used.
+  /// The same instance may be shared with the fullscreen route/view so
+  /// both stay in sync without a second player.
+  final MediaForgeFullscreenController? fullscreenController;
+
+  /// When false the fullscreen button is hidden.
+  final bool fullscreenEnabled;
+
+  /// Host override for entering fullscreen (e.g. native window
+  /// fullscreen). When provided it replaces the built-in immersive
+  /// behavior; the fullscreen state is still updated.
+  final Future<void> Function()? onEnterFullscreen;
+
+  /// Host override for exiting fullscreen. See [onEnterFullscreen].
+  final Future<void> Function()? onExitFullscreen;
+
+  /// Host-known cached/downloaded ranges (generic time ranges — never
+  /// torrent/libtorrent types). Forwarded to the controller and merged
+  /// with engine read-ahead for timeline display.
+  final ValueListenable<List<MediaForgeBufferedRange>>?
+      externalBufferedRanges;
   final VoidCallback? onPictureInPicture;
   final Future<Uri?> Function()? onPickExternalSubtitle;
   final VoidCallback? onBack;
@@ -90,10 +142,74 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
   Timer? _flashTimer;
   double? _volumePreview;
 
+  MediaForgeFullscreenController? _internalFullscreen;
+  MediaForgeFullscreenController get _fullscreen =>
+      widget.fullscreenController ?? _internalFullscreen!;
+
+  /// True while the built-in immersive mode applied system UI changes,
+  /// so [dispose] can restore them even if still fullscreen.
+  bool _systemUiApplied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _internalFullscreen = widget.fullscreenController == null
+        ? MediaForgeFullscreenController()
+        : null;
+    _fullscreen.addListener(_onFullscreenChanged);
+    _forwardExternalRanges();
+    widget.externalBufferedRanges?.addListener(_forwardExternalRanges);
+  }
+
+  @override
+  void didUpdateWidget(MediaPlayerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.fullscreenController != widget.fullscreenController) {
+      oldWidget.fullscreenController?.removeListener(_onFullscreenChanged);
+      _internalFullscreen?.dispose();
+      _internalFullscreen = widget.fullscreenController == null
+          ? MediaForgeFullscreenController()
+          : null;
+      _fullscreen.addListener(_onFullscreenChanged);
+    }
+    if (oldWidget.externalBufferedRanges !=
+        widget.externalBufferedRanges) {
+      oldWidget.externalBufferedRanges?.removeListener(
+          _forwardExternalRanges);
+      _forwardExternalRanges();
+      widget.externalBufferedRanges?.addListener(_forwardExternalRanges);
+    }
+  }
+
+  void _forwardExternalRanges() {
+    final ranges = widget.externalBufferedRanges?.value;
+    if (ranges == null) return;
+    widget.controller.setExternalBufferedRanges(ranges);
+  }
+
+  void _onFullscreenChanged() {
+    if (!mounted) return;
+    final isFullscreen = _effectiveIsFullscreen;
+    unawaited(_applyFullscreenSystemUI(isFullscreen));
+    setState(() {});
+    _bump();
+  }
+
   @override
   void dispose() {
     _hideTimer?.cancel();
     _flashTimer?.cancel();
+    widget.externalBufferedRanges?.removeListener(_forwardExternalRanges);
+    // Never leave global orientation/system-overlay changes behind.
+    if (_systemUiApplied) {
+      _restoreSystemChrome();
+      _systemUiApplied = false;
+    }
+    try {
+      _fullscreen.removeListener(_onFullscreenChanged);
+    } catch (_) {}
+    _internalFullscreen?.dispose();
+    _internalFullscreen = null;
     _appearance.dispose();
     super.dispose();
   }
@@ -177,13 +293,106 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
     if (v.hasError) return 'Error';
     if (!v.isInitialized) return 'Loading';
     if (v.isCompleted) return 'Ended';
-    if (v.isBuffering && _recentSeek) return 'Seeking';
-    if (v.isBuffering) return 'Buffering';
+    if ((v.isRebuffering || v.isBuffering) && _recentSeek) return 'Seeking';
+    if (v.isRebuffering || v.isBuffering) return 'Buffering';
     if (v.isPlaying) {
       final hw = widget.controller.lastDiagnostics?.hwDecode;
       return hw == true ? 'Playing · HW' : 'Playing';
     }
     return 'Paused';
+  }
+
+  // -- fullscreen -----------------------------------------------------------
+
+  /// Effective fullscreen state.
+  ///
+  /// Priority: explicit [MediaForgeFullscreenController] > legacy
+  /// ([onToggleFullscreen] + [isFullscreen]) > internal state. The legacy
+  /// path is preserved verbatim for existing embeddings.
+  bool get _effectiveIsFullscreen {
+    if (widget.fullscreenController != null) {
+      return widget.fullscreenController!.isFullscreen;
+    }
+    if (widget.onToggleFullscreen != null) return widget.isFullscreen;
+    return _fullscreen.isFullscreen;
+  }
+
+  /// Toggle entry point for the button, `F` key and `Esc`.
+  ///
+  /// Legacy [onToggleFullscreen] keeps full control when provided
+  /// (backward compat). Otherwise the built-in controller drives state,
+  /// with optional host overrides for native-window handling.
+  Future<void> _handleFullscreenToggle() async {
+    if (widget.onToggleFullscreen != null) {
+      widget.onToggleFullscreen!();
+      return;
+    }
+    if (!widget.fullscreenEnabled) return;
+    if (_effectiveIsFullscreen) {
+      await _exitFullscreen();
+    } else {
+      await _enterFullscreen();
+    }
+  }
+
+  Future<void> _enterFullscreen() async {
+    _bump();
+    if (widget.onEnterFullscreen != null) {
+      await widget.onEnterFullscreen!();
+    }
+    // Same running session: only state + chrome change, never a new
+    // player/controller, reopen, or texture.
+    await _fullscreen.enterFullscreen();
+    debugPrint('[MediaForgeFullscreen] entered (same controller '
+        'handle=${widget.controller.textureHandle})');
+  }
+
+  Future<void> _exitFullscreen() async {
+    _bump();
+    if (widget.onExitFullscreen != null) {
+      await widget.onExitFullscreen!();
+    }
+    await _fullscreen.exitFullscreen();
+    debugPrint('[MediaForgeFullscreen] exited, position='
+        '${widget.controller.value.position.inMilliseconds}ms');
+  }
+
+  Future<void> _applyFullscreenSystemUI(bool fullscreen) async {
+    if (_isDesktop) {
+      // Desktop: the player already fills the window/view; true
+      // native-window fullscreen (if desired) belongs to the host via
+      // onEnterFullscreen/onExitFullscreen. Esc + icon state still work.
+      _systemUiApplied = false;
+      return;
+    }
+    try {
+      if (fullscreen) {
+        // Mobile fullscreen: entire screen, immersive system UI, sensible
+        // orientation (all, so rotation follows the device). Hosts needing
+        // a landscape lock can do so in onEnterFullscreen.
+        await SystemChrome.setEnabledSystemUIMode(
+            SystemUiMode.immersiveSticky);
+        await SystemChrome.setPreferredOrientations(
+            DeviceOrientation.values);
+        _systemUiApplied = true;
+      } else if (_systemUiApplied) {
+        await _restoreSystemChrome();
+        _systemUiApplied = false;
+      }
+    } catch (e) {
+      debugPrint('[MediaForgeFullscreen] system UI failed: $e');
+    }
+  }
+
+  Future<void> _restoreSystemChrome() async {
+    try {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations(
+          DeviceOrientation.values);
+      debugPrint('[MediaForgeFullscreen] system UI restored');
+    } catch (e) {
+      debugPrint('[MediaForgeFullscreen] restore failed: $e');
+    }
   }
 
   // -- panels -------------------------------------------------------------
@@ -529,7 +738,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
               onInvoke: (_) => widget.controller.setMuted(
                   !widget.controller.value.isMuted)),
           _FullscreenIntent: CallbackAction<_FullscreenIntent>(
-              onInvoke: (_) => widget.onToggleFullscreen?.call()),
+              onInvoke: (_) => _handleFullscreenToggle()),
           _SubtitlesIntent: CallbackAction<_SubtitlesIntent>(
               onInvoke: (_) => widget.controller.setSubtitlesEnabled(
                   !widget.controller.value.subtitlesEnabled)),
@@ -543,8 +752,8 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                   ? _seekTo(Duration.zero)
                   : _seekTo(widget.controller.value.duration)),
           _EscapeIntent: CallbackAction<_EscapeIntent>(onInvoke: (_) {
-            if (widget.isFullscreen) {
-              widget.onToggleFullscreen?.call();
+            if (_effectiveIsFullscreen) {
+              _handleFullscreenToggle();
             } else {
               _hideTimer?.cancel();
               setState(() => _controlsVisible = false);
@@ -661,7 +870,10 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                             right: 0,
                             child: PlayerBottomBar(
                               position: _dragPreview ?? value.position,
-                              buffered: value.buffered,
+                              buffered: value.bufferedPosition,
+                              bufferedRanges: value.bufferedRanges,
+                              externalBufferedRanges: widget.controller
+                                  .externalBufferedRanges,
                               duration: value.duration,
                               isPlaying: value.isPlaying,
                               showRemaining: _showRemaining,
@@ -696,8 +908,11 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                               onPictureInPicture:
                                   widget.onPictureInPicture,
                               onToggleFullscreen:
-                                  widget.onToggleFullscreen,
-                              isFullscreen: widget.isFullscreen,
+                                  widget.fullscreenEnabled
+                                      ? _handleFullscreenToggle
+                                      : widget.onToggleFullscreen,
+                              isFullscreen: _effectiveIsFullscreen,
+                              fullscreenEnabled: widget.fullscreenEnabled,
                               chapters: widget.chapters,
                               thumbnailBuilder:
                                   widget.thumbnailBuilder,
@@ -707,7 +922,7 @@ class _MediaPlayerScreenState extends State<MediaPlayerScreen> {
                         if (_controlsVisible &&
                             !value.hasError &&
                             !value.isCompleted &&
-                            !(value.isBuffering &&
+                            !((value.isRebuffering || value.isBuffering) &&
                                 value.isPlaying) &&
                             value.isInitialized)
                           // Center wrapper is load-bearing: a bare Row
@@ -797,7 +1012,10 @@ class _StateLayer extends StatelessWidget {
         layers.add(_ReplayCard(
           onReplay: onRetry,
         ));
-      } else if (value.isBuffering && value.isPlaying) {
+      } else if ((value.isRebuffering || value.isBuffering) &&
+          value.isPlaying) {
+        // Stall only: background read-ahead (isPreloading) while healthy
+        // or paused must never show a large spinner.
         layers.add(_CenterStatus(
           child:
               const CircularProgressIndicator(color: Colors.white),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/editor_output_paths.dart';
 import '../services/media_ingest.dart';
+import '../services/remote_ingest_cache.dart';
 import '../theme/app_theme.dart';
 import '../video_forge_editor.dart';
 import 'video_editor_screen.dart';
@@ -34,6 +35,8 @@ class _VideoForgeEditorWidgetState extends State<VideoForgeEditorWidget> {
     _session = widget.config.session ?? VideoEditorSession();
     EditorOutputPaths.configure(cacheSegment: widget.config.cacheSegment);
     MediaIngest.configure(ingestSegment: '${widget.config.cacheSegment}/ingest');
+    RemoteIngestCache.configure(
+        ingestSegment: '${widget.config.cacheSegment}/ingest');
     _bootstrap();
   }
 
@@ -90,6 +93,8 @@ class _VideoForgeEditorWidgetState extends State<VideoForgeEditorWidget> {
       onExport: widget.config.onExport,
       onCancel: widget.config.onCancel,
       cacheSegment: widget.config.cacheSegment,
+      initialPosition: widget.config.initialPosition,
+      cacheKey: widget.config.cacheKey,
     );
     return Theme(
       data: theme,

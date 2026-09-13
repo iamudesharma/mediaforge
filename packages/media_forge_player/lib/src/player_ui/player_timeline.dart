@@ -1,16 +1,36 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../buffered_range.dart';
 import 'utils.dart';
 import 'models.dart';
 
 /// Timeline scrubber with played/buffered ranges and chapter markers.
 ///
-/// * Drag (or tap) anywhere to preview, release to commit the seek via
-///   [onSeekCommitted]; live position streams in through [position].
-/// * Desktop hover shows the hovered timestamp and, when
-///   [thumbnailBuilder] is provided, a thumbnail preview.
-/// * [chapters] are app-provided markers; the engine exposes none.
+/// Visual contract (YouTube/VLC style):
+/// ```text
+/// [======== played =====>|---- buffered ----|........ not loaded ........]
+/// ```
+/// * base/unbuffered track (empty)
+/// * buffered/cache ranges (engine read-ahead merged with optional host
+///   cache) — always visible, including while paused
+/// * played progress + playhead knob
+/// * chapter markers, hover timestamp + optional thumbnail
+///
+/// Drag (or tap) anywhere to preview, release to commit the seek via
+/// [onSeekCommitted]; live position streams in through [position].
+/// Desktop hover shows the hovered timestamp and, when [thumbnailBuilder]
+/// is provided, a thumbnail preview.
+///
+/// [buffered] is the legacy single-point API (kept for backward compat).
+/// Prefer [bufferedRanges]: non-contiguous ranges from seeks/sparse caches.
+/// When [bufferedRanges] is non-empty it drives rendering; otherwise
+/// [buffered] is used as a single `[0, buffered]` window.
+///
+/// Listening to [MediaForgePlayerController.bufferState] (a dedicated
+/// notifier) instead of the full player value keeps timeline updates
+/// lightweight: the video texture listens to the presenter and is never
+/// rebuilt because buffering changed.
 class PlayerTimeline extends StatefulWidget {
   const PlayerTimeline({
     super.key,
@@ -18,20 +38,41 @@ class PlayerTimeline extends StatefulWidget {
     required this.buffered,
     required this.duration,
     required this.onSeekCommitted,
+    this.bufferedRanges = const [],
+    this.externalBufferedRanges = const [],
     this.chapters = const [],
     this.thumbnailBuilder,
     this.enabled = true,
   });
 
   final Duration position;
+
+  /// Legacy contiguous buffered point (backward compat).
   final Duration buffered;
   final Duration duration;
   final ValueChanged<Duration> onSeekCommitted;
+
+  /// Engine-derived availability (merged display ranges when combined with
+  /// [externalBufferedRanges]). Empty = fall back to [buffered].
+  final List<MediaForgeBufferedRange> bufferedRanges;
+
+  /// Host-provided cache ranges (generic, e.g. torrent piece cache).
+  /// Merged (union) with [bufferedRanges] for display, never double-counted.
+  final List<MediaForgeBufferedRange> externalBufferedRanges;
   final List<MediaPlayerChapter> chapters;
 
   /// Optional async thumbnail for a position (`null` = no preview).
   final Future<Widget?> Function(Duration position)? thumbnailBuilder;
   final bool enabled;
+
+  /// Merged display ranges (internal ∪ external, normalized).
+  List<MediaForgeBufferedRange> get displayRanges {
+    if (bufferedRanges.isEmpty && externalBufferedRanges.isEmpty) {
+      if (buffered <= Duration.zero) return const [];
+      return [MediaForgeBufferedRange(start: Duration.zero, end: buffered)];
+    }
+    return mergeBufferedRanges(bufferedRanges, externalBufferedRanges);
+  }
 
   @override
   State<PlayerTimeline> createState() => _PlayerTimelineState();
@@ -92,6 +133,14 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
   Widget build(BuildContext context) {
     final shownFraction =
         _dragFraction ?? _fractionFor(widget.position);
+    // Prefer merged ranges; fall back to legacy single point.
+    final displayRanges = widget.displayRanges;
+    final displayFractions = displayRanges
+        .map((r) => (
+              start: _fractionFor(r.start),
+              end: _fractionFor(r.end),
+            ))
+        .toList();
     final bufferedFraction = _fractionFor(widget.buffered);
     final hoverFraction = _hoverFraction;
     final accent = Theme.of(context).colorScheme.primary;
@@ -141,6 +190,7 @@ class _PlayerTimelineState extends State<PlayerTimeline> {
                   painter: _TimelinePainter(
                     playedFraction: shownFraction,
                     bufferedFraction: bufferedFraction,
+                    bufferedSpans: displayFractions,
                     chapters: widget.chapters
                         .map((c) => _fractionFor(c.position))
                         .toList(),
@@ -273,12 +323,17 @@ class _TimelinePainter extends CustomPainter {
   _TimelinePainter({
     required this.playedFraction,
     required this.bufferedFraction,
+    required this.bufferedSpans,
     required this.chapters,
     required this.activeColor,
   });
 
   final double playedFraction;
   final double bufferedFraction;
+
+  /// Merged buffered spans as (start, end) fractions. When non-empty these
+  /// drive rendering; otherwise [bufferedFraction] is the fallback.
+  final List<({double start, double end})> bufferedSpans;
   final List<double> chapters;
   final Color activeColor;
 
@@ -288,18 +343,26 @@ class _TimelinePainter extends CustomPainter {
     const trackH = 4.0;
     const radius = Radius.circular(2);
 
-    // Base track.
+    // Base/unbuffered track.
     canvas.drawRRect(
       RRect.fromLTRBR(0, centerY - trackH / 2, size.width,
           centerY + trackH / 2, radius),
       Paint()..color = Colors.white24,
     );
-    // Buffered range.
-    final bufferedW = size.width * bufferedFraction.clamp(0.0, 1.0);
-    if (bufferedW > 0) {
+    // Buffered/cache ranges (visible even while paused).
+    final spans = bufferedSpans.isEmpty
+        ? [
+            if (bufferedFraction > 0)
+              (start: 0.0, end: bufferedFraction.clamp(0.0, 1.0)),
+          ]
+        : bufferedSpans;
+    for (final span in spans) {
+      final s = span.start.clamp(0.0, 1.0);
+      final e = span.end.clamp(0.0, 1.0);
+      if (e <= s) continue;
       canvas.drawRRect(
-        RRect.fromLTRBR(0, centerY - trackH / 2, bufferedW,
-            centerY + trackH / 2, radius),
+        RRect.fromLTRBR(s * size.width, centerY - trackH / 2,
+            e * size.width, centerY + trackH / 2, radius),
         Paint()..color = Colors.white38,
       );
     }
@@ -321,7 +384,7 @@ class _TimelinePainter extends CustomPainter {
         Paint()..color = Colors.white70,
       );
     }
-    // Knob.
+    // Playhead knob.
     canvas.drawCircle(
       Offset(playedW, centerY),
       6.5,
@@ -342,5 +405,18 @@ class _TimelinePainter extends CustomPainter {
       old.playedFraction != playedFraction ||
       old.bufferedFraction != bufferedFraction ||
       old.activeColor != activeColor ||
-      !listEquals(old.chapters, chapters);
+      !listEquals(old.chapters, chapters) ||
+      !_spansEqual(old.bufferedSpans, bufferedSpans);
+
+  static bool _spansEqual(
+    List<({double start, double end})> a,
+    List<({double start, double end})> b,
+  ) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].start != b[i].start || a[i].end != b[i].end) return false;
+    }
+    return true;
+  }
 }

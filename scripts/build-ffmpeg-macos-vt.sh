@@ -17,6 +17,26 @@
 #
 set -euo pipefail
 
+# §17 build reproducibility: isolate FFmpeg configure from the developer's
+# Homebrew installation. Stale Homebrew library paths leak into pkg-config
+# detection (X11, etc.) and end up baked into libavutil.pc as
+# `-L/opt/homebrew/... -lX11`, making the prefix non-hermetic. They also let
+# cargo builds silently pick up a foreign Homebrew FFmpeg 7.x whose .pc
+# files request unavailable `libstdc++` (macOS uses libc++). A local
+# Homebrew install must never be a required build input.
+if [[ -z "${FFMPEG_KEEP_HOMEBREW:-}" ]]; then
+  export PKG_CONFIG_PATH="${FFMPEG_PKG_CONFIG_PATH:-}"
+  export PKG_CONFIG_LIBDIR="${FFMPEG_PKG_CONFIG_LIBDIR:-}"
+  unset PKG_CONFIG_LIBDIR 2>/dev/null || true
+  # Keep only an explicitly requested pkg-config path; drop Homebrew.
+  if [[ -n "${PKG_CONFIG_PATH:-}" ]]; then
+    PKG_CONFIG_PATH="$(echo "${PKG_CONFIG_PATH}" | tr ':' '\n' | grep -v -E '/opt/homebrew|/usr/local/Homebrew|homebrew' || true | paste -sd: -)"
+    export PKG_CONFIG_PATH
+  fi
+  echo "==> Homebrew isolated from FFmpeg configure (PKG_CONFIG_PATH=${PKG_CONFIG_PATH:-<empty>})"
+  echo "    Set FFMPEG_KEEP_HOMEBREW=1 to opt back into Homebrew detection."
+fi
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FFMPEG_VERSION="${FFMPEG_VERSION:-8.0}"
 if [[ "${FFMPEG_SHARED:-0}" == "1" ]]; then
@@ -48,7 +68,7 @@ cd "ffmpeg-${FFMPEG_VERSION}"
 # Rebuild from scratch when the install prefix OR the configure flags
 # changed — incremental make does not reliably pick up deselected/
 # newly-selected demuxers, protocols, or static/shared flips.
-CONFIGURE_STAMP_ARGS="prefix=${INSTALL_PREFIX} shared=${FFMPEG_SHARED:-0} v=3"
+CONFIGURE_STAMP_ARGS="prefix=${INSTALL_PREFIX} shared=${FFMPEG_SHARED:-0} v=4"
 if [[ -f config.mak ]]; then
   old_prefix="$(sed -n 's/^prefix=//p' config.mak | head -1)"
   old_stamp="$(cat .rust_image_configure_stamp 2>/dev/null || true)"
@@ -66,6 +86,12 @@ fi
   --disable-ffplay \
   --disable-ffprobe \
   --disable-doc \
+  --disable-xlib \
+  --disable-sdl2 \
+  --disable-libxcb \
+  --disable-libxcb-shm \
+  --disable-libxcb-xfixes \
+  --disable-libxcb-shape \
   --enable-pthreads \
   --enable-network \
   --enable-avcodec \
@@ -131,6 +157,21 @@ if [[ "${FFMPEG_SHARED:-0}" != "1" ]]; then
     fi
   done
   echo "==> archives carry http/tcp/tls/crypto/file + hls/mpegts; component defines present"
+  # §17 hermeticity: no Homebrew paths may leak into the installed .pc files.
+  # Unavailable `libstdc++` link requests come from foreign Homebrew FFmpeg
+  # .pc files; our static prefix must never reference /opt/homebrew.
+  if grep -r -q '/opt/homebrew' "${INSTALL_PREFIX}/lib/pkgconfig/" 2>/dev/null; then
+    echo "WARNING: ${INSTALL_PREFIX}/lib/pkgconfig references /opt/homebrew" >&2
+    grep -r '/opt/homebrew' "${INSTALL_PREFIX}/lib/pkgconfig/" 2>/dev/null | head -5 >&2 || true
+    echo "         Rebuild with FFMPEG_KEEP_HOMEBREW unset and --disable-xlib (default)." >&2
+    echo "         Linking still succeeds while Homebrew X11 exists, but the prefix is not hermetic." >&2
+  else
+    echo "==> pkgconfig hermetic: no /opt/homebrew references"
+  fi
+  if grep -r -q '\-lstdc++' "${INSTALL_PREFIX}/lib/pkgconfig/" 2>/dev/null; then
+    echo "ERROR: ${INSTALL_PREFIX}/lib/pkgconfig requests -lstdc++ (unavailable on macOS; use libc++)." >&2
+    exit 1
+  fi
 fi
 
 if [[ "${verify_ok}" -eq 0 ]]; then

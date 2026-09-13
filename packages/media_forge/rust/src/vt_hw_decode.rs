@@ -1,5 +1,21 @@
-//! VideoToolbox hardware decode via FFmpeg `hw_device_ctx` (FFmpeg 7+/8).
+//! Hardware decode via FFmpeg `hw_device_ctx` (VideoToolbox on Apple,
+//! MediaCodec on Android; FFmpeg 7+/8).
 //! Internal module — not exposed to flutter_rust_bridge (`rust_input: crate::api`).
+//!
+//! Android rendering optimization (§9): MediaCodec hardware decoding is
+//! preserved (`AV_HWDEVICE_TYPE_MEDIACODEC` + `get_format` + NV12
+//! `transfer_to_sw`, JVM registered in `android_jni.rs`). The current
+//! presentation path (`MediaCodec → NV12 transfer → software RGBA →
+//! FFI/Dart → bitmap upload`, reported as `android_bitmap_upload`) is kept
+//! as the verified fallback.
+//!
+//! Target architecture (not yet claimed — requires physical-device
+//! diagnostics proving the path):
+//! ```text
+//! MediaCodec → Android Surface / SurfaceTexture → pixel_surface texture → Flutter
+//! ```
+//! Until `pixel_surface` exposes a Surface-backed texture and device logs
+//! confirm continuous surface output, do NOT report Android zero-copy.
 
 use std::ffi::c_void;
 use std::ptr;

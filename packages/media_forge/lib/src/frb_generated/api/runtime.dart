@@ -762,7 +762,7 @@ class PixelBufferHandoff {
 }
 
 /// State of the playback clock.
-enum PlaybackState { idle, playing, paused, seeking, ended }
+enum PlaybackState { idle, playing, paused, seeking, ended, rebuffering }
 
 /// Kind of a container stream discovered at open time.
 enum StreamKind { video, audio, subtitle }
