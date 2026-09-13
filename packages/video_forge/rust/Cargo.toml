@@ -27,7 +27,7 @@ uuid.workspace = true
 parking_lot.workspace = true
 mp4parse.workspace = true
 memmap2.workspace = true
-flutter_rust_bridge = "=2.13.0"
+flutter_rust_bridge = "=2.13.0-beta.6"
 ffmpeg-next.workspace = true
 log.workspace = true
 env_logger.workspace = true

@@ -20,7 +20,7 @@ dependencies:
     path: ../media_forge
   pixel_surface:
     path: ../pixel_surface
-  flutter_rust_bridge: ^2.13.0
+  flutter_rust_bridge: ^2.13.0-beta.6
   file_picker: ^8.3.7
   path_provider: ^2.1.5
   path: ^1.9.0

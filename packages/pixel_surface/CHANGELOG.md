@@ -3,6 +3,11 @@
 - iOS deployment target lowered 16.0 → 15.0 (audited: no iOS 16+ API used;
   see `IOS15_COMPATIBILITY.md`). PeerStream (iOS 15) consumes without changes.
 
+## 1.1.0-dev.1
+
+- Pre-release aligned with **Flutter 3.47.0** (Dart 3.13.0) verification.
+- Document minimum Flutter **3.27.0** (`TextureRegistry.SurfaceProducer` + `scheduleFrame()`).
+
 ## 1.0.0
 
 - Initial pub.dev release of `pixel_surface` — Flutter GPU texture bridge for native Rust pipelines and custom renderers. Renamed from `rust_gpu_texture` to a proper pub.dev package name.

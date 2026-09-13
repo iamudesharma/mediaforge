@@ -1,3 +1,8 @@
+## 1.1.0-dev.1
+
+- Pre-release aligned with **Flutter 3.47.0** (Dart 3.13.0) verification.
+- Upgrade `flutter_rust_bridge` to **2.13.0-beta.6** (Dart + Rust + regenerated bindings).
+
 ## 1.0.0
 
 - Initial pub.dev release of `video_forge` — high-performance Rust video processing engine for Flutter powered by FFmpeg.

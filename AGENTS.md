@@ -64,7 +64,7 @@ After editing `rust/src/api/*.rs`, regenerate:
 | `video_forge` / `media_forge` | `cd packages/<pkg> && flutter_rust_bridge_codegen generate` | `lib/src/frb_generated/` |
 
 Config per package: `flutter_rust_bridge.yaml` (`rust_input: crate::api`).
-**Version lockstep (currently `2.13.0`, verified):** codegen binary (`cargo install flutter_rust_bridge_codegen --version '=2.13.0'`), every Rust `flutter_rust_bridge` pin, and every Dart `flutter_rust_bridge: ^2.13.0` (including `benchmark/` and `packages/*/example/`) must agree or apps fail with "Rust initialization failed". After upgrading, regenerate all four packages and run each package's `cargo test` + `flutter analyze` + `flutter test`. Codegen 2.13+ deletes unowned `*.freezed.dart` in the output dir — restore via git and re-run `build_runner` if `@freezed` models are still referenced.
+**Version lockstep (currently `2.13.0-beta.6`, verified):** codegen binary (`cargo install flutter_rust_bridge_codegen --version '=2.13.0-beta.6'`), every Rust `flutter_rust_bridge` pin, and every Dart `flutter_rust_bridge: ^2.13.0-beta.6` (including `benchmark/` and `packages/*/example/`) must agree or apps fail with "Rust initialization failed". After upgrading, regenerate all four packages and run each package's `cargo test` + `flutter analyze` + `flutter test`. Codegen 2.13+ deletes unowned `*.freezed.dart` in the output dir — restore via git and re-run `build_runner` if `@freezed` models are still referenced.
 
 ## Logging (required on non-trivial changes)
 
@@ -108,4 +108,22 @@ Dark-only, single mint accent. Tokens: `packages/image_forge_editor/lib/src/edit
 ## CI
 
 - `.github/workflows/ci.yml` (ubuntu): bootstrap → per-package analyze/test → apt FFmpeg → `cargo test -p video_forge`. No native app build.
-- `.github/workflows/media_forge_native.yml` (path-filtered): FRB `2.13.0` alignment check; macOS release (static FFmpeg build, hermeticity, `cargo build --release -p media_forge`, protocol/codec + HW-probe test, `media_forge_player` Dart tests); iOS 15 target/build check; Android release + MediaCodec path grep.
+- `.github/workflows/media_forge_native.yml` (path-filtered): FRB `2.13.0-beta.6` alignment check; macOS release (static FFmpeg build, hermeticity, `cargo build --release -p media_forge`, protocol/codec + HW-probe test, `media_forge_player` Dart tests); iOS 15 target/build check; Android release + MediaCodec path grep.
+
+## Cursor Cloud specific instructions
+
+Cloud Agent setup is defined in `.cursor/environment.json` and `scripts/cloud-agent-install.sh` (Flutter stable, Rust/Android targets, melos bootstrap, FFmpeg dev libs).
+
+**Linux limitations on this branch:**
+
+- `pixel_surface` `gpu` is **Apple-only** today. On Linux, build/test `image_forge` Rust with CPU features only: `cargo test --features blurhash --no-default-features` (omit default `gpu`/`avif`). AVIF needs NASM (`nasm` package) when enabled.
+- `examples/image_editor` Linux desktop builds pull `image_forge` default features and fail until GPU is ported to Vulkan on Linux. Use Dart/widget tests and the Rust CLI benchmark instead.
+
+**Quick health checks (Linux cloud agent):**
+
+```bash
+bash scripts/cloud-agent-install.sh          # idempotent bootstrap
+dart run melos exec --scope=image_forge_editor -- flutter test
+cd packages/video_forge && cargo test -p video_forge
+cd packages/image_forge/rust && cargo run --release --features blurhash --no-default-features --bin image_forge_benchmark -- --synthetic -n 3
+```

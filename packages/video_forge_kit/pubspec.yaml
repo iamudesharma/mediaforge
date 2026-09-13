@@ -15,7 +15,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_rust_bridge: ^2.13.0
+  flutter_rust_bridge: ^2.13.0-beta.6
   video_player: ^2.9.2
   pixel_surface:
     path: ../pixel_surface
