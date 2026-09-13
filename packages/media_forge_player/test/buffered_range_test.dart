@@ -266,6 +266,10 @@ void main() {
       fake.videoPacketQueueLen = 20;
       fake.bufferedDurationMs = 2000;
       await c.diagnosticsTickForTest();
+      // Recovery hysteresis needs the ready condition to hold for
+      // _rebufferExitDelay (350ms) before the spinner clears.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await c.diagnosticsTickForTest();
       expect(c.value.isRebuffering, isFalse);
       expect(c.value.isPreloading, isTrue);
       expect(c.value.bufferedAhead.inMilliseconds, greaterThan(0));

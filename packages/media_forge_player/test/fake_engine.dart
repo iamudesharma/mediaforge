@@ -403,4 +403,59 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
   @override
   Future<void> setOverlayVolume(
           {required BigInt id, required double volume}) async {}
+
+  // -- lifecycle / telemetry (added with the beta.6 regen) ------------------
+
+  bool suspended = false;
+  bool cancelRequested = false;
+
+  @override
+  Future<void> suspend() async {
+    playing = false;
+    suspended = true;
+  }
+
+  @override
+  Future<void> resume() async {
+    suspended = false;
+  }
+
+  @override
+  Future<void> requestCancel() async => cancelRequested = true;
+
+  @override
+  Future<void> clearCancel() async => cancelRequested = false;
+
+  @override
+  Future<String> renderingPath() async => 'fake-cpu';
+
+  @override
+  Future<BigInt> videoQueueBytes() async => BigInt.zero;
+
+  @override
+  Future<BigInt> audioQueueBytes() async => BigInt.zero;
+
+  @override
+  Future<BigInt> videoQueueDurationMs() async => BigInt.zero;
+
+  @override
+  Future<BigInt> audioQueueDurationMs() async => BigInt.zero;
+
+  @override
+  Future<BigInt> probeDurationMs() async => BigInt.from(durationMs);
+
+  @override
+  Future<BigInt> frameMemoryBytes() async => BigInt.zero;
+
+  @override
+  Future<BigInt> reconnectCount() async => BigInt.zero;
+
+  @override
+  Future<BigInt> queueOverflowDrops() async => BigInt.zero;
+
+  @override
+  Future<BigInt> catchupDrops() async => BigInt.zero;
+
+  @override
+  Future<BigInt> staleDrops() async => BigInt.zero;
 }
