@@ -68,7 +68,9 @@ cd "ffmpeg-${FFMPEG_VERSION}"
 # Rebuild from scratch when the install prefix OR the configure flags
 # changed — incremental make does not reliably pick up deselected/
 # newly-selected demuxers, protocols, or static/shared flips.
-CONFIGURE_STAMP_ARGS="prefix=${INSTALL_PREFIX} shared=${FFMPEG_SHARED:-0} v=4"
+# Bump when the curated component list below changes so an existing build
+# directory is fully reconfigured rather than retaining stale registrations.
+CONFIGURE_STAMP_ARGS="prefix=${INSTALL_PREFIX} shared=${FFMPEG_SHARED:-0} v=7"
 if [[ -f config.mak ]]; then
   old_prefix="$(sed -n 's/^prefix=//p' config.mak | head -1)"
   old_stamp="$(cat .rust_image_configure_stamp 2>/dev/null || true)"
@@ -102,9 +104,9 @@ fi
   --enable-zlib \
   --enable-securetransport \
   --enable-protocol=file,http,https,tcp,tls,httpproxy,crypto \
-  --enable-demuxer=mov,mp4,m4v,matroska,mp3,wav,ogg,flac,aac,hls,mpegts \
+  --enable-demuxer=mov,mp4,m4v,matroska,mp3,wav,ogg,flac,aac,hls,mpegts,srt,webvtt,ass \
   --enable-muxer=mp4 \
-  --enable-decoder=h264,hevc,aac,mp3,flac,vorbis,opus,pcm_s16le,pcm_s24le,pcm_f32le,mpeg4,msmpeg4v2,msmpeg4v3,h263,h263i,h263p \
+  --enable-decoder=h264,hevc,aac,ac3,eac3,mp3,flac,vorbis,opus,pcm_s16le,pcm_s24le,pcm_f32le,mpeg4,msmpeg4v2,msmpeg4v3,h263,h263i,h263p,ass,dvbsub,dvdsub,movtext,pgssub,srt,subrip,text,webvtt \
   --enable-parser=h264,hevc,aac,mpeg4video,h263,mpegaudio,mpegvideo \
   --enable-videotoolbox \
   --enable-hwaccel=h264_videotoolbox,hevc_videotoolbox \
@@ -144,19 +146,19 @@ fi
 # libs and is not what ships). A miss here used to surface at app
 # runtime as "Protocol not found" (see PeerStream localhost streaming).
 if [[ "${FFMPEG_SHARED:-0}" != "1" ]]; then
-  for obj in http.o tcp.o tls.o crypto.o file.o hls.o mpegts.o; do
+  for obj in http.o tcp.o tls.o crypto.o file.o hls.o mpegts.o srtdec.o webvttdec.o assdec.o; do
     if ! ar t "${INSTALL_PREFIX}/lib/libavformat.a" 2>/dev/null | grep -qx "${obj}"; then
       echo "ERROR: ${obj} missing from ${INSTALL_PREFIX}/lib/libavformat.a" >&2
       exit 1
     fi
   done
-  for def in CONFIG_HTTP_PROTOCOL CONFIG_TCP_PROTOCOL CONFIG_TLS_PROTOCOL CONFIG_HLS_DEMUXER CONFIG_MPEGTS_DEMUXER; do
+  for def in CONFIG_HTTP_PROTOCOL CONFIG_TCP_PROTOCOL CONFIG_TLS_PROTOCOL CONFIG_HLS_DEMUXER CONFIG_MPEGTS_DEMUXER CONFIG_SRT_DEMUXER CONFIG_WEBVTT_DEMUXER CONFIG_ASS_DEMUXER CONFIG_ASS_DECODER CONFIG_DVBSUB_DECODER CONFIG_DVDSUB_DECODER CONFIG_MOVTEXT_DECODER CONFIG_PGSSUB_DECODER CONFIG_SRT_DECODER CONFIG_SUBRIP_DECODER CONFIG_TEXT_DECODER CONFIG_WEBVTT_DECODER; do
     if ! grep -q "define ${def} 1" "${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION}/config_components.h"; then
       echo "ERROR: ${def} not enabled in config_components.h" >&2
       exit 1
     fi
   done
-  echo "==> archives carry http/tcp/tls/crypto/file + hls/mpegts; component defines present"
+  echo "==> archives carry stream protocols, hls/mpegts, and sidecar/embedded subtitle demuxers + decoders"
   # §17 hermeticity: no Homebrew paths may leak into the installed .pc files.
   # Unavailable `libstdc++` link requests come from foreign Homebrew FFmpeg
   # .pc files; our static prefix must never reference /opt/homebrew.

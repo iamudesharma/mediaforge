@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_forge/media_forge.dart' as mf;
 import 'package:media_forge_player/media_forge_player.dart';
 
 import 'fake_engine.dart';
@@ -111,19 +112,16 @@ void main() {
       expect(() => c.selectAudioTrack(99), throwsRangeError);
     });
 
-    test('subtitle switch on/off + poll text', () async {
+    test('default subtitle auto-selects, switch on/off + poll text',
+        () async {
       final fake = FakeMediaPlaybackEngine();
       final c = makeController(fake);
       addTearDown(c.dispose);
       await c.open(
         const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
       );
-      // Nothing selected → no cues.
-      expect(
-        await c.subtitleTextAt(const Duration(seconds: 6)),
-        isNull,
-      );
-      await c.selectSubtitleTrack(3);
+      // Index 3 is flagged default → selected on open, cues flow.
+      expect(c.value.selectedSubtitleTrackId, 3);
       expect(fake.subtitleSelectLog, [3]);
       expect(
         await c.subtitleTextAt(const Duration(seconds: 6)),
@@ -137,13 +135,59 @@ void main() {
         await c.subtitleTextAt(const Duration(seconds: 20)),
         isNull,
       );
+      // Explicit Off → no cues and no bridge poll.
+      final pollsBefore = c.subtitlePollCountForTest;
       await c.selectSubtitleTrack(null);
       expect(fake.subtitleSelectLog, [3, -1]);
       expect(
         await c.subtitleTextAt(const Duration(seconds: 6)),
         isNull,
       );
+      expect(c.subtitlePollCountForTest, pollsBefore);
+      // Switching to the non-default track still works.
+      await c.selectSubtitleTrack(4);
+      expect(fake.subtitleSelectLog, [3, -1, 4]);
+      expect(c.value.selectedSubtitleTrackId, 4);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        'Hello',
+      );
       expect(() => c.selectSubtitleTrack(99), throwsRangeError);
+    });
+
+    test('forced embedded track wins over default', () async {
+      final fake = FakeMediaPlaybackEngine(
+        streams: [
+          ...FakeMediaPlaybackEngine()
+              .streams
+              .where((s) => s.kind != mf.StreamKind.subtitle),
+          _subtitleStream(4, isForced: true),
+          _subtitleStream(3, isDefault: true),
+        ],
+      );
+      final c = makeController(fake);
+      addTearDown(c.dispose);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
+      );
+      expect(c.value.selectedSubtitleTrackId, 4);
+      expect(fake.subtitleSelectLog, [4]);
+    });
+
+    test('auto-select is skipped while subtitles are disabled', () async {
+      final fake = FakeMediaPlaybackEngine();
+      final c = makeController(fake);
+      addTearDown(c.dispose);
+      await c.setSubtitlesEnabled(false);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
+      );
+      expect(c.value.selectedSubtitleTrackId, isNull);
+      expect(fake.subtitleSelectLog, isEmpty);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        isNull,
+      );
     });
 
     test('subtitle delay shifts cues', () async {
@@ -213,6 +257,120 @@ void main() {
         isFalse,
       );
       expect(c.value.selectedSubtitleTrackId, isNull);
+    });
+
+    test('file:// URIs reach the engine as plain paths', () async {
+      final fake = FakeMediaPlaybackEngine();
+      final c = makeController(fake);
+      addTearDown(c.dispose);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
+      );
+      final id = await c.addExternalSubtitle(Uri.file('/tmp/a.srt'));
+      // FFmpeg's file protocol wants /tmp/a.srt, never file:///tmp/a.srt.
+      expect(fake.externalOpened, ['/tmp/a.srt']);
+      expect(fake.externalOpened.single, isNot(startsWith('file://')));
+      await c.selectSubtitleTrack(id);
+      expect(c.value.selectedSubtitleTrackId, id);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        'Hello',
+      );
+    });
+
+    test('plain path, file:// and http(s) variants all deliver cues',
+        () async {
+      final fake = FakeMediaPlaybackEngine();
+      final c = makeController(fake);
+      addTearDown(c.dispose);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
+      );
+      // Bare path: passed through as a path.
+      final plain = await c.addExternalSubtitle(Uri.parse('/plain/path.srt'));
+      expect(fake.externalOpened.last, '/plain/path.srt');
+      await c.selectSubtitleTrack(plain);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        'Hello',
+      );
+      // file:// URL: decoded to the same path.
+      final fileUrl = await c.addExternalSubtitle(
+        Uri.parse('file:///tmp/a.srt'),
+      );
+      expect(fake.externalOpened.last, '/tmp/a.srt');
+      await c.selectSubtitleTrack(fileUrl);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 12)),
+        'World',
+      );
+      // http(s): verbatim (Range reads keep working).
+      final url = await c.addExternalSubtitle(
+        Uri.parse('https://example.com/a.vtt'),
+      );
+      expect(fake.externalOpened.last, 'https://example.com/a.vtt');
+      expect(c.value.subtitleTracks.length, 5); // 2 embedded + 3 sidecars
+      await c.selectSubtitleTrack(url);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        'Hello',
+      );
+    });
+
+    test('selecting Off hides an open sidecar session deterministically',
+        () async {
+      final fake = FakeMediaPlaybackEngine();
+      final c = makeController(fake);
+      addTearDown(c.dispose);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
+      );
+      final id = await c.addExternalSubtitle(Uri.file('/tmp/a.srt'));
+      await c.selectSubtitleTrack(id);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        'Hello',
+      );
+      final pollsBefore = c.subtitlePollCountForTest;
+      await c.selectSubtitleTrack(null);
+      // Embedded forwarding stops and the open sidecar session is hidden:
+      // no cue, no bridge poll.
+      expect(fake.subtitleSelectLog.last, -1);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        isNull,
+      );
+      expect(c.subtitlePollCountForTest, pollsBefore);
+      // Nothing is lost: re-selecting the sidecar track resumes delivery.
+      await c.selectSubtitleTrack(id);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 7)),
+        'Hello',
+      );
+    });
+
+    test('open() replaces the sidecar session and clears external tracks',
+        () async {
+      final fake = FakeMediaPlaybackEngine();
+      final c = makeController(fake);
+      addTearDown(c.dispose);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
+      );
+      final id = await c.addExternalSubtitle(Uri.file('/tmp/a.srt'));
+      await c.selectSubtitleTrack(id);
+      expect(c.value.subtitleTracks.any((t) => !t.isEmbedded), isTrue);
+      await c.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8081/next'),
+      );
+      expect(c.value.subtitleTracks.any((t) => !t.isEmbedded), isFalse);
+      expect(fake.externalOpen, isFalse);
+      // Fresh session: the default embedded track auto-selects again.
+      expect(c.value.selectedSubtitleTrackId, 3);
+      expect(
+        await c.subtitleTextAt(const Duration(seconds: 6)),
+        'Hello',
+      );
     });
   });
 
@@ -294,3 +452,23 @@ void main() {
     });
   });
 }
+
+mf.MediaStreamInfo _subtitleStream(
+  int index, {
+  bool isDefault = false,
+  bool isForced = false,
+}) =>
+    mf.MediaStreamInfo(
+      index: index,
+      kind: mf.StreamKind.subtitle,
+      codecName: 'subrip',
+      language: '',
+      title: '',
+      bitrate: BigInt.zero,
+      width: 0,
+      height: 0,
+      channels: 0,
+      sampleRate: 0,
+      isDefault: isDefault,
+      isForced: isForced,
+    );

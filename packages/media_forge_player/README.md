@@ -12,6 +12,24 @@ Flutter Player API (this package)
 `pixel_surface` is presentation only. `media_forge` is the engine.
 This package is the public player (à la `video_player` / `media_kit`).
 
+## Video settings
+
+Display fit/rotation, plus an **experimental** GPU enhancement stage
+(`off` / `sharp` / `enhanced` / `highQuality`). Off by default, changeable at
+any time without reopening the media, and it runs entirely on the GPU between
+hardware decode and presentation:
+
+```dart
+await controller.probeVideoEnhancement();          // once, at app init
+if (controller.supportsVideoEnhancement) {
+  await controller.setVideoEnhancementMode(VideoEnhancementMode.enhanced);
+}
+final status = controller.videoEnhancementStatus;  // resolutions, ms/frame, misses
+```
+
+Unsupported devices keep the normal render path. See
+`docs/VIDEO_ENHANCEMENT.md`.
+
 ## Quick start
 
 ```dart

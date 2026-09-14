@@ -512,14 +512,14 @@ impl PresenterRuntime {
                     &video_frame_queue,
                 );
 
-                let media_ms = {
-                    let audio_ms = audio_clock_ms.load(Ordering::Relaxed);
-                    if audio_ms > 0 {
-                        audio_ms
-                    } else {
-                        clock.get_media_time_ms()
-                    }
-                };
+                // `PlaybackClock` is synchronized from the sample-accurate
+                // audio callback whenever audio is flowing. Reading the
+                // clock here, rather than a raw nonzero audio timestamp,
+                // also keeps presentation moving if an output callback is
+                // briefly unavailable (for example after a seek or device
+                // reconfiguration). A stale audio timestamp must not leave
+                // decoded video permanently queued behind a frozen PTS.
+                let media_ms = clock.get_media_time_ms();
 
                 if let Some(frame) = video_frame_queue.dequeue_best_for_time(media_ms) {
                     let pts = frame.pts_ms;
@@ -554,6 +554,22 @@ impl PresenterRuntime {
                             pacing_drift_average_ms
                         );
                         last_present_log = Instant::now();
+                    }
+                } else {
+                    // Frames are decoded but their PTS is still ahead of the
+                    // synchronized clock. Do not spin here: repeated
+                    // sub-millisecond reads otherwise prevent the fallback
+                    // clock from advancing when an audio callback is late.
+                    // A short condition-variable wait also wakes immediately
+                    // for a seek, stop, or newly decoded frame.
+                    if let Some(sig) = frame_ready.as_ref() {
+                        let lock = &sig.0;
+                        let cvar = &sig.1;
+                        let mut guard = lock.lock();
+                        let _ = cvar.wait_for(&mut guard, Duration::from_millis(1));
+                        observed_version = *guard;
+                    } else {
+                        thread::sleep(Duration::from_millis(1));
                     }
                 }
             }
@@ -606,5 +622,62 @@ mod tests {
             cvar.notify_all();
         }
         handle.join().unwrap();
+    }
+
+    #[test]
+    fn presenter_advances_when_audio_clock_stops_after_seek() {
+        // A seek sets the audio clock to its target before the next audio
+        // callback. The presenter must not treat that one timestamp as a
+        // permanent master clock or future video frames can never become due.
+        let clock = Arc::new(PlaybackClock::new());
+        clock.start();
+        clock.sync_from_audio_ms(100);
+        let audio_clock = Arc::new(AtomicU64::new(100));
+        let video_packets = Arc::new(PacketQueue::new(8));
+        let audio_packets = Arc::new(PacketQueue::new(8));
+        let video_frames = Arc::new(FrameQueue::new(8));
+        let audio_frames = Arc::new(FrameQueue::new(8));
+        video_frames.enqueue(MediaVideoFrame {
+            pts_ms: 120,
+            width: 1,
+            height: 1,
+            pixels: vec![0; 4],
+            pixel_buffer_ptr: 0,
+            seek_generation: 0,
+        });
+
+        let presenter = PresenterRuntime::new();
+        let signal: Arc<(Mutex<u64>, Condvar)> =
+            Arc::new((Mutex::new(0), Condvar::new()));
+        presenter.set_frame_ready(signal.clone());
+        let seek = Arc::new(SeekController::new(
+            Arc::new(AtomicI64::new(-1)),
+            Arc::new(AtomicBool::new(false)),
+            Arc::new(AtomicBool::new(false)),
+            clock.clone(),
+            audio_clock.clone(),
+            video_packets,
+            audio_packets,
+            video_frames.clone(),
+            audio_frames,
+            Arc::new(AtomicU64::new(0)),
+            presenter.get_display_frame(),
+            presenter.frozen_frame.clone(),
+        ));
+        seek.set_frame_ready(signal);
+        presenter.start(clock, video_frames.clone(), audio_clock, seek);
+
+        let deadline = Instant::now() + Duration::from_millis(500);
+        let mut presented = None;
+        while Instant::now() < deadline {
+            if let Some(frame) = presenter.take_display_frame() {
+                presented = Some(frame);
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        presenter.stop();
+
+        assert_eq!(presented.map(|frame| frame.pts_ms), Some(120));
     }
 }

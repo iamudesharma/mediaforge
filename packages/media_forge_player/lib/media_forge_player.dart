@@ -24,4 +24,5 @@ export 'src/player_ui/player_ui.dart';
 export 'src/player_value.dart';
 export 'src/texture_presenter.dart';
 export 'src/track_info.dart';
+export 'src/video_enhancement.dart';
 export 'src/video_widget.dart';

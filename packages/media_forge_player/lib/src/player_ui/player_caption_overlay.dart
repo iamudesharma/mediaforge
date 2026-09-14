@@ -53,9 +53,9 @@ class _PlayerCaptionOverlayState extends State<PlayerCaptionOverlay> {
 
   void _maybePoll() {
     final v = widget.controller.value;
-    final hasSelection = v.selectedSubtitleTrackId != null ||
-        v.subtitleTracks.any((t) => !t.isEmbedded);
-    if (!v.subtitlesEnabled || !hasSelection) {
+    // Same gate as MediaForgePlayerController.subtitleTextAt
+    // (MediaForgePlayerValue.hasActiveSubtitles): enabled + a selected track.
+    if (!v.hasActiveSubtitles) {
       if (_text != null && mounted) setState(() => _text = null);
       return;
     }

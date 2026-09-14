@@ -15,6 +15,7 @@ use crate::video_decode::{
     flush_decoder, open_video_pipelines, push_rgba_frame, CATCHUP_SKIP_NON_KEYFRAME_MS,
     HwPipeline, SwPipeline,
 };
+use crate::video_enhance::{self, VideoEnhancementRuntime};
 use crate::vt_hw_decode;
 
 macro_rules! runtime_log {
@@ -82,7 +83,10 @@ fn hw_decode_enabled() -> bool {
 /// FFmpeg's `best()` can pick an undecodable stream (e.g. Apple `apac`) because it
 /// has more channels or higher bitrate; this helper prefers known codecs.
 fn find_best_audio_stream(ictx: &ffmpeg_next::format::context::Input) -> Option<ffmpeg_next::format::stream::Stream> {
-    let known_codecs: &[&str] = &["aac", "mp3", "flac", "opus", "vorbis", "pcm_s16le", "pcm_s24le", "pcm_f32le"];
+    let known_codecs: &[&str] = &[
+        "aac", "ac3", "eac3", "mp3", "flac", "opus", "vorbis", "pcm_s16le", "pcm_s24le",
+        "pcm_f32le",
+    ];
     let mut fallback = None;
     for stream in ictx.streams() {
         if stream.parameters().medium() != ffmpeg_next::media::Type::Audio {
@@ -399,6 +403,29 @@ fn audio_stream_format(params: &ffmpeg_next::codec::Parameters) -> (u32, u32) {
         .unwrap_or((0, 0))
 }
 
+/// Display text out of an ASS rect.
+///
+/// Raw ASS/SSA event text (standalone `.ass` files) is returned as-is. The
+/// generic text decoders (srt/vtt/…) and the Matroska path instead hand over
+/// a full ASS dialogue payload —
+/// `[Dialogue: ]readorder,layer,style,name,marginL,marginR,marginV,effect,text`
+/// — whose last field is the real text; the leading fields must never leak
+/// into the caption.
+fn ass_rect_text(ass: &str) -> &str {
+    let payload = ass
+        .strip_prefix("Dialogue:")
+        .map(str::trim_start)
+        .unwrap_or(ass);
+    let fields: Vec<&str> = payload.splitn(9, ',').collect();
+    if fields.len() == 9
+        && fields[0].trim().parse::<i64>().is_ok()
+        && fields[1].trim().parse::<i64>().is_ok()
+    {
+        return fields[8];
+    }
+    payload
+}
+
 /// Strip ASS/SSA override groups (`{...}`) and convert `\N` to newline.
 fn strip_ass_overrides(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -423,12 +450,29 @@ fn subtitle_text(sub: &ffmpeg_next::Subtitle) -> String {
                 parts.push(t.get().to_string())
             }
             ffmpeg_next::codec::subtitle::Rect::Ass(a) => {
-                parts.push(strip_ass_overrides(a.get()))
+                parts.push(strip_ass_overrides(ass_rect_text(a.get())))
             }
             _ => {}
         }
     }
     parts.join("\n").trim().to_string()
+}
+
+/// Text plus display window (ms, relative to the packet PTS) of a decoded
+/// subtitle, releasing the FFmpeg struct afterwards.
+///
+/// `avsubtitle_free` memsets the whole struct — display times included — so
+/// the window MUST be read before freeing. Reading it afterwards silently
+/// yields `0..0`, which the cue gate then drops as degenerate (every sidecar
+/// cue was lost this way).
+fn take_subtitle(sub: &mut ffmpeg_next::Subtitle) -> (String, u64, u64) {
+    let text = subtitle_text(sub);
+    let start = sub.start().max(0) as u64;
+    let end = sub.end().max(0) as u64;
+    unsafe {
+        ffmpeg_next::ffi::avsubtitle_free(sub.as_mut_ptr());
+    }
+    (text, start, end)
 }
 
 /// State of the decoder recovery process.
@@ -1060,6 +1104,113 @@ pub struct PixelBufferHandoff {
     pub height: u32,
     pub pixel_buffer_ptr: u64,
     pub seek_generation: u64,
+}
+
+// ── GPU video enhancement (experimental) ──────────────────────────────
+//
+// The quality ladder is a public enum so host apps never pass magic numbers,
+// and the wire names are stable (they appear in logs and diagnostics).
+// Off is the default everywhere: enabling enhancement is always explicit.
+
+/// Requested video enhancement quality.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VideoEnhancementMode {
+    /// Untouched render path (default).
+    Off,
+    /// Lightweight GPU sharpen at native size.
+    Sharp,
+    /// High-quality upscale + adaptive sharpen + light dither.
+    Enhanced,
+    /// Best non-AI upscale (separable Lanczos-3) + adaptive sharpen.
+    HighQuality,
+}
+
+impl VideoEnhancementMode {
+    fn to_internal(self) -> video_enhance::EnhancementMode {
+        use video_enhance::EnhancementMode as M;
+        match self {
+            VideoEnhancementMode::Off => M::Off,
+            VideoEnhancementMode::Sharp => M::Sharp,
+            VideoEnhancementMode::Enhanced => M::Enhanced,
+            VideoEnhancementMode::HighQuality => M::HighQuality,
+        }
+    }
+
+    fn from_internal(mode: video_enhance::EnhancementMode) -> Self {
+        use video_enhance::EnhancementMode as M;
+        match mode {
+            M::Off => VideoEnhancementMode::Off,
+            M::Sharp => VideoEnhancementMode::Sharp,
+            M::Enhanced => VideoEnhancementMode::Enhanced,
+            M::HighQuality => VideoEnhancementMode::HighQuality,
+        }
+    }
+}
+
+/// What this device/build can do. Never fails playback: `supported == false`
+/// simply means the normal render path stays in place.
+#[frb(non_opaque)]
+pub struct VideoEnhancementCapabilities {
+    pub supported: bool,
+    /// Backend identity, e.g. `metal_wgpu`.
+    pub backend: String,
+    /// Modes that will actually run (always contains `Off`).
+    pub modes: Vec<VideoEnhancementMode>,
+    /// Largest output longest edge the backend produces.
+    pub max_output_edge: u32,
+    /// Why enhancement is unavailable (empty when supported).
+    pub reason: String,
+}
+
+/// Live enhancement state for diagnostics.
+#[frb(non_opaque)]
+pub struct VideoEnhancementStatus {
+    pub supported: bool,
+    pub requested_mode: VideoEnhancementMode,
+    /// Mode actually running; differs from `requested_mode` after an
+    /// automatic quality downgrade.
+    pub active_mode: VideoEnhancementMode,
+    pub backend: String,
+    /// Executed pass path, e.g. `metal_lanczos_cas`.
+    pub path: String,
+    /// `none` / `catmull_rom` / `lanczos3`.
+    pub scaler: String,
+    pub input_width: u32,
+    pub input_height: u32,
+    pub output_width: u32,
+    pub output_height: u32,
+    /// Enhancement stage time for the last frame (ms).
+    pub last_frame_ms: f32,
+    /// Smoothed enhancement stage time (ms).
+    pub average_frame_ms: f32,
+    /// Source frame interval the stage is measured against (ms).
+    pub deadline_ms: f32,
+    pub deadline_misses: u64,
+    pub hard_deadline_misses: u64,
+    pub enhanced_frames: u64,
+    pub bypassed_frames: u64,
+    pub failed_frames: u64,
+    /// GPU passes issued for the last frame.
+    pub passes: u32,
+    /// Why enhancement fell back (empty when healthy).
+    pub fallback_reason: String,
+    /// Why the last frame was bypassed (empty when it was enhanced).
+    pub bypass_reason: String,
+}
+
+/// Stable wire names used in logs and diagnostics. Host apps use the enum
+/// variants, so these helpers stay out of the generated bridge surface.
+impl VideoEnhancementMode {
+    #[frb(ignore)]
+    pub fn wire_name(self) -> &'static str {
+        self.to_internal().as_str()
+    }
+
+    /// Parse a stable wire name; unknown input maps to `Off`.
+    #[frb(ignore)]
+    pub fn from_wire_name(name: &str) -> Self {
+        Self::from_internal(video_enhance::EnhancementMode::from_wire(name))
+    }
 }
 
 pub fn media_video_frame_into_pixel_buffer_handoff(
@@ -2919,6 +3070,8 @@ pub struct MediaPlaybackEngine {
     bridge_calls: Arc<AtomicU64>,
     /// §5: frame-ready signal (decoder notifies, presenter waits).
     frame_ready: Arc<(Mutex<u64>, Condvar)>,
+    /// Experimental GPU video enhancement (default Off; device-dependent).
+    video_enhance: Mutex<VideoEnhancementRuntime>,
 }
 
 /// Demux+decode session for an external (sidecar) subtitle file/URL.
@@ -3067,6 +3220,7 @@ impl MediaPlaybackEngine {
             presented_frames: Arc::new(AtomicU64::new(0)),
             bridge_calls: Arc::new(AtomicU64::new(0)),
             frame_ready,
+            video_enhance: Mutex::new(VideoEnhancementRuntime::new()),
         }
     }
 
@@ -3793,6 +3947,9 @@ impl MediaPlaybackEngine {
         self.close_external_subtitle();
         self.video_frame_queue.flush_video();
         self.audio_frame_queue.flush();
+        // New source (or explicit stop): give pooled GPU enhancement surfaces
+        // back and re-plan from scratch. The selected mode is preserved.
+        self.video_enhance.lock().on_source_change();
     }
 
     pub fn seek(&self, time_ms: u64) {
@@ -3801,7 +3958,102 @@ impl MediaPlaybackEngine {
         self.audio_runtime.clear_trim_end_reached();
         // Flush overlay audio queues so they restart from the new position
         self.audio_runtime.flush_overlay_queues();
+        // The next decoded PTS is discontinuous, so the enhancement deadline
+        // tracker must not treat the jump as a frame interval.
+        self.video_enhance.lock().on_seek();
         self.seek_controller.request_seek(time_ms, "ui_seek");
+    }
+
+    // ── GPU video enhancement (experimental) ──────────────────────────
+
+    /// What this device can do. Safe to call before any media is open.
+    pub fn video_enhancement_capabilities(&self) -> VideoEnhancementCapabilities {
+        let caps = self.video_enhance.lock().capabilities().clone();
+        VideoEnhancementCapabilities {
+            supported: caps.supported,
+            backend: caps.backend,
+            modes: caps
+                .modes
+                .iter()
+                .map(|m| VideoEnhancementMode::from_internal(*m))
+                .collect(),
+            max_output_edge: caps.max_output_edge,
+            reason: caps.reason,
+        }
+    }
+
+    /// Current enhancement state for diagnostics.
+    pub fn video_enhancement_status(&self) -> VideoEnhancementStatus {
+        let status = self.video_enhance.lock().status();
+        VideoEnhancementStatus {
+            supported: status.supported,
+            requested_mode: VideoEnhancementMode::from_internal(status.requested_mode),
+            active_mode: VideoEnhancementMode::from_internal(status.active_mode),
+            backend: status.backend,
+            path: status.path,
+            scaler: status.scaler,
+            input_width: status.input_width,
+            input_height: status.input_height,
+            output_width: status.output_width,
+            output_height: status.output_height,
+            last_frame_ms: status.last_frame_ms,
+            average_frame_ms: status.average_frame_ms,
+            deadline_ms: status.deadline_ms,
+            deadline_misses: status.deadline_misses,
+            hard_deadline_misses: status.hard_deadline_misses,
+            enhanced_frames: status.enhanced_frames,
+            bypassed_frames: status.bypassed_frames,
+            failed_frames: status.failed_frames,
+            passes: status.passes,
+            fallback_reason: status.fallback_reason,
+            bypass_reason: status.bypass_reason,
+        }
+    }
+
+    /// Select an enhancement mode. Takes effect on the next presented frame:
+    /// no media reopen, no decoder restart, no queue flush.
+    ///
+    /// Returns false when the device cannot run the requested mode (playback
+    /// is unaffected — the normal render path stays in place).
+    pub fn set_video_enhancement_mode(&self, mode: VideoEnhancementMode) -> bool {
+        self.video_enhance.lock().set_mode(mode.to_internal())
+    }
+
+    /// Display box in device pixels, used for the resolution-aware target.
+    /// `(0, 0)` clears the hint.
+    pub fn set_video_enhancement_viewport(&self, width: u32, height: u32) {
+        self.video_enhance.lock().set_viewport(width, height);
+    }
+
+    /// Hard ceiling for the enhanced output longest edge (`0` = mode default).
+    pub fn set_video_enhancement_max_output_edge(&self, edge: u32) {
+        self.video_enhance.lock().set_max_output_edge(edge);
+    }
+
+    /// Run the enhancement stage for one decoded frame.
+    ///
+    /// Returns a handoff for the enhanced surface, or `None` to present the
+    /// decoded frame untouched. **Ownership:** on success the `+1` retain on
+    /// `pixel_buffer_ptr` is consumed; on `None` the caller still owns it and
+    /// must present that frame.
+    pub fn enhance_pixel_buffer(
+        &self,
+        pixel_buffer_ptr: u64,
+        width: u32,
+        height: u32,
+        pts_ms: u64,
+    ) -> Option<PixelBufferHandoff> {
+        let (enhanced, size) = self
+            .video_enhance
+            .lock()
+            .enhance(pixel_buffer_ptr, width, height, pts_ms as i64)?;
+        Some(PixelBufferHandoff {
+            pts_ms,
+            width: size.width,
+            height: size.height,
+            pixel_buffer_ptr: enhanced,
+            seek_generation: self.seek_generation.load(Ordering::Relaxed),
+        })
     }
 
     // ── Stream enumeration & track switching ──────────────────────────
@@ -3979,9 +4231,16 @@ impl MediaPlaybackEngine {
             })?;
         let sub_idx = sub_stream.index();
         let (params, tb) = (sub_stream.parameters(), sub_stream.time_base());
-        let mut decoder = CodecContext::from_parameters(params.clone())
+        let mut decoder_ctx = CodecContext::from_parameters(params.clone())
             .map_err(|e| anyhow::anyhow!("Subtitle codec params error: {:?}", e))?
-            .decoder()
+            .decoder();
+        // libavcodec derives `end_display_time` from the packet duration only
+        // when the codec context carries a packet time base
+        // (libavcodec/decode.c). The generic text decoders (srt/webvtt/…)
+        // leave the display times at 0, so without this every sidecar cue is
+        // dropped as degenerate (end == start) and the feature stays silent.
+        decoder_ctx.set_packet_time_base(tb);
+        let mut decoder = decoder_ctx
             .subtitle()
             .map_err(|e| anyhow::anyhow!("Cannot open subtitle decoder: {:?}", e))?;
         runtime_log!(
@@ -4011,19 +4270,17 @@ impl MediaPlaybackEngine {
                         let mut sub = ffmpeg_next::Subtitle::new();
                         match decoder.decode(&packet, &mut sub) {
                             Ok(true) => {
-                                let text = subtitle_text(&sub);
-                                unsafe {
-                                    ffmpeg_next::ffi::avsubtitle_free(sub.as_mut_ptr());
-                                }
+                                let (text, rel_start, rel_end) =
+                                    take_subtitle(&mut sub);
                                 if text.is_empty() {
                                     continue;
                                 }
                                 let d = delay.load(Ordering::Relaxed);
                                 let start = pts_ms
-                                    .saturating_add(sub.start() as u64)
+                                    .saturating_add(rel_start)
                                     .saturating_add_signed(d);
                                 let end = pts_ms
-                                    .saturating_add(sub.end() as u64)
+                                    .saturating_add(rel_end)
                                     .saturating_add_signed(d);
                                 if end > start {
                                     let mut q = cues.lock();
@@ -4035,12 +4292,17 @@ impl MediaPlaybackEngine {
                                     while q.len() > SUBTITLE_CUE_CAP {
                                         q.pop_front();
                                     }
+                                } else {
+                                    runtime_log!(
+                                        "[MediaPlaybackEngine] External subtitle cue dropped (no end time: {}..{}ms)",
+                                        start,
+                                        end
+                                    );
                                 }
                             }
                             _ => {
-                                unsafe {
-                                    ffmpeg_next::ffi::avsubtitle_free(sub.as_mut_ptr());
-                                }
+                                // Nothing decoded: still release the struct.
+                                let _ = take_subtitle(&mut sub);
                             }
                         }
                     }
@@ -4092,7 +4354,14 @@ impl MediaPlaybackEngine {
                         match CodecContext::from_parameters(p.clone())
                             .map_err(|e| format!("{:?}", e))
                             .and_then(|ctx| {
-                                ctx.decoder().subtitle().map_err(|e| format!("{:?}", e))
+                                // Same packet-time-base requirement as the
+                                // sidecar path: text decoders (mov_text,
+                                // subrip) leave the display times at 0 and
+                                // libavcodec fills `end_display_time` from the
+                                // packet duration only when it is set.
+                                let mut dec = ctx.decoder();
+                                dec.set_packet_time_base(tb);
+                                dec.subtitle().map_err(|e| format!("{:?}", e))
                             })
                         {
                             Ok(dec) => {
@@ -4136,16 +4405,8 @@ impl MediaPlaybackEngine {
                         };
                         let mut sub = ffmpeg_next::Subtitle::new();
                         let got = dec.decode(&pkt, &mut sub).unwrap_or(false);
-                        let text = if got {
-                            subtitle_text(&sub)
-                        } else {
-                            String::new()
-                        };
-                        let (rel_start, rel_end) =
-                            (sub.start() as u64, sub.end() as u64);
-                        unsafe {
-                            ffmpeg_next::ffi::avsubtitle_free(sub.as_mut_ptr());
-                        }
+                        let (decoded, rel_start, rel_end) = take_subtitle(&mut sub);
+                        let text = if got { decoded } else { String::new() };
                         if text.is_empty() {
                             continue;
                         }
@@ -4289,20 +4550,12 @@ impl MediaPlaybackEngine {
 
     /// Master playback position in ms.
     ///
-    /// Uses the sample-accurate **audio device clock** when audio is actively
-    /// playing — this eliminates drift between the wall clock and the hardware
-    /// audio output, which is the primary reason video lags behind audio.
-    ///
-    /// Falls back to the software wall clock during buffering, pause, and seek.
+    /// [`PlaybackClock`] is the single presentation clock. The audio callback
+    /// continuously synchronizes it while audio is available, while its
+    /// monotonic fallback keeps video and the UI moving if audio setup or a
+    /// callback fails. Reading `audio_clock_ms` directly here would otherwise
+    /// freeze a video-only session at its last audio timestamp.
     pub fn get_media_time_ms(&self) -> u64 {
-        // Prefer audio sample counter (hardware-paced, zero-drift)
-        if self.audio_runtime.is_running.load(Ordering::Relaxed) {
-            let audio_ms = self.audio_runtime.audio_clock_ms.load(Ordering::Relaxed);
-            if audio_ms > 0 {
-                return audio_ms;
-            }
-        }
-        // Fall back to software wall clock
         self.clock.get_media_time_ms()
     }
 
@@ -4498,6 +4751,27 @@ mod tests {
     }
 
     #[test]
+    fn media_time_advances_when_audio_clock_stalls() {
+        let engine = MediaPlaybackEngine::new(0, 64, 1080);
+        engine.clock.start();
+        engine.clock.sync_from_audio_ms(100);
+        // This is the failure mode for an audio stream whose decoder/device
+        // setup failed after a seek: it still has a last timestamp but emits
+        // no further callback updates.
+        engine
+            .audio_runtime
+            .is_running
+            .store(true, Ordering::Relaxed);
+        engine
+            .audio_runtime
+            .audio_clock_ms
+            .store(100, Ordering::Relaxed);
+
+        thread::sleep(Duration::from_millis(15));
+        assert!(engine.get_media_time_ms() > 100);
+    }
+
+    #[test]
     fn test_packet_queue() {
         let queue = PacketQueue::new(2);
         assert_eq!(queue.len(), 0);
@@ -4615,6 +4889,34 @@ mod tests {
         );
         assert_eq!(strip_ass_overrides("plain"), "plain");
         assert_eq!(strip_ass_overrides("{\\pos(1,2)}A{\\i1}B"), "AB");
+    }
+
+    #[test]
+    fn test_ass_rect_text_drops_dialogue_fields() {
+        // Text decoders (srt/vtt sidecars) emit the dialogue payload and the
+        // caption must be the last field only — commas inside it preserved.
+        assert_eq!(
+            strip_ass_overrides(ass_rect_text("0,0,Default,,0,0,0,,Hello sidecar")),
+            "Hello sidecar"
+        );
+        assert_eq!(
+            strip_ass_overrides(ass_rect_text(
+                "12,0,Default,,0,0,0,,Hello, world"
+            )),
+            "Hello, world"
+        );
+        // Matroska prefixes the payload with "Dialogue:".
+        assert_eq!(
+            strip_ass_overrides(ass_rect_text(
+                "Dialogue: 0,0,Default,,0,0,0,,{\\an8}Hi\\Nthere"
+            )),
+            "Hi\nthere"
+        );
+        // Raw ASS event text (standalone .ass) passes through untouched.
+        assert_eq!(
+            strip_ass_overrides(ass_rect_text("{\\i1}plain, text")),
+            "plain, text"
+        );
     }
 
     #[test]
@@ -4794,5 +5096,56 @@ mod tests {
             message
         );
         let _ = server.join();
+    }
+
+    /// Sidecar `.srt` over FFmpeg's file protocol. The player sends plain
+    /// filesystem paths for `file:` URIs (never `file:///...`), so this is
+    /// the exact target string the engine must open, and the cues must reach
+    /// `poll_subtitle_text` with the times written in the file.
+    #[test]
+    fn test_external_subtitle_plain_path_delivers_cues() {
+        let dir = std::env::temp_dir().join(format!(
+            "media_forge_sidecar_{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create temp dir");
+        let path = dir.join("sidecar.srt");
+        std::fs::write(
+            &path,
+            "1\n00:00:05,000 --> 00:00:09,000\nHello sidecar\n\n\
+             2\n00:00:10,000 --> 00:00:14,000\nSecond cue\n\n",
+        )
+        .expect("write sidecar srt");
+        let plain_path = path.to_string_lossy().into_owned();
+        assert!(
+            !plain_path.contains("://"),
+            "test must exercise a plain path: {plain_path}"
+        );
+
+        let engine = MediaPlaybackEngine::new(0, 2000, 720);
+        engine
+            .open_external_subtitle(plain_path)
+            .expect("plain path opens");
+
+        // The sidecar is demuxed on its own thread: wait for the first cue.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut text = None;
+        while std::time::Instant::now() < deadline {
+            text = engine.poll_subtitle_text(6000);
+            if text.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert_eq!(text.as_deref(), Some("Hello sidecar"));
+        assert_eq!(
+            engine.poll_subtitle_text(12_000).as_deref(),
+            Some("Second cue")
+        );
+        // Outside every cue window nothing is delivered.
+        assert_eq!(engine.poll_subtitle_text(30_000), None);
+
+        engine.close_external_subtitle();
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

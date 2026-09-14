@@ -4,6 +4,17 @@ import 'package:flutter/foundation.dart';
 import 'package:media_forge/media_forge.dart';
 import 'package:pixel_surface/pixel_surface.dart';
 
+/// Hook that runs the GPU enhancement stage for one decoded frame.
+///
+/// Returns the enhanced handoff (whose `+1` the presenter then hands to
+/// Flutter), or `null` to present [handoff] untouched. Implemented by
+/// [MediaForgePlayerController]; kept as a function type so the presenter has
+/// no dependency on the controller.
+typedef MediaForgeFrameEnhancer = Future<PixelBufferHandoff?> Function(
+  MediaVideoFrame frame,
+  PixelBufferHandoff handoff,
+);
+
 /// GPU presenter owned by [MediaForgePlayerController].
 ///
 /// Improvements over the raw `media_forge` presenter for player use:
@@ -17,6 +28,10 @@ class MediaForgeTexturePresenter {
   MediaForgeTexturePresenter({required this.textureHandle});
 
   final int textureHandle;
+
+  /// Optional GPU enhancement stage, run on the decoded frame before
+  /// presentation. `null` leaves the existing render path untouched.
+  MediaForgeFrameEnhancer? enhancer;
 
   /// Flutter texture id for `Texture(textureId:)`.
   final ValueNotifier<int?> textureId = ValueNotifier<int?>(null);
@@ -40,6 +55,7 @@ class MediaForgeTexturePresenter {
   int _nativeW = 0;
   int _nativeH = 0;
   double? _lastPresentationMs;
+  bool _enhancementActive = false;
 
   bool get isReady => textureId.value != null && frameSize.value != Size.zero;
   bool get usesGpuTexture => gpuTextureSupported();
@@ -59,6 +75,9 @@ class MediaForgeTexturePresenter {
   int get nativeWidth => _nativeW;
   int get nativeHeight => _nativeH;
   double? get lastPresentationMs => _lastPresentationMs;
+
+  /// True when the last presented frame came out of the GPU enhancement stage.
+  bool get enhancementActive => _enhancementActive;
 
   /// Present one decoder frame. Returns PTS ms, or -1 when nothing new.
   Future<int> presentNext(MediaPlaybackEngine engine) async {
@@ -94,14 +113,41 @@ class MediaForgeTexturePresenter {
   }
 
   Future<void> _presentPixelBuffer(MediaVideoFrame frame) async {
-    final handoff = await mediaVideoFrameIntoPixelBufferHandoff(frame: frame);
+    var handoff = await mediaVideoFrameIntoPixelBufferHandoff(frame: frame);
     if (handoff == null) return;
-    final w = handoff.width;
-    final h = handoff.height;
+
+    // GPU enhancement, when enabled: the engine consumes the decoded frame's
+    // retain and returns its own surface, so `handoff` must not be presented
+    // as well. A `null` result means "not enhanced" and the decoded frame is
+    // presented unchanged.
+    var present = handoff;
+    final enhance = enhancer;
+    _enhancementActive = false;
+    if (enhance != null) {
+      try {
+        final enhanced = await enhance(frame, handoff);
+        if (_disposed) return;
+        if (enhanced != null) {
+          present = enhanced;
+          _enhancementActive = true;
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[MediaForgePlayer] enhancement stage failed: $e');
+        }
+      }
+    }
+
+    final w = present.width;
+    final h = present.height;
     if (w <= 0 || h <= 0) return;
-    _nativeW = w;
-    _nativeH = h;
-    final ptr = handoff.pixelBufferPtr.toInt();
+    // Native diagnostics keep reporting the *decoder* dimensions; the
+    // enhanced size is what the presentation texture actually holds.
+    if (frame.width > 0 && frame.height > 0) {
+      _nativeW = frame.width;
+      _nativeH = frame.height;
+    }
+    final ptr = present.pixelBufferPtr.toInt();
     await _ensureTexture(w, h);
     if (_disposed || textureId.value == null) return;
     await GpuTextureRegistry.presentPixelBuffer(
@@ -112,7 +158,9 @@ class MediaForgeTexturePresenter {
     // (see media_forge vt_pixel_buffer.rs); Swift adopts it without copy
     // when canAdoptPixelBufferDirectly succeeds. Report zero-copy only for
     // this path — never for RGBA uploads.
-    _renderingPath = 'videotoolbox_iosurface_zero_copy';
+    _renderingPath = _enhancementActive
+        ? 'videotoolbox_iosurface_zero_copy+enhanced'
+        : 'videotoolbox_iosurface_zero_copy';
   }
 
   /// BGRA-first upload. `media_forge` decodes to RGBA bytes today, so this

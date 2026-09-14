@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(flutter_rust_bridge_codegen:*)",
+      "Shell(sw_vers:*)",
+      "Shell(cargo:*)",
+      "Shell(~/.cargo/bin/flutter_rust_bridge_codegen:*)",
+      "Shell(for:*)",
+      "Shell(do:*)",
+      "Shell(then:*)",
+      "Shell(echo:*)",
+      "Shell(fi:*)",
+      "Shell(done:*)",
+      "Shell(ls ~/.cargo/bin/ 2>/dev/null; echo \"--- rustup:\"; ~/.cargo/bin/rustup --version 2>/dev/null || echo \"no rustup\"; echo \"--- default cargo:\"; ~/.cargo/bin/cargo --version 2>/dev/null; echo \"--- targets:\"; ~/.cargo/bin/rustup target list --installed 2>/dev/null | head -20)",
+      "Shell(cargo --version; rustc --version; echo \"--- ffmpeg cache:\"; ls -d ~/.cache/rust_image/ffmpeg-macos-vt-static 2>/dev/null && ls ~/.cache/rust_image/ffmpeg-macos-vt-static; echo \"--- tools/ffmpeg/dist:\"; ls \"tools/ffmpeg/dist\" 2>/dev/null; echo \"--- media_forge target dir:\"; ls packages/media_forge/rust/target 2>/dev/null; echo \"--- scene:\"; ls platforms 2>/dev/null; ls scripts | head -40)",
+      "Shell(grep:*)",
+      "Shell(sed:*)",
+      "Shell(R=/Users/udeshsharma/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f;:*)",
+      "Shell(R=/Users/udeshsharma/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wgpu-hal-24.0.4/src/metal;:*)",
+      "Shell(cd packages/pixel_surface/rust && cargo test --features gpu 2>&1 | grep -v \"^warning: unexpected \\`cfg\\`\\|cargo-clippy\\|^ *|\\|^ *=\\|^ *-->\\|^[0-9]* *|\\|^ *$\\|note: this warning originates\\|the macro\\|help: try referring\" | tail -60)",
+      "Shell(cd \"/Volumes/AppleExpanded/Code/Gym app/rust_image/packages/pixel_surface/rust\" && python3 - <<'EOF' import re, pathlib p = pathlib.Path(\"tests/enhance_metal.rs\") s = p.read_text() s = s.replace(\" create_backend, EnhancementBackend, EnhancementMode, FrameHandle, FrameSize,\", \" create_backend, EnhancementMode, FrameHandle, FrameSize,\") s = s.replace(\" metal_iosurface::with_bgra_pixels(buffer.pixel_buffer, |pixels, stride| {\", \" metal_iosurface::with_bgra_pixels_mut(buffer.pixel_buffer, |pixels, stride| {\") s = s.replace(''' let view = unsafe { metal_iosurface::metal_texture_view_for_pixel_buffer(&device(), out_ptr, 256, 192) }; assert!(view.is_ok(), \"output must be a valid BGRA surface: {view:?}\"); drop(view);''', ''' let view = unsafe { metal_iosurface::metal_texture_view_for_pixel_buffer(&device(), out_ptr, 256, 192) }; match &view { Ok(texture) => assert_eq!((texture.width(), texture.height()), (256, 192)), Err(err) => panic!(\"output must be an adoptable BGRA surface: {err}\"), } drop(view);''') p.write_text(s) print(\"ok\") EOF cargo test --features gpu --test enhance_metal 2>&1 | grep -vE \"cargo-clippy|^ *\\||^ *=|^ *-->|note: this warning|the macro|help: try\" | tail -40)",
+      "Shell(cd \"/Volumes/AppleExpanded/Code/Gym app/rust_image/packages/pixel_surface/rust/src\" && python3 - <<'EOF' import pathlib p = pathlib.Path(\"metal_iosurface.rs\") lines = p.read_text().split(\"\\n\") # Both call sites pass K_CV_32BGRA as the MTLPixelFormat argument (0-indexed 430 and 552). for idx in (430, 552): assert lines[idx].strip() == \"K_CV_32BGRA,\", (idx, lines[idx]) lines[idx] = lines[idx].replace(\"K_CV_32BGRA\", \"K_MTL_BGRA8_UNORM\") p.write_text(\"\\n\".join(lines)) print(\"patched\") EOF grep -n \"K_MTL_BGRA8_UNORM\\|K_CV_32BGRA\" metal_iosurface.rs)",
+      "Shell(lldb:*)",
+      "Shell(R=$(ls -d ~/.cargo/registry/src/*/metal-0.31.0 2>/dev/null | head -1); echo \"$R\"; grep -n \"foreign_type!\" -A 12 $R/src/texture.rs | head -40; echo \"=== impl Clone / from_ptr:\"; grep -rn \"fn from_ptr\\|unsafe impl Send\\|impl Clone\" $R/src/texture.rs | head -20)",
+      "Shell(R=/Users/udeshsharma/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/metal-0.31.0;:*)",
+      "Shell(flutter:*)",
+      "Shell(cd \"/Volumes/AppleExpanded/Code/Gym app/rust_image/packages/media_forge_player/lib/src/player_ui/panels\" && head -223 video_settings_panel.dart > /tmp/vsp.dart && mv /tmp/vsp.dart video_settings_panel.dart && flutter analyze --no-fatal-infos --no-pub 2>&1 | grep -E \"error|issues|No issues\" | head; echo \"=== from the package root:\"; cd ../../.. && flutter analyze --no-fatal-infos 2>&1 | grep -E \"error|warning|issues|No issues\" | head -10)",
+      "Shell(touch:*)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

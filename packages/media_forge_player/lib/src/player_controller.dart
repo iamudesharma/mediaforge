@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -18,6 +19,7 @@ import 'player_configuration.dart';
 import 'player_value.dart';
 import 'texture_presenter.dart';
 import 'track_info.dart';
+import 'video_enhancement.dart';
 
 /// Creates engine instances. Overridable in tests with fakes.
 typedef MediaForgeEngineFactory = Future<mf.MediaPlaybackEngine> Function({
@@ -209,6 +211,64 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
 
   MediaForgeTexturePresenter get presenter => _presenter;
 
+  // ---- experimental GPU video enhancement ---------------------------------
+  //
+  // The requested mode is player state, so it survives source changes and is
+  // re-applied whenever a new engine is created. The native side owns the
+  // target plan, the quality ladder and all GPU work — Dart only routes the
+  // frame pointer.
+  VideoEnhancementMode _videoEnhancementMode = VideoEnhancementMode.defaultMode;
+
+  /// Probed GPU enhancement capabilities (`null` until the first probe).
+  ///
+  /// Separate from `value` because the probe is a one-off device query, not
+  /// per-frame state. Not disposed on release: settings UI may still be
+  /// mounted during a route transition.
+  final ValueNotifier<VideoEnhancementCapabilities?> enhancementCapabilities =
+      ValueNotifier<VideoEnhancementCapabilities?>(null);
+
+  VideoEnhancementStatus? _videoEnhancementStatus;
+  int _videoEnhancementMaxOutputEdge = 0;
+  int? _videoEnhancementViewportWidth;
+  int? _videoEnhancementViewportHeight;
+  bool _videoEnhancementProbed = false;
+  int _enhancedFrames = 0;
+  int _enhancementBypassedFrames = 0;
+
+  /// Requested enhancement mode (default [VideoEnhancementMode.off]).
+  VideoEnhancementMode get videoEnhancementMode => _videoEnhancementMode;
+
+  /// Latest probe result, or `null` before [probeVideoEnhancement] runs.
+  ///
+  /// Listen to [enhancementCapabilities] to react to the probe completing.
+  VideoEnhancementCapabilities? get videoEnhancementCapabilities =>
+      enhancementCapabilities.value;
+
+  /// Latest enhancement diagnostics, or `null` before the first frame.
+  VideoEnhancementStatus? get videoEnhancementStatus => _videoEnhancementStatus;
+
+  /// True when this device can run GPU enhancement.
+  ///
+  /// Before the first [probeVideoEnhancement] this reports the compiled-in
+  /// capability, which is optimistic on Apple and false everywhere else.
+  bool get supportsVideoEnhancement =>
+      enhancementCapabilities.value?.supported ??
+      _videoEnhancementStatus?.supported ??
+      false;
+
+  /// Modes this device will actually run (always includes
+  /// [VideoEnhancementMode.off]).
+  List<VideoEnhancementMode> get supportedVideoEnhancementModes =>
+      enhancementCapabilities.value?.supportedModes ??
+      const [VideoEnhancementMode.off];
+
+  /// Frames presented through the GPU enhancement stage since [open].
+  int get enhancedFrameCount => _enhancedFrames;
+
+  /// Frames where enhancement was skipped (unsupported plan, deadline
+  /// pressure, backend failure) since [open].
+  int get enhancementBypassedFrameCount => _enhancementBypassedFrames;
+
   final StreamController<MediaForgeEvent> _events =
       StreamController<MediaForgeEvent>.broadcast();
   Stream<MediaForgeEvent> get events => _events.stream;
@@ -392,6 +452,9 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     _catchupDrops = 0;
     _decoderDrops = 0;
     _pendingSeekGeneration = null;
+    _enhancedFrames = 0;
+    _enhancementBypassedFrames = 0;
+    _videoEnhancementStatus = null;
     _starvationStartedAt = null;
     _recoveryReadyStartedAt = null;
     _rebufferingLatched = false;
@@ -485,6 +548,12 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
       _presenter.onSeek();
       _lastInternalRanges = const [];
       bufferState.value = MediaForgeBufferState.empty;
+      // A new source replaces sidecar subtitles: the engine closes the
+      // external session during open, so the Dart track list and the cue
+      // cache are cleared here to stay in step (a stale external id must
+      // never survive into the new session). Re-add with
+      // [addExternalSubtitle] after the open completes.
+      _clearSubtitleTextCache();
       value = value.copyWith(
         isInitialized: true,
         clearError: true,
@@ -599,6 +668,10 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     debugPrint('[MediaForgePlayer] engine ready handle=$textureHandle '
         'maxQueue=${effectiveMaxQueueSize} edge=${effectivePreviewMaxEdge} '
         'native=${configuration?.isNative ?? false}');
+    // Enhancement state lives on the controller, so it survives source
+    // changes and is re-applied to every new engine (still no media reopen:
+    // this runs before the first open).
+    await _applyEnhancementSettings();
   }
 
   // ------------------------------------------------------------- transport ---
@@ -834,16 +907,47 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     }
     final external =
         value.subtitleTracks.where((t) => !t.isEmbedded).toList();
+    // A fresh source auto-selects the embedded track the container flags as
+    // forced (foreign-dialogue track) or default, so flagged subtitles show
+    // without a manual pick. An existing selection — including the user's
+    // explicit Off — is never overridden.
+    final autoSelected = value.selectedSubtitleTrackId != null
+        ? null
+        : _flaggedSubtitleTrackId(subs, enabled: value.subtitlesEnabled);
     value = value.copyWith(
       audioTracks: audio,
       subtitleTracks: [...subs, ...external],
       videoTracks: videos,
+      selectedSubtitleTrackId: autoSelected,
       clearVideoSelection: value.selectedVideoTrackId != null &&
           videos.every((t) => t.id != value.selectedVideoTrackId),
     );
+    if (autoSelected != null) {
+      try {
+        await engine.selectSubtitleStream(index: autoSelected);
+      } catch (e) {
+        debugPrint('[MediaForgePlayer] auto subtitle select failed: $e');
+      }
+    }
     debugPrint('[MediaForgePlayer] tracks audio=${audio.length} '
         'subtitle=${subs.length} video=${videos.length} '
-        'external=${external.length}');
+        'external=${external.length} autoSubtitle=$autoSelected');
+  }
+
+  /// The embedded track the container asks to be shown: forced first, then
+  /// default. `null` when subtitles are switched off or nothing is flagged.
+  static int? _flaggedSubtitleTrackId(
+    List<MediaForgeSubtitleTrack> subs, {
+    required bool enabled,
+  }) {
+    if (!enabled) return null;
+    for (final t in subs) {
+      if (t.isForced) return t.id;
+    }
+    for (final t in subs) {
+      if (t.isDefault) return t.id;
+    }
+    return null;
   }
 
   /// Select a video track by stream index. Switches the live pipeline.
@@ -886,7 +990,14 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     debugPrint('[MediaForgePlayer] audio track selected id=$id');
   }
 
-  /// Select an embedded subtitle track (`null` = off). Switches live.
+  /// Select a subtitle track by id (`null` = off). Switches live.
+  ///
+  /// Embedded ids switch the engine decoder; external (sidecar) ids are
+  /// state-only because [addExternalSubtitle] already opened their session.
+  /// Off stops embedded forwarding and hides *every* cue source
+  /// deterministically: a sidecar session may keep decoding, but nothing is
+  /// delivered until a track is selected again. Tear the session down with
+  /// [closeExternalSubtitles] instead.
   Future<void> selectSubtitleTrack(int? id) async {
     if (_releaseFuture != null || _disposed) return;
     if (id != null &&
@@ -909,20 +1020,32 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
         rethrow;
       }
     }
-    value = value.copyWith(selectedSubtitleTrackId: id);
+    if (id != value.selectedSubtitleTrackId) _clearSubtitleTextCache();
+    // `copyWith(selectedSubtitleTrackId: null)` means "keep", so Off needs
+    // the explicit clear flag — otherwise the old track stays selected and
+    // keeps being polled/rendered.
+    value = value.copyWith(
+      selectedSubtitleTrackId: id,
+      clearSubtitleSelection: id == null,
+    );
     debugPrint('[MediaForgePlayer] subtitle track selected id=$id');
   }
 
   /// Register an external (sidecar) subtitle file/URL and decode it into
   /// the shared cue queue. Returns the synthetic track id.
+  ///
+  /// `file:` and bare URIs are sent to the engine as local paths — FFmpeg's
+  /// file protocol wants `/tmp/a.srt`, never `file:///tmp/a.srt`. http(s)
+  /// URLs pass through verbatim so Range reads keep working.
   Future<int> addExternalSubtitle(Uri uri, {String? language}) async {
     if (_releaseFuture != null || _disposed) {
       throw StateError('Controller is released');
     }
+    final target = _engineTargetForSubtitle(uri);
     final id = 1000 + value.subtitleTracks.length;
     if (_engineReady) {
       try {
-        await _engine!.openExternalSubtitle(pathOrUrl: '$uri');
+        await _engine!.openExternalSubtitle(pathOrUrl: target);
       } catch (e, st) {
         debugPrint('[MediaForgePlayer] openExternalSubtitle failed: $e\n$st');
         rethrow;
@@ -937,8 +1060,19 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     );
     value = value.copyWith(
         subtitleTracks: [...value.subtitleTracks, track]);
-    debugPrint('[MediaForgePlayer] external subtitle added id=$id uri=$uri');
+    debugPrint('[MediaForgePlayer] external subtitle added id=$id '
+        'target=$target');
     return id;
+  }
+
+  /// Engine target for a sidecar [uri]: `file:` and bare local paths are
+  /// decoded to filesystem paths, everything else (http/https/… ) stays a
+  /// string.
+  static String _engineTargetForSubtitle(Uri uri) {
+    if (uri.scheme == 'file' || (uri.scheme.isEmpty && uri.host.isEmpty)) {
+      return uri.toFilePath();
+    }
+    return uri.toString();
   }
 
   /// Stop the sidecar session and drop external tracks from state.
@@ -954,29 +1088,37 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
     final selectedGone = value.selectedSubtitleTrackId != null &&
         value.subtitleTracks.any((t) =>
             t.id == value.selectedSubtitleTrackId && !t.isEmbedded);
+    if (selectedGone) _clearSubtitleTextCache();
     value = value.copyWith(
       subtitleTracks:
           value.subtitleTracks.where((t) => t.isEmbedded).toList(),
       clearSubtitleSelection: selectedGone,
     );
+    debugPrint('[MediaForgePlayer] external subtitles closed '
+        'tracks=${value.subtitleTracks.length}');
+  }
+
+  /// Drop cached cue text so a previous track/position can never leak into
+  /// the next poll (the cache is served verbatim while suspended).
+  void _clearSubtitleTextCache() {
+    _lastSubtitleText = null;
+    _lastSubtitlePosition = null;
+    _lastSubtitlePollAt = null;
   }
 
   /// Active cue text at [position] (`null` when none).
   ///
-  /// Efficient: no bridge call when subtitles are disabled, no track is
-  /// selected, or no cue transition is near (cue-boundary wakeups). The
-  /// minimum poll interval from [MediaForgePlayerConfiguration] is honoured
-  /// for repeated polls at the same position.
+  /// Gated by [MediaForgePlayerValue.hasActiveSubtitles] — the same rule the
+  /// caption overlays use: subtitles enabled and a track selected. No bridge
+  /// call when no track is active, when the engine is not ready, or when the
+  /// same position is re-polled within the configured minimum interval
+  /// (cue-boundary behaviour).
   Future<String?> subtitleTextAt(Duration position) async {
     if (_releaseFuture != null || _disposed) return null;
+    // §14: never poll when disabled / no track selected. Checked before the
+    // suspend shortcut so switching Off hides cues deterministically.
+    if (!value.hasActiveSubtitles) return null;
     if (_suspended) return _lastSubtitleText;
-    // §14: never poll when disabled / no track.
-    if (!value.subtitlesEnabled) return null;
-    if (value.selectedSubtitleTrackId == null) {
-      final hasExternalSelected = value.subtitleTracks.any((t) =>
-          t.id == value.selectedSubtitleTrackId && !t.isEmbedded);
-      if (!hasExternalSelected) return null;
-    }
     if (!_engineReady) return null;
     final now = DateTime.now();
     final minInterval = configuration?.subtitlePollMinimumInterval ??
@@ -1016,11 +1158,246 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
   /// Enable/disable cue delivery (decoding continues while disabled).
   Future<void> setSubtitlesEnabled(bool enabled) async {
     if (_releaseFuture != null || _disposed) return;
+    if (!enabled) _clearSubtitleTextCache();
     value = value.copyWith(subtitlesEnabled: enabled);
     if (_engineReady) {
       await _engine!.setSubtitlesEnabled(enabled: enabled);
     }
     debugPrint('[MediaForgePlayer] subtitles enabled=$enabled');
+  }
+
+  // --------------------------------------------------- video enhancement -----
+
+  /// Best answer available before the native GPU probe runs.
+  ///
+  /// Apple is the only platform with a backend today, so other platforms can
+  /// answer honestly without touching the GPU at all.
+  static VideoEnhancementCapabilities _platformDefaultCapabilities() {
+    if (kIsWeb) return VideoEnhancementCapabilities.unsupported;
+    final apple = defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    if (!apple) {
+      return const VideoEnhancementCapabilities(
+        supported: false,
+        supportedModes: [VideoEnhancementMode.off],
+        backend: 'none',
+        maxOutputEdge: 0,
+        reason: 'video enhancement backend is Apple-only in this release',
+      );
+    }
+    return const VideoEnhancementCapabilities(
+      supported: true,
+      supportedModes: VideoEnhancementMode.values,
+      backend: 'metal_wgpu',
+      maxOutputEdge: 3840,
+      reason: 'probe_pending',
+    );
+  }
+
+  /// Probe GPU enhancement support for this device.
+  ///
+  /// Creates the native GPU pipeline on first call, so call it once during
+  /// app/settings initialisation rather than per frame. Never throws: an
+  /// unsupported device reports [VideoEnhancementCapabilities.unsupported].
+  Future<VideoEnhancementCapabilities> probeVideoEnhancement() async {
+    final engine = _engine;
+    if (engine == null) {
+      // Without an engine the compiled-in answer is all we can honestly give,
+      // but it must still be published so UI can gate on it.
+      final cached = enhancementCapabilities.value;
+      if (cached != null) return cached;
+      final provisional = _platformDefaultCapabilities();
+      enhancementCapabilities.value = provisional;
+      return provisional;
+    }
+    try {
+      final caps = await engine.videoEnhancementCapabilities();
+      final mapped = VideoEnhancementCapabilities(
+        supported: caps.supported,
+        supportedModes: caps.modes.map(VideoEnhancementMode.fromEngine).toList(),
+        backend: caps.backend,
+        maxOutputEdge: caps.maxOutputEdge,
+        reason: caps.reason,
+      );
+      _videoEnhancementProbed = true;
+      enhancementCapabilities.value = mapped;
+      debugPrint('[MediaForgePlayer] videoEnhancement probe: $mapped');
+      return mapped;
+    } catch (e) {
+      debugPrint('[MediaForgePlayer] videoEnhancement probe failed: $e');
+      _videoEnhancementProbed = true;
+      enhancementCapabilities.value = VideoEnhancementCapabilities.unsupported;
+      return VideoEnhancementCapabilities.unsupported;
+    }
+  }
+
+  /// Change the GPU enhancement mode.
+  ///
+  /// Applies to the next presented frame: no media reopen, no decoder
+  /// restart, no queue flush, no seek. Selecting an unsupported mode leaves
+  /// playback on the normal render path and reports the reason through
+  /// [videoEnhancementStatus].
+  ///
+  /// Returns true when the device accepted the mode.
+  Future<bool> setVideoEnhancementMode(VideoEnhancementMode mode) async {
+    if (_releaseFuture != null || _disposed) return false;
+    _videoEnhancementMode = mode;
+    value = value.copyWith(videoEnhancementMode: mode);
+    // The hook is installed only while a mode is active, so `off` costs
+    // nothing on the presentation path — not even a bridge call.
+    _presenter.enhancer = mode.isActive ? _enhanceFrame : null;
+    final engine = _engine;
+    if (engine == null) {
+      debugPrint('[MediaForgePlayer] videoEnhancement=$mode (applied on open)');
+      return true;
+    }
+    try {
+      final accepted = await engine.setVideoEnhancementMode(
+        mode: mode.toEngine,
+      );
+      debugPrint('[MediaForgePlayer] videoEnhancement=$mode accepted=$accepted');
+      return accepted;
+    } catch (e) {
+      debugPrint('[MediaForgePlayer] videoEnhancement set failed: $e');
+      return false;
+    }
+  }
+
+  /// Display box in device pixels (logical size × devicePixelRatio).
+  ///
+  /// Drives the resolution-aware target: enhancement only upscales toward the
+  /// display, never past it. Passing `(0, 0)` clears the hint. Safe to call
+  /// during layout — it forwards asynchronously and never notifies listeners.
+  void setVideoEnhancementViewport(double width, double height) {
+    if (_releaseFuture != null || _disposed) return;
+    final w = width.isFinite && width > 0 ? width.round() : 0;
+    final h = height.isFinite && height > 0 ? height.round() : 0;
+    if (_videoEnhancementViewportWidth == w &&
+        _videoEnhancementViewportHeight == h) {
+      return;
+    }
+    _videoEnhancementViewportWidth = w;
+    _videoEnhancementViewportHeight = h;
+    final engine = _engine;
+    if (engine == null) return;
+    unawaited(
+      engine.setVideoEnhancementViewport(width: w, height: h).catchError((_) {}),
+    );
+  }
+
+  /// Hard ceiling for the enhanced output longest edge (`0` = mode default).
+  Future<void> setVideoEnhancementMaxOutputEdge(int edge) async {
+    if (_releaseFuture != null || _disposed) return;
+    _videoEnhancementMaxOutputEdge = edge < 0 ? 0 : edge;
+    final engine = _engine;
+    if (engine == null) return;
+    await engine.setVideoEnhancementMaxOutputEdge(
+      edge: _videoEnhancementMaxOutputEdge,
+    );
+  }
+
+  /// Push the current requested mode / viewport / cap to a freshly created
+  /// engine (called from [_ensureEngine]).
+  Future<void> _applyEnhancementSettings() async {
+    final engine = _engine;
+    if (engine == null) return;
+    _presenter.enhancer =
+        _videoEnhancementMode.isActive ? _enhanceFrame : null;
+    if (_videoEnhancementMaxOutputEdge > 0) {
+      await engine.setVideoEnhancementMaxOutputEdge(
+        edge: _videoEnhancementMaxOutputEdge,
+      );
+    }
+    if (_videoEnhancementViewportWidth != null) {
+      await engine.setVideoEnhancementViewport(
+        width: _videoEnhancementViewportWidth!,
+        height: _videoEnhancementViewportHeight ?? 0,
+      );
+    }
+    if (!_videoEnhancementProbed) {
+      await probeVideoEnhancement();
+    }
+    // Nothing to send while the mode is off and staying off.
+    await engine.setVideoEnhancementMode(mode: _videoEnhancementMode.toEngine);
+  }
+
+  /// Enhancement hook installed on the presenter.
+  ///
+  /// Runs the native GPU stage for one decoded frame. Returns `null` to
+  /// present the decoded frame unchanged — which is also what happens on any
+  /// error, so a GPU problem can never break playback.
+  Future<mf.PixelBufferHandoff?> _enhanceFrame(
+    mf.MediaVideoFrame frame,
+    mf.PixelBufferHandoff handoff,
+  ) async {
+    final engine = _engine;
+    if (engine == null) return null;
+    try {
+      // The engine takes ownership of the decoded frame's retain on success
+      // and returns the enhanced surface; `null` means "present the decoded
+      // frame as-is" and leaves that retain with us.
+      final enhanced = await engine.enhancePixelBuffer(
+        pixelBufferPtr: handoff.pixelBufferPtr,
+        width: handoff.width,
+        height: handoff.height,
+        ptsMs: handoff.ptsMs,
+      );
+      if (enhanced == null) {
+        _enhancementBypassedFrames++;
+        return null;
+      }
+      _enhancedFrames++;
+      return enhanced;
+    } catch (e) {
+      debugPrint('[MediaForgePlayer] enhancement failed: $e');
+      _enhancementBypassedFrames++;
+      return null;
+    }
+  }
+
+  /// Refresh the enhancement counters folded into diagnostics.
+  Future<void> _refreshEnhancementDiagnostics() async {
+    final engine = _engine;
+    if (engine == null) return;
+    if (!_videoEnhancementMode.isActive &&
+        (_videoEnhancementStatus?.supported ?? true) == false) {
+      return;
+    }
+    try {
+      final s = await engine.videoEnhancementStatus();
+      _videoEnhancementStatus = VideoEnhancementStatus(
+        supported: s.supported,
+        requestedMode: VideoEnhancementMode.fromEngine(s.requestedMode),
+        activeMode: VideoEnhancementMode.fromEngine(s.activeMode),
+        backend: s.backend,
+        path: s.path,
+        scaler: s.scaler,
+        inputWidth: s.inputWidth,
+        inputHeight: s.inputHeight,
+        outputWidth: s.outputWidth,
+        outputHeight: s.outputHeight,
+        lastFrameMs: s.lastFrameMs,
+        averageFrameMs: s.averageFrameMs,
+        deadlineMs: s.deadlineMs,
+        deadlineMisses: s.deadlineMisses.toInt(),
+        hardDeadlineMisses: s.hardDeadlineMisses.toInt(),
+        enhancedFrames: s.enhancedFrames.toInt(),
+        bypassedFrames: s.bypassedFrames.toInt(),
+        failedFrames: s.failedFrames.toInt(),
+        passes: s.passes,
+        fallbackReason: s.fallbackReason,
+        bypassReason: s.bypassReason,
+      );
+      if (value.videoEnhancementActive != _presenter.enhancementActive ||
+          value.videoEnhancementFallbackReason != s.fallbackReason) {
+        value = value.copyWith(
+          videoEnhancementActive: _presenter.enhancementActive,
+          videoEnhancementFallbackReason: s.fallbackReason,
+        );
+      }
+    } catch (e) {
+      debugPrint('[MediaForgePlayer] enhancement status failed: $e');
+    }
   }
 
   // ------------------------------------------------------- presentation ------
@@ -1239,6 +1616,8 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
           engineDecoder.isEmpty || engineDecoder == 'none'
               ? fallbackDecoder
               : engineDecoder;
+      await _refreshEnhancementDiagnostics();
+      final enhancement = _videoEnhancementStatus;
       final diag = MediaForgeDiagnostics(
         state: snap.state,
         mediaTimeMs: mediaMs,
@@ -1297,6 +1676,21 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
         retainedPixelBufferCount: vq,
         retainedTextureCount: _presenter.textureId.value != null ? 1 : 0,
         isSuspended: _suspended,
+        videoEnhancementSupported: enhancement?.supported ?? false,
+        videoEnhancementRequested: _videoEnhancementMode.wireName,
+        videoEnhancementActive:
+            (enhancement?.activeMode ?? VideoEnhancementMode.off).wireName,
+        videoEnhancementBackend: enhancement?.backend ?? 'none',
+        videoEnhancementPath: enhancement?.path ?? '',
+        videoEnhancementInputWidth: enhancement?.inputWidth ?? 0,
+        videoEnhancementInputHeight: enhancement?.inputHeight ?? 0,
+        videoEnhancementOutputWidth: enhancement?.outputWidth ?? 0,
+        videoEnhancementOutputHeight: enhancement?.outputHeight ?? 0,
+        videoEnhancementFrameMs: enhancement?.lastFrameMs,
+        videoEnhancementAverageMs: enhancement?.averageFrameMs,
+        videoEnhancementDeadlineMs: enhancement?.deadlineMs,
+        videoEnhancementDeadlineMisses: enhancement?.deadlineMisses ?? 0,
+        videoEnhancementFallbackReason: enhancement?.fallbackReason ?? '',
       );
       _lastDiagnostics = diag;
       if (!_diagnostics.isClosed) _diagnostics.add(diag);
@@ -1702,6 +2096,7 @@ class MediaForgePlayerController extends ValueNotifier<MediaForgePlayerValue>
       debugPrint('[MediaForgePlayer] dispose stop failed: $e');
     }
     _engine = null;
+    _presenter.enhancer = null;
     // 5-6. Release frames + texture/presentation resources.
     try {
       _presenter.dispose();

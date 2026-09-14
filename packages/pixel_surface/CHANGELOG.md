@@ -1,5 +1,39 @@
 ## Unreleased
 
+- New `enhance` module (feature `gpu`, Apple): GPU video enhancement /
+  upscaling between hardware decode and presentation.
+  - `EnhancementMode` (`off` / `sharp` / `enhanced` / `highQuality`),
+    `EnhancementBackend` trait, `create_backend()` (never fails — reports
+    `supported == false` instead), `EnhancementCapabilities`, `FrameHandle`.
+  - `enhance::plan` — resolution-aware target planning: preserves aspect ratio,
+    never downscales, caps output per mode, and bypasses 4K-class sources that
+    are shown smaller than they are.
+  - `enhance::policy` — deadline-aware quality ladder with anti-oscillation
+    hysteresis (steps down under load, back up only after a long clean window).
+  - `enhance::metal` — wgpu-over-Metal backend: up to three compute passes
+    (separable Catmull-Rom or Lanczos-3 upscale, then contrast-adaptive sharpen
+    plus dither) writing straight into an IOSurface-backed `CVPixelBuffer`.
+    Output surfaces are pooled in a 3-deep ring; the shader works in logical
+    RGBA on `bgra8unorm` textures, so there is no CPU copy and no channel
+    swizzle round-trip.
+  - `metal_iosurface::metal_texture_view_for_pixel_buffer` — Metal view of an
+    existing BGRA `CVPixelBuffer` (the decode IOSurface) without taking over
+    the caller's retain.
+  - `metal_iosurface::create_bgra_iosurface_pixel_buffer_metal` — output
+    surface with explicit IOSurface + `kCVPixelBufferMetalCompatibilityKey`
+    attributes so Flutter adopts it without a CPU copy.
+  - `metal_iosurface::with_bgra_pixels` / `with_bgra_pixels_mut` — diagnostic
+    locked access to a BGRA surface.
+  - New bin `enhance_bench` (`cargo run --release --features gpu --bin
+    enhance_bench`) measuring the stage across the resolution matrix.
+- Fixed: `CVMetalTextureCacheCreateTextureFromImage` was passed a CoreVideo
+  pixel format (`'BGRA'`) where an `MTLPixelFormat` is required, which aborted
+  inside `MTLDebugValidateMTLPixelFormat`. Now uses
+  `MTLPixelFormatBGRA8Unorm` (both call sites).
+- Fixed: `CvMetalTexture::clone_metal_texture` built a `metal::Texture` with
+  `from_ptr` (which does **not** retain) while its `Drop` releases, producing a
+  dangling `MTLTexture` and a double release. It now uses the clone the
+  `foreign_obj_type!` macro generates (`retain` on clone).
 - iOS deployment target lowered 16.0 → 15.0 (audited: no iOS 16+ API used;
   see `IOS15_COMPATIBILITY.md`). PeerStream (iOS 15) consumes without changes.
 

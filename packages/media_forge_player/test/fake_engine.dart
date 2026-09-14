@@ -140,6 +140,9 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
     openCount++;
     positionMs = 0;
     playing = false;
+    // Native parity: a new source closes the sidecar session (Rust
+    // `open_common` calls `close_external_subtitle`).
+    externalOpen = false;
     _lastTick = DateTime.now();
   }
 
@@ -149,6 +152,7 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
     openCount++;
     positionMs = 0;
     playing = false;
+    externalOpen = false;
     _lastTick = DateTime.now();
   }
 
@@ -198,6 +202,139 @@ class FakeMediaPlaybackEngine implements mf.MediaPlaybackEngine {
 
   @override
   Future<void> setSourceMuted({required bool muted}) async {}
+
+  // -- experimental GPU video enhancement --------------------------------
+  //
+  // Mirrors the native contract: the mode is accepted live (no reopen), the
+  // capability set is configurable so tests can simulate an unsupported
+  // device, and `enhancePixelBuffer` either returns a distinct output pointer
+  // or `null` for "present the decoded frame unchanged".
+
+  /// Modes the fake device accepts. Empty means "off only".
+  List<mf.VideoEnhancementMode> enhancementModes = const [
+    mf.VideoEnhancementMode.off,
+    mf.VideoEnhancementMode.sharp,
+    mf.VideoEnhancementMode.enhanced,
+    mf.VideoEnhancementMode.highQuality,
+  ];
+
+  /// Backend label reported to the controller.
+  String enhancementBackend = 'fake_gpu';
+
+  /// When false, `enhancePixelBuffer` returns null (bypass / unsupported).
+  bool enhancementProducesOutput = true;
+
+  /// Enhancement stage time reported to the policy ladder.
+  double enhancementFrameMs = 1.5;
+
+  mf.VideoEnhancementMode enhancementMode = mf.VideoEnhancementMode.off;
+  BigInt? enhancementViewportWidth;
+  BigInt? enhancementViewportHeight;
+  int? enhancementMaxOutputEdge;
+
+  /// Every mode request, in order.
+  final List<mf.VideoEnhancementMode> enhancementModeLog = [];
+
+  /// Every enhanced frame handed back.
+  int enhancementCallCount = 0;
+
+  /// Fake output sizes keyed by the requested mode.
+  Map<mf.VideoEnhancementMode, (int, int)> enhancementOutputSizes = const {
+    mf.VideoEnhancementMode.sharp: (1280, 720),
+    mf.VideoEnhancementMode.enhanced: (1920, 1080),
+    mf.VideoEnhancementMode.highQuality: (3840, 2160),
+  };
+
+  int _fakeOutputPtr = 0x7F000000;
+
+  @override
+  Future<mf.VideoEnhancementCapabilities> videoEnhancementCapabilities() async {
+    final supported = enhancementModes.length > 1;
+    return mf.VideoEnhancementCapabilities(
+      supported: supported,
+      backend: supported ? enhancementBackend : 'none',
+      modes: enhancementModes,
+      maxOutputEdge: supported ? 3840 : 0,
+      reason: supported ? '' : 'unsupported in fake',
+    );
+  }
+
+  @override
+  Future<bool> setVideoEnhancementMode(
+      {required mf.VideoEnhancementMode mode}) async {
+    enhancementModeLog.add(mode);
+    if (!enhancementModes.contains(mode)) return false;
+    enhancementMode = mode;
+    return true;
+  }
+
+  @override
+  Future<void> setVideoEnhancementViewport(
+      {required int width, required int height}) async {
+    enhancementViewportWidth = BigInt.from(width);
+    enhancementViewportHeight = BigInt.from(height);
+  }
+
+  @override
+  Future<void> setVideoEnhancementMaxOutputEdge({required int edge}) async {
+    enhancementMaxOutputEdge = edge;
+  }
+
+  @override
+  Future<mf.VideoEnhancementStatus> videoEnhancementStatus() async {
+    final supported = enhancementModes.length > 1;
+    final active = supported ? enhancementMode : mf.VideoEnhancementMode.off;
+    final size = enhancementOutputSizes[active] ?? (0, 0);
+    return mf.VideoEnhancementStatus(
+      supported: supported,
+      requestedMode: enhancementMode,
+      activeMode: active,
+      backend: supported ? enhancementBackend : 'none',
+      path: active == mf.VideoEnhancementMode.off ? '' : 'fake_pass',
+      scaler: active == mf.VideoEnhancementMode.sharp ? 'none' : 'lanczos3',
+      inputWidth: 1280,
+      inputHeight: 720,
+      outputWidth: active == mf.VideoEnhancementMode.off ? 0 : size.$1,
+      outputHeight: active == mf.VideoEnhancementMode.off ? 0 : size.$2,
+      lastFrameMs: enhancementFrameMs,
+      averageFrameMs: enhancementFrameMs,
+      deadlineMs: 33,
+      deadlineMisses: BigInt.zero,
+      hardDeadlineMisses: BigInt.zero,
+      enhancedFrames: BigInt.from(enhancementCallCount),
+      bypassedFrames: BigInt.zero,
+      failedFrames: BigInt.zero,
+      passes: active == mf.VideoEnhancementMode.sharp ? 1 : 3,
+      fallbackReason: supported ? '' : 'unsupported in fake',
+      bypassReason: '',
+    );
+  }
+
+  @override
+  Future<mf.PixelBufferHandoff?> enhancePixelBuffer({
+    required BigInt pixelBufferPtr,
+    required int width,
+    required int height,
+    required BigInt ptsMs,
+  }) async {
+    if (enhancementMode == mf.VideoEnhancementMode.off ||
+        !enhancementProducesOutput) {
+      return null;
+    }
+    enhancementCallCount++;
+    final size = enhancementOutputSizes[enhancementMode] ?? (width, height);
+    _fakeOutputPtr += 0x10;
+    return mf.PixelBufferHandoff(
+      ptsMs: ptsMs,
+      width: size.$1,
+      height: size.$2,
+      pixelBufferPtr: BigInt.from(_fakeOutputPtr),
+      seekGeneration: BigInt.zero,
+    );
+  }
+
+  /// Last pointer handed out by [enhancePixelBuffer] (0 before the first).
+  int get lastEnhancedPixelBufferPtr => _fakeOutputPtr;
 
   @override
   Future<void> setTrimRange(

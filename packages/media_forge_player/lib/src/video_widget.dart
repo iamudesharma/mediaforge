@@ -93,6 +93,7 @@ class MediaForgeVideo extends StatelessWidget {
                 ),
               );
             } else if (cpu != null) {
+
               surface = Container(
                 color: Colors.black,
                 alignment: Alignment.center,
@@ -117,25 +118,64 @@ class MediaForgeVideo extends StatelessWidget {
                     child: const Icon(Icons.movie_outlined),
                   );
             }
-            if (!showSubtitles) return surface;
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                surface,
-                Positioned(
-                  left: 12,
-                  right: 12,
-                  bottom: 12,
-                  child: _SubtitleOverlay(
-                    controller: controller,
-                    style: subtitleStyle,
-                    builder: subtitleBuilder,
+            if (!showSubtitles) {
+              return _ViewportReporter(
+                controller: controller,
+                child: surface,
+              );
+            }
+            return _ViewportReporter(
+              controller: controller,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  surface,
+                  Positioned(
+                    left: 12,
+                    right: 12,
+                    bottom: 12,
+                    child: _SubtitleOverlay(
+                      controller: controller,
+                      style: subtitleStyle,
+                      builder: subtitleBuilder,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             );
           },
         );
+      },
+    );
+  }
+}
+
+/// Reports the played surface's size (in device pixels) to the controller so
+/// the GPU enhancement stage can size its output to the display.
+///
+/// Reporting is deferred to a post-frame callback and swallowed on error, so
+/// measuring can never affect layout or throw during a build.
+class _ViewportReporter extends StatelessWidget {
+  const _ViewportReporter({required this.controller, required this.child});
+
+  final MediaForgePlayerController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final height = constraints.maxHeight;
+        if (width.isFinite && height.isFinite && width > 0 && height > 0) {
+          final deviceWidth = width * ratio;
+          final deviceHeight = height * ratio;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            controller.setVideoEnhancementViewport(deviceWidth, deviceHeight);
+          });
+        }
+        return child;
       },
     );
   }
@@ -177,7 +217,9 @@ class _SubtitleOverlayState extends State<_SubtitleOverlay> {
 
   void _maybePoll() {
     final v = widget.controller.value;
-    if (v.selectedSubtitleTrackId == null && !v.subtitleTracks.any((t) => !t.isEmbedded)) {
+    // Same gate as MediaForgePlayerController.subtitleTextAt
+    // (MediaForgePlayerValue.hasActiveSubtitles): enabled + a selected track.
+    if (!v.hasActiveSubtitles) {
       if (_text != null && mounted) setState(() => _text = null);
       return;
     }

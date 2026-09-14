@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0-beta.6";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1455709259;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1900397372;
 
 // Section: executor
 
@@ -1139,6 +1139,67 @@ fn wire__crate__api__runtime__MediaPlaybackEngine_close_external_subtitle_impl(
                             &*api_that_guard,
                         );
                     })?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__runtime__MediaPlaybackEngine_enhance_pixel_buffer_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "MediaPlaybackEngine_enhance_pixel_buffer",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>,
+            >>::sse_decode(&mut deserializer);
+            let api_pixel_buffer_ptr = <u64>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            let api_pts_ms = <u64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = Ok::<_, ()>(
+                        crate::api::runtime::MediaPlaybackEngine::enhance_pixel_buffer(
+                            &*api_that_guard,
+                            api_pixel_buffer_ptr,
+                            api_width,
+                            api_height,
+                            api_pts_ms,
+                        ),
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -3746,6 +3807,144 @@ fn wire__crate__api__runtime__MediaPlaybackEngine_set_trim_range_impl(
         },
     )
 }
+fn wire__crate__api__runtime__MediaPlaybackEngine_set_video_enhancement_max_output_edge_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec,_,_>(flutter_rust_bridge::for_generated::TaskInfo{ debug_name: "MediaPlaybackEngine_set_video_enhancement_max_output_edge", port: Some(port_), mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal }, move || {
+            let message = unsafe { flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(ptr_, rust_vec_len_, data_len_) };
+            let mut deserializer = flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>>>::sse_decode(&mut deserializer);
+let api_edge = <u32>::sse_decode(&mut deserializer);deserializer.end(); move |context|  {
+                    transform_result_sse::<_, ()>((move ||  {
+                        let mut api_that_guard = None;
+let decode_indices_ = flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(&api_that, 0, false)]);
+        for i in decode_indices_ {
+            match i {
+                0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                _ => unreachable!(),
+            }
+        }
+        let api_that_guard = api_that_guard.unwrap();
+ let output_ok = Ok::<_, ()>({ crate::api::runtime::MediaPlaybackEngine::set_video_enhancement_max_output_edge(&*api_that_guard, api_edge); })?;   std::result::Result::Ok(output_ok)
+                    })())
+                } })
+}
+fn wire__crate__api__runtime__MediaPlaybackEngine_set_video_enhancement_mode_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "MediaPlaybackEngine_set_video_enhancement_mode",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>,
+            >>::sse_decode(&mut deserializer);
+            let api_mode =
+                <crate::api::runtime::VideoEnhancementMode>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = Ok::<_, ()>(
+                        crate::api::runtime::MediaPlaybackEngine::set_video_enhancement_mode(
+                            &*api_that_guard,
+                            api_mode,
+                        ),
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__runtime__MediaPlaybackEngine_set_video_enhancement_viewport_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "MediaPlaybackEngine_set_video_enhancement_viewport",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>,
+            >>::sse_decode(&mut deserializer);
+            let api_width = <u32>::sse_decode(&mut deserializer);
+            let api_height = <u32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = Ok::<_, ()>({
+                        crate::api::runtime::MediaPlaybackEngine::set_video_enhancement_viewport(
+                            &*api_that_guard,
+                            api_width,
+                            api_height,
+                        );
+                    })?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__runtime__MediaPlaybackEngine_set_volume_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4103,6 +4302,112 @@ fn wire__crate__api__runtime__MediaPlaybackEngine_take_video_frame_impl(
                         Ok::<_, ()>(crate::api::runtime::MediaPlaybackEngine::take_video_frame(
                             &*api_that_guard,
                         ))?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__runtime__MediaPlaybackEngine_video_enhancement_capabilities_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "MediaPlaybackEngine_video_enhancement_capabilities",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = Ok::<_, ()>(
+                        crate::api::runtime::MediaPlaybackEngine::video_enhancement_capabilities(
+                            &*api_that_guard,
+                        ),
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__runtime__MediaPlaybackEngine_video_enhancement_status_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "MediaPlaybackEngine_video_enhancement_status",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<MediaPlaybackEngine>,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let mut api_that_guard = None;
+                    let decode_indices_ =
+                        flutter_rust_bridge::for_generated::lockable_compute_decode_order(vec![
+                            flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                &api_that, 0, false,
+                            ),
+                        ]);
+                    for i in decode_indices_ {
+                        match i {
+                            0 => api_that_guard = Some(api_that.lockable_decode_sync_ref()),
+                            _ => unreachable!(),
+                        }
+                    }
+                    let api_that_guard = api_that_guard.unwrap();
+                    let output_ok = Ok::<_, ()>(
+                        crate::api::runtime::MediaPlaybackEngine::video_enhancement_status(
+                            &*api_that_guard,
+                        ),
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -6062,6 +6367,20 @@ impl SseDecode for Vec<(String, String)> {
     }
 }
 
+impl SseDecode for Vec<crate::api::runtime::VideoEnhancementMode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::runtime::VideoEnhancementMode>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for crate::api::runtime::MediaPacket {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -6296,6 +6615,91 @@ impl SseDecode for usize {
     }
 }
 
+impl SseDecode for crate::api::runtime::VideoEnhancementCapabilities {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_supported = <bool>::sse_decode(deserializer);
+        let mut var_backend = <String>::sse_decode(deserializer);
+        let mut var_modes =
+            <Vec<crate::api::runtime::VideoEnhancementMode>>::sse_decode(deserializer);
+        let mut var_maxOutputEdge = <u32>::sse_decode(deserializer);
+        let mut var_reason = <String>::sse_decode(deserializer);
+        return crate::api::runtime::VideoEnhancementCapabilities {
+            supported: var_supported,
+            backend: var_backend,
+            modes: var_modes,
+            max_output_edge: var_maxOutputEdge,
+            reason: var_reason,
+        };
+    }
+}
+
+impl SseDecode for crate::api::runtime::VideoEnhancementMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::runtime::VideoEnhancementMode::Off,
+            1 => crate::api::runtime::VideoEnhancementMode::Sharp,
+            2 => crate::api::runtime::VideoEnhancementMode::Enhanced,
+            3 => crate::api::runtime::VideoEnhancementMode::HighQuality,
+            _ => unreachable!("Invalid variant for VideoEnhancementMode: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::runtime::VideoEnhancementStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_supported = <bool>::sse_decode(deserializer);
+        let mut var_requestedMode =
+            <crate::api::runtime::VideoEnhancementMode>::sse_decode(deserializer);
+        let mut var_activeMode =
+            <crate::api::runtime::VideoEnhancementMode>::sse_decode(deserializer);
+        let mut var_backend = <String>::sse_decode(deserializer);
+        let mut var_path = <String>::sse_decode(deserializer);
+        let mut var_scaler = <String>::sse_decode(deserializer);
+        let mut var_inputWidth = <u32>::sse_decode(deserializer);
+        let mut var_inputHeight = <u32>::sse_decode(deserializer);
+        let mut var_outputWidth = <u32>::sse_decode(deserializer);
+        let mut var_outputHeight = <u32>::sse_decode(deserializer);
+        let mut var_lastFrameMs = <f32>::sse_decode(deserializer);
+        let mut var_averageFrameMs = <f32>::sse_decode(deserializer);
+        let mut var_deadlineMs = <f32>::sse_decode(deserializer);
+        let mut var_deadlineMisses = <u64>::sse_decode(deserializer);
+        let mut var_hardDeadlineMisses = <u64>::sse_decode(deserializer);
+        let mut var_enhancedFrames = <u64>::sse_decode(deserializer);
+        let mut var_bypassedFrames = <u64>::sse_decode(deserializer);
+        let mut var_failedFrames = <u64>::sse_decode(deserializer);
+        let mut var_passes = <u32>::sse_decode(deserializer);
+        let mut var_fallbackReason = <String>::sse_decode(deserializer);
+        let mut var_bypassReason = <String>::sse_decode(deserializer);
+        return crate::api::runtime::VideoEnhancementStatus {
+            supported: var_supported,
+            requested_mode: var_requestedMode,
+            active_mode: var_activeMode,
+            backend: var_backend,
+            path: var_path,
+            scaler: var_scaler,
+            input_width: var_inputWidth,
+            input_height: var_inputHeight,
+            output_width: var_outputWidth,
+            output_height: var_outputHeight,
+            last_frame_ms: var_lastFrameMs,
+            average_frame_ms: var_averageFrameMs,
+            deadline_ms: var_deadlineMs,
+            deadline_misses: var_deadlineMisses,
+            hard_deadline_misses: var_hardDeadlineMisses,
+            enhanced_frames: var_enhancedFrames,
+            bypassed_frames: var_bypassedFrames,
+            failed_frames: var_failedFrames,
+            passes: var_passes,
+            fallback_reason: var_fallbackReason,
+            bypass_reason: var_bypassReason,
+        };
+    }
+}
+
 fn pde_ffi_dispatcher_primary_impl(
     func_id: i32,
     port: flutter_rust_bridge::for_generated::MessagePort,
@@ -6305,590 +6709,124 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__runtime__AudioRuntime_add_overlay_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        2 => wire__crate__api__runtime__AudioRuntime_clear_trim_end_reached_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        3 => wire__crate__api__runtime__AudioRuntime_flush_overlay_queues_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        4 => wire__crate__api__runtime__AudioRuntime_get_volume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        5 => wire__crate__api__runtime__AudioRuntime_is_trim_end_reached_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        6 => wire__crate__api__runtime__AudioRuntime_remove_overlay_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        7 => wire__crate__api__runtime__AudioRuntime_set_muted_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        8 => wire__crate__api__runtime__AudioRuntime_set_overlay_volume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        9 => wire__crate__api__runtime__AudioRuntime_set_source_muted_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        10 => wire__crate__api__runtime__AudioRuntime_set_trim_end_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        11 => wire__crate__api__runtime__AudioRuntime_set_volume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        12 => wire__crate__api__runtime__AudioRuntime_start_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__runtime__AudioRuntime_stop_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__runtime__AudioRuntime_stop_all_overlays_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        15 => wire__crate__api__runtime__GpuPresenter_new_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__runtime__MediaPlaybackEngine_add_overlay_audio_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        17 => wire__crate__api__runtime__MediaPlaybackEngine_audio_queue_bytes_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        18 => wire__crate__api__runtime__MediaPlaybackEngine_audio_queue_duration_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        19 => wire__crate__api__runtime__MediaPlaybackEngine_catchup_drops_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        20 => wire__crate__api__runtime__MediaPlaybackEngine_clear_cancel_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        21 => wire__crate__api__runtime__MediaPlaybackEngine_close_external_subtitle_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        22 => wire__crate__api__runtime__MediaPlaybackEngine_frame_memory_bytes_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        23 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_clock_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        24 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_frame_queue_len_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        25 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_packet_queue_len_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        26 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_waveform_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        27 => wire__crate__api__runtime__MediaPlaybackEngine_get_av_drift_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        28 => wire__crate__api__runtime__MediaPlaybackEngine_get_decode_capabilities_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        29 => wire__crate__api__runtime__MediaPlaybackEngine_get_diagnostics_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        30 => wire__crate__api__runtime__MediaPlaybackEngine_get_duration_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        31 => wire__crate__api__runtime__MediaPlaybackEngine_get_last_presented_pts_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        32 => wire__crate__api__runtime__MediaPlaybackEngine_get_latest_decoded_video_pts_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        33 => wire__crate__api__runtime__MediaPlaybackEngine_get_media_time_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        34 => wire__crate__api__runtime__MediaPlaybackEngine_get_playback_state_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        35 => wire__crate__api__runtime__MediaPlaybackEngine_get_subtitle_delay_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        36 => wire__crate__api__runtime__MediaPlaybackEngine_get_trim_end_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        37 => wire__crate__api__runtime__MediaPlaybackEngine_get_trim_start_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        38 => wire__crate__api__runtime__MediaPlaybackEngine_get_video_frame_queue_len_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        39 => wire__crate__api__runtime__MediaPlaybackEngine_get_video_packet_queue_len_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        40 => wire__crate__api__runtime__MediaPlaybackEngine_get_volume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        41 => wire__crate__api__runtime__MediaPlaybackEngine_get_wall_clock_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        42 => wire__crate__api__runtime__MediaPlaybackEngine_hard_resync_drift_threshold_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        43 => wire__crate__api__runtime__MediaPlaybackEngine_list_streams_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        44 => wire__crate__api__runtime__MediaPlaybackEngine_new_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        45 => wire__crate__api__runtime__MediaPlaybackEngine_open_external_subtitle_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        46 => wire__crate__api__runtime__MediaPlaybackEngine_open_file_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        47 => wire__crate__api__runtime__MediaPlaybackEngine_open_url_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        48 => wire__crate__api__runtime__MediaPlaybackEngine_pause_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        49 => wire__crate__api__runtime__MediaPlaybackEngine_poll_subtitle_text_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        50 => wire__crate__api__runtime__MediaPlaybackEngine_presenter_interval_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        51 => wire__crate__api__runtime__MediaPlaybackEngine_probe_duration_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        52 => wire__crate__api__runtime__MediaPlaybackEngine_push_audio_packet_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        53 => wire__crate__api__runtime__MediaPlaybackEngine_push_video_packet_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        54 => wire__crate__api__runtime__MediaPlaybackEngine_queue_overflow_drops_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        55 => wire__crate__api__runtime__MediaPlaybackEngine_reconnect_count_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        56 => wire__crate__api__runtime__MediaPlaybackEngine_remove_overlay_audio_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        57 => wire__crate__api__runtime__MediaPlaybackEngine_rendering_path_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        58 => wire__crate__api__runtime__MediaPlaybackEngine_request_cancel_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        59 => wire__crate__api__runtime__MediaPlaybackEngine_resume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        60 => wire__crate__api__runtime__MediaPlaybackEngine_seek_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        61 => wire__crate__api__runtime__MediaPlaybackEngine_select_audio_stream_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        62 => wire__crate__api__runtime__MediaPlaybackEngine_select_subtitle_stream_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        63 => wire__crate__api__runtime__MediaPlaybackEngine_select_video_stream_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        64 => wire__crate__api__runtime__MediaPlaybackEngine_set_muted_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        65 => wire__crate__api__runtime__MediaPlaybackEngine_set_overlay_volume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        66 => wire__crate__api__runtime__MediaPlaybackEngine_set_rate_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        67 => wire__crate__api__runtime__MediaPlaybackEngine_set_source_muted_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        68 => wire__crate__api__runtime__MediaPlaybackEngine_set_subtitle_delay_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        69 => wire__crate__api__runtime__MediaPlaybackEngine_set_subtitles_enabled_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        70 => wire__crate__api__runtime__MediaPlaybackEngine_set_trim_range_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        71 => wire__crate__api__runtime__MediaPlaybackEngine_set_volume_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        72 => wire__crate__api__runtime__MediaPlaybackEngine_stale_drops_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        73 => wire__crate__api__runtime__MediaPlaybackEngine_start_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        74 => wire__crate__api__runtime__MediaPlaybackEngine_stop_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        75 => wire__crate__api__runtime__MediaPlaybackEngine_suspend_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        76 => wire__crate__api__runtime__MediaPlaybackEngine_take_audio_frame_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        77 => wire__crate__api__runtime__MediaPlaybackEngine_take_video_frame_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        78 => wire__crate__api__runtime__MediaPlaybackEngine_video_queue_bytes_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        79 => wire__crate__api__runtime__MediaPlaybackEngine_video_queue_duration_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        80 => wire__crate__api__runtime__PacketQueue_bytes_impl(port, ptr, rust_vec_len, data_len),
-        81 => wire__crate__api__runtime__PacketQueue_close_impl(port, ptr, rust_vec_len, data_len),
-        82 => wire__crate__api__runtime__PacketQueue_duration_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        83 => wire__crate__api__runtime__PacketQueue_flush_impl(port, ptr, rust_vec_len, data_len),
-        84 => {
-            wire__crate__api__runtime__PacketQueue_is_empty_impl(port, ptr, rust_vec_len, data_len)
-        }
-        85 => wire__crate__api__runtime__PacketQueue_len_impl(port, ptr, rust_vec_len, data_len),
-        86 => wire__crate__api__runtime__PacketQueue_new_impl(port, ptr, rust_vec_len, data_len),
-        87 => wire__crate__api__runtime__PacketQueue_new_with_budgets_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        88 => wire__crate__api__runtime__PacketQueue_pop_impl(port, ptr, rust_vec_len, data_len),
-        89 => wire__crate__api__runtime__PacketQueue_push_impl(port, ptr, rust_vec_len, data_len),
-        90 => {
-            wire__crate__api__runtime__PacketQueue_try_pop_impl(port, ptr, rust_vec_len, data_len)
-        }
-        91 => wire__crate__api__runtime__PlaybackClock_advance_presented_pts_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        92 => wire__crate__api__runtime__PlaybackClock_enter_rebuffering_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        93 => wire__crate__api__runtime__PlaybackClock_get_last_presented_pts_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        94 => wire__crate__api__runtime__PlaybackClock_get_media_time_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        95 => wire__crate__api__runtime__PlaybackClock_get_state_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        96 => wire__crate__api__runtime__PlaybackClock_new_impl(port, ptr, rust_vec_len, data_len),
-        97 => {
-            wire__crate__api__runtime__PlaybackClock_pause_impl(port, ptr, rust_vec_len, data_len)
-        }
-        98 => wire__crate__api__runtime__PlaybackClock_reset_presented_pts_for_seek_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        99 => wire__crate__api__runtime__PlaybackClock_resume_from_rebuffering_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        100 => {
-            wire__crate__api__runtime__PlaybackClock_seek_impl(port, ptr, rust_vec_len, data_len)
-        }
-        101 => wire__crate__api__runtime__PlaybackClock_seek_complete_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        102 => wire__crate__api__runtime__PlaybackClock_set_rate_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        103 => {
-            wire__crate__api__runtime__PlaybackClock_start_impl(port, ptr, rust_vec_len, data_len)
-        }
-        104 => wire__crate__api__runtime__PlaybackClock_sync_from_audio_ms_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        106 => {
-            wire__crate__api__runtime__VideoRuntime_start_impl(port, ptr, rust_vec_len, data_len)
-        }
-        107 => wire__crate__api__runtime__VideoRuntime_stop_impl(port, ptr, rust_vec_len, data_len),
-        108 => wire__crate__api__runtime__ensure_ffmpeg_initialized_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        109 => wire__crate__api__runtime__media_video_frame_into_pixel_buffer_handoff_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        110 => wire__crate__api__runtime__network_options_default_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        111 => wire__crate__api__runtime__probe_decode_capabilities_impl(
-            port,
-            ptr,
-            rust_vec_len,
-            data_len,
-        ),
-        _ => unreachable!(),
-    }
+                        1 => wire__crate__api__runtime__AudioRuntime_add_overlay_impl(port, ptr, rust_vec_len, data_len),
+2 => wire__crate__api__runtime__AudioRuntime_clear_trim_end_reached_impl(port, ptr, rust_vec_len, data_len),
+3 => wire__crate__api__runtime__AudioRuntime_flush_overlay_queues_impl(port, ptr, rust_vec_len, data_len),
+4 => wire__crate__api__runtime__AudioRuntime_get_volume_impl(port, ptr, rust_vec_len, data_len),
+5 => wire__crate__api__runtime__AudioRuntime_is_trim_end_reached_impl(port, ptr, rust_vec_len, data_len),
+6 => wire__crate__api__runtime__AudioRuntime_remove_overlay_impl(port, ptr, rust_vec_len, data_len),
+7 => wire__crate__api__runtime__AudioRuntime_set_muted_impl(port, ptr, rust_vec_len, data_len),
+8 => wire__crate__api__runtime__AudioRuntime_set_overlay_volume_impl(port, ptr, rust_vec_len, data_len),
+9 => wire__crate__api__runtime__AudioRuntime_set_source_muted_impl(port, ptr, rust_vec_len, data_len),
+10 => wire__crate__api__runtime__AudioRuntime_set_trim_end_ms_impl(port, ptr, rust_vec_len, data_len),
+11 => wire__crate__api__runtime__AudioRuntime_set_volume_impl(port, ptr, rust_vec_len, data_len),
+12 => wire__crate__api__runtime__AudioRuntime_start_impl(port, ptr, rust_vec_len, data_len),
+13 => wire__crate__api__runtime__AudioRuntime_stop_impl(port, ptr, rust_vec_len, data_len),
+14 => wire__crate__api__runtime__AudioRuntime_stop_all_overlays_impl(port, ptr, rust_vec_len, data_len),
+15 => wire__crate__api__runtime__GpuPresenter_new_impl(port, ptr, rust_vec_len, data_len),
+16 => wire__crate__api__runtime__MediaPlaybackEngine_add_overlay_audio_impl(port, ptr, rust_vec_len, data_len),
+17 => wire__crate__api__runtime__MediaPlaybackEngine_audio_queue_bytes_impl(port, ptr, rust_vec_len, data_len),
+18 => wire__crate__api__runtime__MediaPlaybackEngine_audio_queue_duration_ms_impl(port, ptr, rust_vec_len, data_len),
+19 => wire__crate__api__runtime__MediaPlaybackEngine_catchup_drops_impl(port, ptr, rust_vec_len, data_len),
+20 => wire__crate__api__runtime__MediaPlaybackEngine_clear_cancel_impl(port, ptr, rust_vec_len, data_len),
+21 => wire__crate__api__runtime__MediaPlaybackEngine_close_external_subtitle_impl(port, ptr, rust_vec_len, data_len),
+22 => wire__crate__api__runtime__MediaPlaybackEngine_enhance_pixel_buffer_impl(port, ptr, rust_vec_len, data_len),
+23 => wire__crate__api__runtime__MediaPlaybackEngine_frame_memory_bytes_impl(port, ptr, rust_vec_len, data_len),
+24 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_clock_ms_impl(port, ptr, rust_vec_len, data_len),
+25 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_frame_queue_len_impl(port, ptr, rust_vec_len, data_len),
+26 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_packet_queue_len_impl(port, ptr, rust_vec_len, data_len),
+27 => wire__crate__api__runtime__MediaPlaybackEngine_get_audio_waveform_impl(port, ptr, rust_vec_len, data_len),
+28 => wire__crate__api__runtime__MediaPlaybackEngine_get_av_drift_ms_impl(port, ptr, rust_vec_len, data_len),
+29 => wire__crate__api__runtime__MediaPlaybackEngine_get_decode_capabilities_impl(port, ptr, rust_vec_len, data_len),
+30 => wire__crate__api__runtime__MediaPlaybackEngine_get_diagnostics_impl(port, ptr, rust_vec_len, data_len),
+31 => wire__crate__api__runtime__MediaPlaybackEngine_get_duration_ms_impl(port, ptr, rust_vec_len, data_len),
+32 => wire__crate__api__runtime__MediaPlaybackEngine_get_last_presented_pts_ms_impl(port, ptr, rust_vec_len, data_len),
+33 => wire__crate__api__runtime__MediaPlaybackEngine_get_latest_decoded_video_pts_ms_impl(port, ptr, rust_vec_len, data_len),
+34 => wire__crate__api__runtime__MediaPlaybackEngine_get_media_time_ms_impl(port, ptr, rust_vec_len, data_len),
+35 => wire__crate__api__runtime__MediaPlaybackEngine_get_playback_state_impl(port, ptr, rust_vec_len, data_len),
+36 => wire__crate__api__runtime__MediaPlaybackEngine_get_subtitle_delay_ms_impl(port, ptr, rust_vec_len, data_len),
+37 => wire__crate__api__runtime__MediaPlaybackEngine_get_trim_end_ms_impl(port, ptr, rust_vec_len, data_len),
+38 => wire__crate__api__runtime__MediaPlaybackEngine_get_trim_start_ms_impl(port, ptr, rust_vec_len, data_len),
+39 => wire__crate__api__runtime__MediaPlaybackEngine_get_video_frame_queue_len_impl(port, ptr, rust_vec_len, data_len),
+40 => wire__crate__api__runtime__MediaPlaybackEngine_get_video_packet_queue_len_impl(port, ptr, rust_vec_len, data_len),
+41 => wire__crate__api__runtime__MediaPlaybackEngine_get_volume_impl(port, ptr, rust_vec_len, data_len),
+42 => wire__crate__api__runtime__MediaPlaybackEngine_get_wall_clock_ms_impl(port, ptr, rust_vec_len, data_len),
+43 => wire__crate__api__runtime__MediaPlaybackEngine_hard_resync_drift_threshold_ms_impl(port, ptr, rust_vec_len, data_len),
+44 => wire__crate__api__runtime__MediaPlaybackEngine_list_streams_impl(port, ptr, rust_vec_len, data_len),
+45 => wire__crate__api__runtime__MediaPlaybackEngine_new_impl(port, ptr, rust_vec_len, data_len),
+46 => wire__crate__api__runtime__MediaPlaybackEngine_open_external_subtitle_impl(port, ptr, rust_vec_len, data_len),
+47 => wire__crate__api__runtime__MediaPlaybackEngine_open_file_impl(port, ptr, rust_vec_len, data_len),
+48 => wire__crate__api__runtime__MediaPlaybackEngine_open_url_impl(port, ptr, rust_vec_len, data_len),
+49 => wire__crate__api__runtime__MediaPlaybackEngine_pause_impl(port, ptr, rust_vec_len, data_len),
+50 => wire__crate__api__runtime__MediaPlaybackEngine_poll_subtitle_text_impl(port, ptr, rust_vec_len, data_len),
+51 => wire__crate__api__runtime__MediaPlaybackEngine_presenter_interval_ms_impl(port, ptr, rust_vec_len, data_len),
+52 => wire__crate__api__runtime__MediaPlaybackEngine_probe_duration_ms_impl(port, ptr, rust_vec_len, data_len),
+53 => wire__crate__api__runtime__MediaPlaybackEngine_push_audio_packet_impl(port, ptr, rust_vec_len, data_len),
+54 => wire__crate__api__runtime__MediaPlaybackEngine_push_video_packet_impl(port, ptr, rust_vec_len, data_len),
+55 => wire__crate__api__runtime__MediaPlaybackEngine_queue_overflow_drops_impl(port, ptr, rust_vec_len, data_len),
+56 => wire__crate__api__runtime__MediaPlaybackEngine_reconnect_count_impl(port, ptr, rust_vec_len, data_len),
+57 => wire__crate__api__runtime__MediaPlaybackEngine_remove_overlay_audio_impl(port, ptr, rust_vec_len, data_len),
+58 => wire__crate__api__runtime__MediaPlaybackEngine_rendering_path_impl(port, ptr, rust_vec_len, data_len),
+59 => wire__crate__api__runtime__MediaPlaybackEngine_request_cancel_impl(port, ptr, rust_vec_len, data_len),
+60 => wire__crate__api__runtime__MediaPlaybackEngine_resume_impl(port, ptr, rust_vec_len, data_len),
+61 => wire__crate__api__runtime__MediaPlaybackEngine_seek_impl(port, ptr, rust_vec_len, data_len),
+62 => wire__crate__api__runtime__MediaPlaybackEngine_select_audio_stream_impl(port, ptr, rust_vec_len, data_len),
+63 => wire__crate__api__runtime__MediaPlaybackEngine_select_subtitle_stream_impl(port, ptr, rust_vec_len, data_len),
+64 => wire__crate__api__runtime__MediaPlaybackEngine_select_video_stream_impl(port, ptr, rust_vec_len, data_len),
+65 => wire__crate__api__runtime__MediaPlaybackEngine_set_muted_impl(port, ptr, rust_vec_len, data_len),
+66 => wire__crate__api__runtime__MediaPlaybackEngine_set_overlay_volume_impl(port, ptr, rust_vec_len, data_len),
+67 => wire__crate__api__runtime__MediaPlaybackEngine_set_rate_impl(port, ptr, rust_vec_len, data_len),
+68 => wire__crate__api__runtime__MediaPlaybackEngine_set_source_muted_impl(port, ptr, rust_vec_len, data_len),
+69 => wire__crate__api__runtime__MediaPlaybackEngine_set_subtitle_delay_ms_impl(port, ptr, rust_vec_len, data_len),
+70 => wire__crate__api__runtime__MediaPlaybackEngine_set_subtitles_enabled_impl(port, ptr, rust_vec_len, data_len),
+71 => wire__crate__api__runtime__MediaPlaybackEngine_set_trim_range_impl(port, ptr, rust_vec_len, data_len),
+72 => wire__crate__api__runtime__MediaPlaybackEngine_set_video_enhancement_max_output_edge_impl(port, ptr, rust_vec_len, data_len),
+73 => wire__crate__api__runtime__MediaPlaybackEngine_set_video_enhancement_mode_impl(port, ptr, rust_vec_len, data_len),
+74 => wire__crate__api__runtime__MediaPlaybackEngine_set_video_enhancement_viewport_impl(port, ptr, rust_vec_len, data_len),
+75 => wire__crate__api__runtime__MediaPlaybackEngine_set_volume_impl(port, ptr, rust_vec_len, data_len),
+76 => wire__crate__api__runtime__MediaPlaybackEngine_stale_drops_impl(port, ptr, rust_vec_len, data_len),
+77 => wire__crate__api__runtime__MediaPlaybackEngine_start_impl(port, ptr, rust_vec_len, data_len),
+78 => wire__crate__api__runtime__MediaPlaybackEngine_stop_impl(port, ptr, rust_vec_len, data_len),
+79 => wire__crate__api__runtime__MediaPlaybackEngine_suspend_impl(port, ptr, rust_vec_len, data_len),
+80 => wire__crate__api__runtime__MediaPlaybackEngine_take_audio_frame_impl(port, ptr, rust_vec_len, data_len),
+81 => wire__crate__api__runtime__MediaPlaybackEngine_take_video_frame_impl(port, ptr, rust_vec_len, data_len),
+82 => wire__crate__api__runtime__MediaPlaybackEngine_video_enhancement_capabilities_impl(port, ptr, rust_vec_len, data_len),
+83 => wire__crate__api__runtime__MediaPlaybackEngine_video_enhancement_status_impl(port, ptr, rust_vec_len, data_len),
+84 => wire__crate__api__runtime__MediaPlaybackEngine_video_queue_bytes_impl(port, ptr, rust_vec_len, data_len),
+85 => wire__crate__api__runtime__MediaPlaybackEngine_video_queue_duration_ms_impl(port, ptr, rust_vec_len, data_len),
+86 => wire__crate__api__runtime__PacketQueue_bytes_impl(port, ptr, rust_vec_len, data_len),
+87 => wire__crate__api__runtime__PacketQueue_close_impl(port, ptr, rust_vec_len, data_len),
+88 => wire__crate__api__runtime__PacketQueue_duration_ms_impl(port, ptr, rust_vec_len, data_len),
+89 => wire__crate__api__runtime__PacketQueue_flush_impl(port, ptr, rust_vec_len, data_len),
+90 => wire__crate__api__runtime__PacketQueue_is_empty_impl(port, ptr, rust_vec_len, data_len),
+91 => wire__crate__api__runtime__PacketQueue_len_impl(port, ptr, rust_vec_len, data_len),
+92 => wire__crate__api__runtime__PacketQueue_new_impl(port, ptr, rust_vec_len, data_len),
+93 => wire__crate__api__runtime__PacketQueue_new_with_budgets_impl(port, ptr, rust_vec_len, data_len),
+94 => wire__crate__api__runtime__PacketQueue_pop_impl(port, ptr, rust_vec_len, data_len),
+95 => wire__crate__api__runtime__PacketQueue_push_impl(port, ptr, rust_vec_len, data_len),
+96 => wire__crate__api__runtime__PacketQueue_try_pop_impl(port, ptr, rust_vec_len, data_len),
+97 => wire__crate__api__runtime__PlaybackClock_advance_presented_pts_impl(port, ptr, rust_vec_len, data_len),
+98 => wire__crate__api__runtime__PlaybackClock_enter_rebuffering_impl(port, ptr, rust_vec_len, data_len),
+99 => wire__crate__api__runtime__PlaybackClock_get_last_presented_pts_ms_impl(port, ptr, rust_vec_len, data_len),
+100 => wire__crate__api__runtime__PlaybackClock_get_media_time_ms_impl(port, ptr, rust_vec_len, data_len),
+101 => wire__crate__api__runtime__PlaybackClock_get_state_impl(port, ptr, rust_vec_len, data_len),
+102 => wire__crate__api__runtime__PlaybackClock_new_impl(port, ptr, rust_vec_len, data_len),
+103 => wire__crate__api__runtime__PlaybackClock_pause_impl(port, ptr, rust_vec_len, data_len),
+104 => wire__crate__api__runtime__PlaybackClock_reset_presented_pts_for_seek_impl(port, ptr, rust_vec_len, data_len),
+105 => wire__crate__api__runtime__PlaybackClock_resume_from_rebuffering_impl(port, ptr, rust_vec_len, data_len),
+106 => wire__crate__api__runtime__PlaybackClock_seek_impl(port, ptr, rust_vec_len, data_len),
+107 => wire__crate__api__runtime__PlaybackClock_seek_complete_impl(port, ptr, rust_vec_len, data_len),
+108 => wire__crate__api__runtime__PlaybackClock_set_rate_impl(port, ptr, rust_vec_len, data_len),
+109 => wire__crate__api__runtime__PlaybackClock_start_impl(port, ptr, rust_vec_len, data_len),
+110 => wire__crate__api__runtime__PlaybackClock_sync_from_audio_ms_impl(port, ptr, rust_vec_len, data_len),
+112 => wire__crate__api__runtime__VideoRuntime_start_impl(port, ptr, rust_vec_len, data_len),
+113 => wire__crate__api__runtime__VideoRuntime_stop_impl(port, ptr, rust_vec_len, data_len),
+114 => wire__crate__api__runtime__ensure_ffmpeg_initialized_impl(port, ptr, rust_vec_len, data_len),
+115 => wire__crate__api__runtime__media_video_frame_into_pixel_buffer_handoff_impl(port, ptr, rust_vec_len, data_len),
+116 => wire__crate__api__runtime__network_options_default_impl(port, ptr, rust_vec_len, data_len),
+117 => wire__crate__api__runtime__probe_decode_capabilities_impl(port, ptr, rust_vec_len, data_len),
+                        _ => unreachable!(),
+                    }
 }
 
 fn pde_ffi_dispatcher_sync_impl(
@@ -7276,6 +7214,93 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::runtime::StreamKind>
         self
     }
 }
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::runtime::VideoEnhancementCapabilities {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.supported.into_into_dart().into_dart(),
+            self.backend.into_into_dart().into_dart(),
+            self.modes.into_into_dart().into_dart(),
+            self.max_output_edge.into_into_dart().into_dart(),
+            self.reason.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::runtime::VideoEnhancementCapabilities
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::runtime::VideoEnhancementCapabilities>
+    for crate::api::runtime::VideoEnhancementCapabilities
+{
+    fn into_into_dart(self) -> crate::api::runtime::VideoEnhancementCapabilities {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::runtime::VideoEnhancementMode {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Off => 0.into_dart(),
+            Self::Sharp => 1.into_dart(),
+            Self::Enhanced => 2.into_dart(),
+            Self::HighQuality => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::runtime::VideoEnhancementMode
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::runtime::VideoEnhancementMode>
+    for crate::api::runtime::VideoEnhancementMode
+{
+    fn into_into_dart(self) -> crate::api::runtime::VideoEnhancementMode {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::runtime::VideoEnhancementStatus {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.supported.into_into_dart().into_dart(),
+            self.requested_mode.into_into_dart().into_dart(),
+            self.active_mode.into_into_dart().into_dart(),
+            self.backend.into_into_dart().into_dart(),
+            self.path.into_into_dart().into_dart(),
+            self.scaler.into_into_dart().into_dart(),
+            self.input_width.into_into_dart().into_dart(),
+            self.input_height.into_into_dart().into_dart(),
+            self.output_width.into_into_dart().into_dart(),
+            self.output_height.into_into_dart().into_dart(),
+            self.last_frame_ms.into_into_dart().into_dart(),
+            self.average_frame_ms.into_into_dart().into_dart(),
+            self.deadline_ms.into_into_dart().into_dart(),
+            self.deadline_misses.into_into_dart().into_dart(),
+            self.hard_deadline_misses.into_into_dart().into_dart(),
+            self.enhanced_frames.into_into_dart().into_dart(),
+            self.bypassed_frames.into_into_dart().into_dart(),
+            self.failed_frames.into_into_dart().into_dart(),
+            self.passes.into_into_dart().into_dart(),
+            self.fallback_reason.into_into_dart().into_dart(),
+            self.bypass_reason.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::runtime::VideoEnhancementStatus
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::runtime::VideoEnhancementStatus>
+    for crate::api::runtime::VideoEnhancementStatus
+{
+    fn into_into_dart(self) -> crate::api::runtime::VideoEnhancementStatus {
+        self
+    }
+}
 
 impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
     // Codec=Sse (Serialization based), see doc to use other codecs
@@ -7549,6 +7574,16 @@ impl SseEncode for Vec<(String, String)> {
     }
 }
 
+impl SseEncode for Vec<crate::api::runtime::VideoEnhancementMode> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::runtime::VideoEnhancementMode>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for crate::api::runtime::MediaPacket {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -7739,6 +7774,62 @@ impl SseEncode for usize {
             .cursor
             .write_u64::<NativeEndian>(self as _)
             .unwrap();
+    }
+}
+
+impl SseEncode for crate::api::runtime::VideoEnhancementCapabilities {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.supported, serializer);
+        <String>::sse_encode(self.backend, serializer);
+        <Vec<crate::api::runtime::VideoEnhancementMode>>::sse_encode(self.modes, serializer);
+        <u32>::sse_encode(self.max_output_edge, serializer);
+        <String>::sse_encode(self.reason, serializer);
+    }
+}
+
+impl SseEncode for crate::api::runtime::VideoEnhancementMode {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::runtime::VideoEnhancementMode::Off => 0,
+                crate::api::runtime::VideoEnhancementMode::Sharp => 1,
+                crate::api::runtime::VideoEnhancementMode::Enhanced => 2,
+                crate::api::runtime::VideoEnhancementMode::HighQuality => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::runtime::VideoEnhancementStatus {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.supported, serializer);
+        <crate::api::runtime::VideoEnhancementMode>::sse_encode(self.requested_mode, serializer);
+        <crate::api::runtime::VideoEnhancementMode>::sse_encode(self.active_mode, serializer);
+        <String>::sse_encode(self.backend, serializer);
+        <String>::sse_encode(self.path, serializer);
+        <String>::sse_encode(self.scaler, serializer);
+        <u32>::sse_encode(self.input_width, serializer);
+        <u32>::sse_encode(self.input_height, serializer);
+        <u32>::sse_encode(self.output_width, serializer);
+        <u32>::sse_encode(self.output_height, serializer);
+        <f32>::sse_encode(self.last_frame_ms, serializer);
+        <f32>::sse_encode(self.average_frame_ms, serializer);
+        <f32>::sse_encode(self.deadline_ms, serializer);
+        <u64>::sse_encode(self.deadline_misses, serializer);
+        <u64>::sse_encode(self.hard_deadline_misses, serializer);
+        <u64>::sse_encode(self.enhanced_frames, serializer);
+        <u64>::sse_encode(self.bypassed_frames, serializer);
+        <u64>::sse_encode(self.failed_frames, serializer);
+        <u32>::sse_encode(self.passes, serializer);
+        <String>::sse_encode(self.fallback_reason, serializer);
+        <String>::sse_encode(self.bypass_reason, serializer);
     }
 }
 
