@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models.dart';
 import '../../player_controller.dart';
+import '../../video_enhancement.dart';
 import '../utils.dart';
 import '../widgets/setting_tile.dart';
 
@@ -9,6 +10,10 @@ import '../widgets/setting_tile.dart';
 ///
 /// Fit and display rotation are UI-level; decoder/HW state is read from
 /// the engine diagnostics snapshot ([MediaForgePlayerController.lastDiagnostics]).
+///
+/// The experimental GPU enhancement section is included only when the device
+/// reports a backend for it, so unsupported platforms never see a dead
+/// control.
 class VideoSettingsPanel extends StatelessWidget {
   const VideoSettingsPanel({
     super.key,
@@ -96,6 +101,11 @@ class VideoSettingsPanel extends StatelessWidget {
                 ),
               ],
             ),
+            ValueListenableBuilder(
+              valueListenable: controller.enhancementCapabilities,
+              builder: (context, _, _) =>
+                  _VideoEnhancementSection(controller: controller),
+            ),
             const PanelSectionLabel('Detected video'),
             InfoRow(
               'Resolution',
@@ -127,4 +137,91 @@ class VideoSettingsPanel extends StatelessWidget {
       },
     );
   }
+}
+
+/// Experimental GPU enhancement: mode picker + live diagnostics.
+class _VideoEnhancementSection extends StatelessWidget {
+  const _VideoEnhancementSection({required this.controller});
+
+  final MediaForgePlayerController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final caps = controller.videoEnhancementCapabilities;
+    // Probe on first build so the section reflects the real device, then
+    // rebuild through the notifier.
+    if (caps == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller.probeVideoEnhancement();
+      });
+      return const SizedBox.shrink();
+    }
+    if (!caps.supported) return const SizedBox.shrink();
+
+    final status = controller.videoEnhancementStatus;
+    final selected = controller.value.videoEnhancementMode;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const PanelSectionLabel('Video enhancement'),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: const Text(
+                'EXPERIMENTAL',
+                style: TextStyle(
+                  fontSize: 9,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.amber,
+                ),
+              ),
+            ),
+            const Spacer(),
+          ],
+        ),
+        for (final mode in caps.supportedModes)
+          SettingTile(
+            icon: _iconFor(mode),
+            title: mode.displayName,
+            subtitle: mode.description,
+            trailing: selected == mode
+                ? const Icon(Icons.check, size: 18, color: Colors.white)
+                : null,
+            onTap: () => controller.setVideoEnhancementMode(mode),
+          ),
+        if (status != null && status.requestedMode.isActive) ...[
+          const SizedBox(height: 4),
+          InfoRow('Active mode', status.activeMode.displayName +
+              (status.isDowngraded ? ' (reduced)' : '')),
+          if (status.outputWidth > 0)
+            InfoRow('Processing', status.resolutionLabel),
+          InfoRow('GPU path', status.path.isEmpty ? '—' : status.path),
+          InfoRow(
+            'Frame time',
+            status.deadlineMs > 0
+                ? '${status.lastFrameMs.toStringAsFixed(2)} ms / '
+                    '${status.deadlineMs.toStringAsFixed(1)} ms budget'
+                : '${status.lastFrameMs.toStringAsFixed(2)} ms',
+          ),
+          InfoRow('Deadline misses', '${status.deadlineMisses}'),
+          if (status.fallbackReason.isNotEmpty)
+            InfoRow('Fallback', status.fallbackReason),
+        ],
+      ],
+    );
+  }
+
+  static IconData _iconFor(VideoEnhancementMode mode) => switch (mode) {
+        VideoEnhancementMode.off => Icons.block_outlined,
+        VideoEnhancementMode.sharp => Icons.details_outlined,
+        VideoEnhancementMode.enhanced => Icons.auto_awesome_outlined,
+        VideoEnhancementMode.highQuality => Icons.hd_outlined,
+      };
 }

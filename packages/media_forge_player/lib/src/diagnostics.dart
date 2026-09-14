@@ -66,6 +66,21 @@ class MediaForgeDiagnostics {
     this.retainedPixelBufferCount = 0,
     this.retainedTextureCount = 0,
     this.isSuspended = false,
+    // ---- experimental GPU video enhancement ----
+    this.videoEnhancementSupported = false,
+    this.videoEnhancementRequested = 'off',
+    this.videoEnhancementActive = 'off',
+    this.videoEnhancementBackend = 'none',
+    this.videoEnhancementPath = '',
+    this.videoEnhancementInputWidth = 0,
+    this.videoEnhancementInputHeight = 0,
+    this.videoEnhancementOutputWidth = 0,
+    this.videoEnhancementOutputHeight = 0,
+    this.videoEnhancementFrameMs,
+    this.videoEnhancementAverageMs,
+    this.videoEnhancementDeadlineMs,
+    this.videoEnhancementDeadlineMisses = 0,
+    this.videoEnhancementFallbackReason = '',
   });
 
   final PlaybackState state;
@@ -207,6 +222,46 @@ class MediaForgeDiagnostics {
   final int retainedTextureCount;
 
   final bool isSuspended;
+
+  // ---- experimental GPU video enhancement ----
+
+  /// True when this device can run GPU enhancement at all.
+  final bool videoEnhancementSupported;
+
+  /// Mode the app requested (`off` / `sharp` / `enhanced` / `high_quality`).
+  final String videoEnhancementRequested;
+
+  /// Mode actually running; lags the request after an automatic downgrade.
+  final String videoEnhancementActive;
+
+  /// Backend identity, e.g. `metal_wgpu`.
+  final String videoEnhancementBackend;
+
+  /// Executed pass path, e.g. `metal_lanczos_cas`.
+  final String videoEnhancementPath;
+
+  /// Decoder resolution entering the enhancement stage.
+  final int videoEnhancementInputWidth;
+  final int videoEnhancementInputHeight;
+
+  /// Resolution handed to the presentation texture.
+  final int videoEnhancementOutputWidth;
+  final int videoEnhancementOutputHeight;
+
+  /// Enhancement stage time for the last frame (ms), when measured.
+  final double? videoEnhancementFrameMs;
+
+  /// Smoothed enhancement stage time (ms).
+  final double? videoEnhancementAverageMs;
+
+  /// Source frame interval the stage is measured against (ms).
+  final double? videoEnhancementDeadlineMs;
+
+  /// Frames that used more than 75% of the source deadline.
+  final int videoEnhancementDeadlineMisses;
+
+  /// Why enhancement is not running at the requested level (empty when fine).
+  final String videoEnhancementFallbackReason;
 
   /// Total decoder queue depth (packets + frames, video + audio).
   int get decoderQueueDepth =>

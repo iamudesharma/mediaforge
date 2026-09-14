@@ -33,3 +33,8 @@ wgpu = { version = "24", optional = true, features = ["metal"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("gpu"))'] }
+
+[[bin]]
+name = "enhance_bench"
+path = "src/bin/enhance_bench.rs"
+required-features = ["gpu"]

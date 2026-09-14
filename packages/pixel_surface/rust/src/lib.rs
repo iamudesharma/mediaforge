@@ -19,6 +19,7 @@
 #![warn(clippy::missing_safety_doc)]
 
 pub mod buffer;
+pub mod enhance;
 
 #[cfg(target_vendor = "apple")]
 #[macro_use]

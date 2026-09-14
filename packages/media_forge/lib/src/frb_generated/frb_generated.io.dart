@@ -230,6 +230,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<(String, String)> dco_decode_list_record_string_string(dynamic raw);
 
   @protected
+  List<VideoEnhancementMode> dco_decode_list_video_enhancement_mode(
+    dynamic raw,
+  );
+
+  @protected
   MediaPacket dco_decode_media_packet(dynamic raw);
 
   @protected
@@ -287,6 +292,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt dco_decode_usize(dynamic raw);
+
+  @protected
+  VideoEnhancementCapabilities dco_decode_video_enhancement_capabilities(
+    dynamic raw,
+  );
+
+  @protected
+  VideoEnhancementMode dco_decode_video_enhancement_mode(dynamic raw);
+
+  @protected
+  VideoEnhancementStatus dco_decode_video_enhancement_status(dynamic raw);
 
   @protected
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
@@ -485,6 +501,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<VideoEnhancementMode> sse_decode_list_video_enhancement_mode(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MediaPacket sse_decode_media_packet(SseDeserializer deserializer);
 
   @protected
@@ -550,6 +571,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
+
+  @protected
+  VideoEnhancementCapabilities sse_decode_video_enhancement_capabilities(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VideoEnhancementMode sse_decode_video_enhancement_mode(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  VideoEnhancementStatus sse_decode_video_enhancement_status(
+    SseDeserializer deserializer,
+  );
 
   @protected
   void sse_encode_AnyhowException(
@@ -791,6 +827,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_video_enhancement_mode(
+    List<VideoEnhancementMode> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_media_packet(MediaPacket self, SseSerializer serializer);
 
   @protected
@@ -871,6 +913,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_video_enhancement_capabilities(
+    VideoEnhancementCapabilities self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_video_enhancement_mode(
+    VideoEnhancementMode self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_video_enhancement_status(
+    VideoEnhancementStatus self,
+    SseSerializer serializer,
+  );
 }
 
 // Section: wire_class

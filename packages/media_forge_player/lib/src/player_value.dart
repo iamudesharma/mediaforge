@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'buffered_range.dart';
 import 'track_info.dart';
+import 'video_enhancement.dart';
 
 /// Immutable snapshot of player state, in the spirit of `video_player`'s
 /// `VideoPlayerValue` but covering buffering, tracks and errors.
@@ -42,6 +43,9 @@ class MediaForgePlayerValue {
     this.firstFramePresented = false,
     this.activeSeekGeneration = 0,
     this.lastSeekSettledGeneration = -1,
+    this.videoEnhancementMode = VideoEnhancementMode.defaultMode,
+    this.videoEnhancementActive = false,
+    this.videoEnhancementFallbackReason = '',
   });
 
   /// Nothing opened yet.
@@ -117,6 +121,16 @@ class MediaForgePlayerValue {
   /// Gates cue delivery in `pollSubtitleText`.
   final bool subtitlesEnabled;
 
+  /// Single source of truth for "cues should be fetched and rendered".
+  ///
+  /// Used by [MediaForgePlayerController.subtitleTextAt] and every caption
+  /// overlay, so the poll gate can never drift between them. Selecting a
+  /// track — embedded or external — is what turns delivery on; selecting
+  /// Off (`selectedSubtitleTrackId == null`) turns it off even while a
+  /// sidecar session stays open.
+  bool get hasActiveSubtitles =>
+      subtitlesEnabled && selectedSubtitleTrackId != null;
+
   /// True once the first frame has been presented since open.
   final bool firstFramePresented;
 
@@ -125,6 +139,22 @@ class MediaForgePlayerValue {
 
   /// Latest seek generation that reached a valid presented frame (-1 = none).
   final int lastSeekSettledGeneration;
+
+  /// Requested GPU video enhancement mode (experimental; default off).
+  ///
+  /// Change it at any time with
+  /// [MediaForgePlayerController.setVideoEnhancementMode] — it applies to the
+  /// next presented frame, with no media reopen.
+  final VideoEnhancementMode videoEnhancementMode;
+
+  /// True when the last presented frame went through the GPU enhancement
+  /// stage. False while enhancement is off, unsupported, bypassed or
+  /// downgraded away.
+  final bool videoEnhancementActive;
+
+  /// Why enhancement is not running at [videoEnhancementMode] (empty when
+  /// healthy). Reported by the native quality ladder.
+  final String videoEnhancementFallbackReason;
 
   bool get hasError => errorDescription != null;
   bool get hasVideo => videoWidth > 0 && videoHeight > 0;
@@ -178,6 +208,9 @@ class MediaForgePlayerValue {
     bool? firstFramePresented,
     int? activeSeekGeneration,
     int? lastSeekSettledGeneration,
+    VideoEnhancementMode? videoEnhancementMode,
+    bool? videoEnhancementActive,
+    String? videoEnhancementFallbackReason,
   }) {
     return MediaForgePlayerValue(
       isInitialized: isInitialized ?? this.isInitialized,
@@ -224,6 +257,11 @@ class MediaForgePlayerValue {
       activeSeekGeneration: activeSeekGeneration ?? this.activeSeekGeneration,
       lastSeekSettledGeneration:
           lastSeekSettledGeneration ?? this.lastSeekSettledGeneration,
+      videoEnhancementMode: videoEnhancementMode ?? this.videoEnhancementMode,
+      videoEnhancementActive:
+          videoEnhancementActive ?? this.videoEnhancementActive,
+      videoEnhancementFallbackReason:
+          videoEnhancementFallbackReason ?? this.videoEnhancementFallbackReason,
     );
   }
 
@@ -263,7 +301,10 @@ class MediaForgePlayerValue {
       other.subtitlesEnabled == subtitlesEnabled &&
       other.firstFramePresented == firstFramePresented &&
       other.activeSeekGeneration == activeSeekGeneration &&
-      other.lastSeekSettledGeneration == lastSeekSettledGeneration;
+      other.lastSeekSettledGeneration == lastSeekSettledGeneration &&
+      other.videoEnhancementMode == videoEnhancementMode &&
+      other.videoEnhancementActive == videoEnhancementActive &&
+      other.videoEnhancementFallbackReason == videoEnhancementFallbackReason;
 
   @override
   int get hashCode => Object.hashAll([
@@ -301,5 +342,8 @@ class MediaForgePlayerValue {
         firstFramePresented,
         activeSeekGeneration,
         lastSeekSettledGeneration,
+        videoEnhancementMode,
+        videoEnhancementActive,
+        videoEnhancementFallbackReason,
       ]);
 }

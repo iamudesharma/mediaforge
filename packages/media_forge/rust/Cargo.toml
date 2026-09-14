@@ -24,6 +24,14 @@ env_logger = "0.11"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 cpal = "0.15"
+# GPU video enhancement lives in `pixel_surface::enhance`. The crate itself is
+# platform-neutral (planner + deadline policy + a null backend); the `gpu`
+# feature adds the Metal/wgpu implementation and is Apple-only, so it is
+# enabled from the target-specific block below.
+pixel_surface = { path = "../../pixel_surface/rust" }
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+pixel_surface = { path = "../../pixel_surface/rust", features = ["gpu"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"

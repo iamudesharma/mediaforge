@@ -329,6 +329,36 @@ void main() {
     });
   });
 
+  group('caption overlay', () {
+    testWidgets('renders the auto-selected track and clears on Off',
+        (tester) async {
+      final (controller, _) = makeOpen();
+      await controller.open(
+        const MediaForgeMedia.network('http://127.0.0.1:8080/v'),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlayerCaptionOverlay(
+            controller: controller,
+            style: const MediaPlayerSubtitleStyle(),
+          ),
+        ),
+      );
+      // The default embedded track (index 3) auto-selects on open.
+      expect(controller.value.selectedSubtitleTrackId, 3);
+      controller.value =
+          controller.value.copyWith(position: const Duration(seconds: 6));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Hello'), findsOneWidget);
+      // Off shares subtitleTextAt's gate: the rendered cue is dropped.
+      await controller.selectSubtitleTrack(null);
+      await tester.pump();
+      expect(find.text('Hello'), findsNothing);
+      await endTest(tester, controller);
+    });
+  });
+
   group('formatting utils', () {
     test('formatDuration', () {
       expect(formatDuration(Duration.zero), '0:00');

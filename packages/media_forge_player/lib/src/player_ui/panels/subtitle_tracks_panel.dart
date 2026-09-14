@@ -75,10 +75,21 @@ class SubtitleTracksPanel extends StatelessWidget {
                 trailing: const Icon(Icons.chevron_right,
                     color: Colors.white54),
                 onTap: () async {
-                  final uri = await onPickExternalSubtitle!();
-                  if (uri == null) return;
-                  final id = await controller.addExternalSubtitle(uri);
-                  await controller.selectSubtitleTrack(id);
+                  final messenger = ScaffoldMessenger.maybeOf(context);
+                  try {
+                    final uri = await onPickExternalSubtitle!();
+                    if (uri == null) return;
+                    final id = await controller.addExternalSubtitle(uri);
+                    await controller.selectSubtitleTrack(id);
+                  } catch (e, st) {
+                    debugPrint('[SubtitleTracksPanel] external subtitle '
+                        'load failed: $e\n$st');
+                    messenger?.showSnackBar(
+                      SnackBar(
+                        content: Text('Could not load subtitles: $e'),
+                      ),
+                    );
+                  }
                 },
               ),
             if (value.subtitleTracks.any((t) => !t.isEmbedded))

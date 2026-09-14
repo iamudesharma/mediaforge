@@ -392,7 +392,8 @@ void main() {
         const MediaForgeMedia.network('http://127.0.0.1:8080/stream'),
       );
       final pollsBefore = c.subtitlePollCountForTest;
-      // No track selected → no bridge call.
+      // Explicit Off (no active track) → no bridge call.
+      await c.selectSubtitleTrack(null);
       expect(
         await c.subtitleTextAt(const Duration(seconds: 6)),
         isNull,

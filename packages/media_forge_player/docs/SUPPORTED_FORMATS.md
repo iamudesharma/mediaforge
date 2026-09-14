@@ -36,8 +36,10 @@ per-session as `activeVideoDecoder` (e.g. `hevc-videotoolbox`) with
 * Multiple video tracks: `selectVideoStream` (pipeline reopen on Flush).
 * Subtitles: embedded text/ASS decode → cue queue → `pollSubtitleText`
   (renders in `MediaForgeVideo` caption overlay); sidecar files/URLs via
-  `openExternalSubtitle`; `setSubtitleDelayMs`, `setSubtitlesEnabled`.
-  Bitmap subtitles (dvd/vobsub, pgssub) report timing with empty text.
+  `openExternalSubtitle` (`.srt`/`.vtt`/`.ass` — the srt/webvtt/ass
+  demuxers are enabled in the static FFmpeg build); `setSubtitleDelayMs`,
+  `setSubtitlesEnabled`. Bitmap subtitles (dvd/vobsub, pgssub) report
+  timing with empty text.
 * Volume: engine-side master gain (`setVolume`) + `setMuted` (all) +
   `setSourceMuted` (source only) + per-overlay volume.
 

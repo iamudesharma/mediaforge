@@ -6,10 +6,10 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `audio_stream_format`, `begin_open`, `build_stream_table`, `byte_size`, `ffmpeg_version_string`, `find_best_audio_stream`, `hw_decode_enabled`, `is_full_locked`, `log_decode_capabilities`, `metadata_complete`, `notify_frame_ready`, `notify_ready`, `open_audio_decoder`, `open_common`, `open_input_with_fast_fallback`, `probe_decode_capabilities_inner`, `pts_ms_opt`, `release_media_video_frame_pixel_buffer`, `start_subtitle_worker`, `stop_demuxer_session`, `stop_subtitle_worker`, `stop`, `strip_ass_overrides`, `subtitle_text`, `update_time_internal`, `video_decoder_label`, `video_frame_queue_capacity_sw`, `video_frame_queue_capacity`, `video_stream_dims`
+// These functions are ignored because they are not marked as `pub`: `audio_stream_format`, `begin_open`, `build_stream_table`, `byte_size`, `ffmpeg_version_string`, `find_best_audio_stream`, `from_internal`, `hw_decode_enabled`, `is_full_locked`, `log_decode_capabilities`, `metadata_complete`, `notify_frame_ready`, `notify_ready`, `open_audio_decoder`, `open_common`, `open_input_with_fast_fallback`, `probe_decode_capabilities_inner`, `pts_ms_opt`, `release_media_video_frame_pixel_buffer`, `start_subtitle_worker`, `stop_demuxer_session`, `stop_subtitle_worker`, `stop`, `strip_ass_overrides`, `subtitle_text`, `to_internal`, `update_time_internal`, `video_decoder_label`, `video_frame_queue_capacity_sw`, `video_frame_queue_capacity`, `video_stream_dims`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `AudioPlayerState`, `DecoderRecoveryState`, `ExternalSubtitleSession`, `FrameQueue`, `OverlayAudioState`, `OverlayAudioTrack`, `PacketQueueInner`, `PlaybackClockInner`, `PlaybackSession`, `SendSafeStream`, `SubtitleCue`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
-// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `is_cancelled`, `new`, `new`, `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`, `set_frame_ready`, `set_notify`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `assert_receiver_is_total_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored (category: IgnoreBecauseExplicitAttribute): `from_wire_name`, `is_cancelled`, `new`, `new`, `present_frame`, `present_frame`, `pts_ms`, `pts_ms`, `set_audio_clock`, `set_frame_ready`, `set_notify`, `wire_name`
 // These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `dequeue_best_for_time`, `dequeue`, `enqueue_video`, `enqueue`, `flush_video`, `flush`, `frame_memory_bytes`, `is_empty`, `latest_pts`, `len`, `max_size`, `new`, `open`, `overflow_count`, `set_volume`, `stop`, `volume_f32`
 
 /// Probe linked FFmpeg once (safe to call from Dart at startup).
@@ -109,6 +109,19 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
 
   /// Stop and drop the external subtitle session (cues already ingested stay).
   Future<void> closeExternalSubtitle();
+
+  /// Run the enhancement stage for one decoded frame.
+  ///
+  /// Returns a handoff for the enhanced surface, or `None` to present the
+  /// decoded frame untouched. **Ownership:** on success the `+1` retain on
+  /// `pixel_buffer_ptr` is consumed; on `None` the caller still owns it and
+  /// must present that frame.
+  Future<PixelBufferHandoff?> enhancePixelBuffer({
+    required BigInt pixelBufferPtr,
+    required int width,
+    required int height,
+    required BigInt ptsMs,
+  });
 
   /// Retained decoded-frame memory in bytes (observable, §3/§16).
   Future<BigInt> frameMemoryBytes();
@@ -273,6 +286,23 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
   /// the demuxer, and playback auto-pauses when reaching `end_ms`.
   Future<void> setTrimRange({required BigInt startMs, required BigInt endMs});
 
+  /// Hard ceiling for the enhanced output longest edge (`0` = mode default).
+  Future<void> setVideoEnhancementMaxOutputEdge({required int edge});
+
+  /// Select an enhancement mode. Takes effect on the next presented frame:
+  /// no media reopen, no decoder restart, no queue flush.
+  ///
+  /// Returns false when the device cannot run the requested mode (playback
+  /// is unaffected — the normal render path stays in place).
+  Future<bool> setVideoEnhancementMode({required VideoEnhancementMode mode});
+
+  /// Display box in device pixels, used for the resolution-aware target.
+  /// `(0, 0)` clears the hint.
+  Future<void> setVideoEnhancementViewport({
+    required int width,
+    required int height,
+  });
+
   /// Master output gain 0.0..=1.0 (source + overlays) in the cpal mixer.
   Future<void> setVolume({required double volume});
 
@@ -293,6 +323,12 @@ abstract class MediaPlaybackEngine implements RustOpaqueInterface {
   /// not the raw decode queue. Counts bridge calls vs presented frames
   /// separately (§6): empty polls return None and are never drops.
   Future<MediaVideoFrame?> takeVideoFrame();
+
+  /// What this device can do. Safe to call before any media is open.
+  Future<VideoEnhancementCapabilities> videoEnhancementCapabilities();
+
+  /// Current enhancement state for diagnostics.
+  Future<VideoEnhancementStatus> videoEnhancementStatus();
 
   /// Compressed packet bytes currently buffered (video/audio).
   Future<BigInt> videoQueueBytes();
@@ -850,3 +886,182 @@ enum PlaybackState {
 
 /// Kind of a container stream discovered at open time.
 enum StreamKind { video, audio, subtitle }
+
+/// What this device/build can do. Never fails playback: `supported == false`
+/// simply means the normal render path stays in place.
+class VideoEnhancementCapabilities {
+  final bool supported;
+
+  /// Backend identity, e.g. `metal_wgpu`.
+  final String backend;
+
+  /// Modes that will actually run (always contains `Off`).
+  final List<VideoEnhancementMode> modes;
+
+  /// Largest output longest edge the backend produces.
+  final int maxOutputEdge;
+
+  /// Why enhancement is unavailable (empty when supported).
+  final String reason;
+
+  const VideoEnhancementCapabilities({
+    required this.supported,
+    required this.backend,
+    required this.modes,
+    required this.maxOutputEdge,
+    required this.reason,
+  });
+
+  @override
+  int get hashCode =>
+      supported.hashCode ^
+      backend.hashCode ^
+      modes.hashCode ^
+      maxOutputEdge.hashCode ^
+      reason.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VideoEnhancementCapabilities &&
+          runtimeType == other.runtimeType &&
+          supported == other.supported &&
+          backend == other.backend &&
+          modes == other.modes &&
+          maxOutputEdge == other.maxOutputEdge &&
+          reason == other.reason;
+}
+
+/// Requested video enhancement quality.
+enum VideoEnhancementMode {
+  /// Untouched render path (default).
+  off,
+
+  /// Lightweight GPU sharpen at native size.
+  sharp,
+
+  /// High-quality upscale + adaptive sharpen + light dither.
+  enhanced,
+
+  /// Best non-AI upscale (separable Lanczos-3) + adaptive sharpen.
+  highQuality,
+}
+
+/// Live enhancement state for diagnostics.
+class VideoEnhancementStatus {
+  final bool supported;
+  final VideoEnhancementMode requestedMode;
+
+  /// Mode actually running; differs from `requested_mode` after an
+  /// automatic quality downgrade.
+  final VideoEnhancementMode activeMode;
+  final String backend;
+
+  /// Executed pass path, e.g. `metal_lanczos_cas`.
+  final String path;
+
+  /// `none` / `catmull_rom` / `lanczos3`.
+  final String scaler;
+  final int inputWidth;
+  final int inputHeight;
+  final int outputWidth;
+  final int outputHeight;
+
+  /// Enhancement stage time for the last frame (ms).
+  final double lastFrameMs;
+
+  /// Smoothed enhancement stage time (ms).
+  final double averageFrameMs;
+
+  /// Source frame interval the stage is measured against (ms).
+  final double deadlineMs;
+  final BigInt deadlineMisses;
+  final BigInt hardDeadlineMisses;
+  final BigInt enhancedFrames;
+  final BigInt bypassedFrames;
+  final BigInt failedFrames;
+
+  /// GPU passes issued for the last frame.
+  final int passes;
+
+  /// Why enhancement fell back (empty when healthy).
+  final String fallbackReason;
+
+  /// Why the last frame was bypassed (empty when it was enhanced).
+  final String bypassReason;
+
+  const VideoEnhancementStatus({
+    required this.supported,
+    required this.requestedMode,
+    required this.activeMode,
+    required this.backend,
+    required this.path,
+    required this.scaler,
+    required this.inputWidth,
+    required this.inputHeight,
+    required this.outputWidth,
+    required this.outputHeight,
+    required this.lastFrameMs,
+    required this.averageFrameMs,
+    required this.deadlineMs,
+    required this.deadlineMisses,
+    required this.hardDeadlineMisses,
+    required this.enhancedFrames,
+    required this.bypassedFrames,
+    required this.failedFrames,
+    required this.passes,
+    required this.fallbackReason,
+    required this.bypassReason,
+  });
+
+  @override
+  int get hashCode =>
+      supported.hashCode ^
+      requestedMode.hashCode ^
+      activeMode.hashCode ^
+      backend.hashCode ^
+      path.hashCode ^
+      scaler.hashCode ^
+      inputWidth.hashCode ^
+      inputHeight.hashCode ^
+      outputWidth.hashCode ^
+      outputHeight.hashCode ^
+      lastFrameMs.hashCode ^
+      averageFrameMs.hashCode ^
+      deadlineMs.hashCode ^
+      deadlineMisses.hashCode ^
+      hardDeadlineMisses.hashCode ^
+      enhancedFrames.hashCode ^
+      bypassedFrames.hashCode ^
+      failedFrames.hashCode ^
+      passes.hashCode ^
+      fallbackReason.hashCode ^
+      bypassReason.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VideoEnhancementStatus &&
+          runtimeType == other.runtimeType &&
+          supported == other.supported &&
+          requestedMode == other.requestedMode &&
+          activeMode == other.activeMode &&
+          backend == other.backend &&
+          path == other.path &&
+          scaler == other.scaler &&
+          inputWidth == other.inputWidth &&
+          inputHeight == other.inputHeight &&
+          outputWidth == other.outputWidth &&
+          outputHeight == other.outputHeight &&
+          lastFrameMs == other.lastFrameMs &&
+          averageFrameMs == other.averageFrameMs &&
+          deadlineMs == other.deadlineMs &&
+          deadlineMisses == other.deadlineMisses &&
+          hardDeadlineMisses == other.hardDeadlineMisses &&
+          enhancedFrames == other.enhancedFrames &&
+          bypassedFrames == other.bypassedFrames &&
+          failedFrames == other.failedFrames &&
+          passes == other.passes &&
+          fallbackReason == other.fallbackReason &&
+          bypassReason == other.bypassReason;
+}
